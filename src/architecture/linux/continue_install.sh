@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 
 # This is OS-family specific script to continue installing "set_environment" project.
 
