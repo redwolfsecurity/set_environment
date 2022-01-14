@@ -2195,24 +2195,67 @@ export -f is_framework_api_defined
 #
 function check_nodejs_installation {
 
+  # Let's run all the checks and collect all the found errors into associative array (key = name of the check, value = error code)
+  declare -A ERRORS
+
   # Check nodejs is installed
-  WHICH_NODE="$(which node)" 
-  [ "${WHICH_NODE}" != "" ] || { set_state "${FUNCNAME[0]}" "error_check_nodejs_installation_nodejs_not_installed"; return 1; }
+  WHICH_NODE="$( which node )"
+  CHECK_NAME='is_nodejs_installed'
+  [ "${WHICH_NODE}" != "" ] || { set_state "${FUNCNAME[0]}" "error_check_nodejs_installation_nodejs_not_installed"; ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; }
 
   # Check nodejs is not installed under /usr
-  [[ "${WHICH_NODE}" =~ ^/usr/ ]] && { set_state "${FUNCNAME[0]}" "error_check_nodejs_installation_wrong_installation_dir"; return 1; }
+  [[ "${WHICH_NODE}" =~ ^/usr/ ]] && { set_state "${FUNCNAME[0]}" "error_check_nodejs_installation_wrong_installation_dir"; ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; }
 
   # Check npm is installed
   WHICH_NPM="$(which npm)" 
-  [ "${WHICH_NPM}" != "" ] || { set_state "${FUNCNAME[0]}" "error_check_nmp_installation_nodejs_not_installed"; return 1; }
+  [ "${WHICH_NPM}" != "" ] || { set_state "${FUNCNAME[0]}" "error_check_nmp_installation_nodejs_not_installed"; ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; }
 
   # Check nodejs is not installed under /usr
-  [[ "${WHICH_NPM}" =~ ^/usr/ ]] && { set_state "${FUNCNAME[0]}" "error_check_npm_installation_wrong_installation_dir"; return 1; }
+  [[ "${WHICH_NPM}" =~ ^/usr/ ]] && { set_state "${FUNCNAME[0]}" "error_check_npm_installation_wrong_installation_dir"; ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; }
 
-  # TODO: version check? how do we define/configure which nodejs version we want (at the moment hardcoded)
+  # Get expected nodejs version
+  local EXPECTED_VERSION="$( get_expected_nodejs_version )"
+  [ -z "${EXPECTED_VERSION}" ] && { set_state "${FUNCNAME[0]}" 'failed_to_get_expected_nodejs_version'; ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; }
 
-  return 0
+  # Get actual nodejs version
+  local ACTUAL_VERSION="$( node --version )"
+  [ -z "${ACTUAL_VERSION}" ] && { set_state "${FUNCNAME[0]}" 'failed_to_get_actual_nodejs_version'; ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; }
+
+  # Compare expected vs actual nodejs versions
+  if [ "${EXPECTED_VERSION}" != "${ACTUAL_VERSION}" ]; then
+    # Version mismatch
+    set_state "${FUNCNAME[0]}" 'error_mismatching_nodejs_versions'; ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; }
+  fi
+
+  # Check number of errors
+  if [ ${#ERRORS[@]} -eq 0 ]; then
+    # No errors
+    echo '{"is_success": true}'
+    return 0
+  else
+    # We found some errors
+    echo '{'
+
+    # Iterate all found errors
+    for KEY in "${!ERRORS[@]}"; do
+      echo "  \"${KEY}\": \"${ERRORS[${KEY}]}\","
+    done
+    echo '  "is_error": true'
+
+    echo '}'
+    return 1
+  fi
+
 }
+export -f check_nodejs_installation
+
+###############################################################################
+# Function prints into standard output the expected version of nodejs.
+# We use it during installation and to check installed "set environment" project.
+function get_expected_nodejs_version {
+  echo 'v16.13.0'
+}
+export -f get_expected_nodejs_version
 
 ###
 ### END UTILITY FUNCTIONS

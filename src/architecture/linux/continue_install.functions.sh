@@ -655,7 +655,10 @@ function install_node_ubuntu {
     set_state "${FUNCNAME[0]}" 'started'
 
     local APPROACH='n'
-    local VERSION='v16.13.0'
+    
+    # Get expected nodejs version
+    local VERSION="$( get_expected_nodejs_version )"
+    [ -z "${VERSION}" ] && { set_state "${FUNCNAME[0]}" 'failed_to_get_expected_nodejs_version'; abort; }
 
     case ${APPROACH} in
         nvm)
