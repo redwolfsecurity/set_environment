@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+# Caller must source this script.
+# Caller can check if set_environment was started by right user (after sourcing ". ./install.sh") by chkecking:
+#    - environment variable BEST_USER_TO_RUN_AS
+#      Example: if [ "${BEST_USER_TO_RUN_AS}" == "$(whoami)" ]; then echo "I'm the right/proper user"; fi
+#
+#    - calling bash function is_set_environment_working
+#      Example: if is_set_environment_working; then echo "I'm the right/proper user with set_environment installed/working properly."; fi
+#
+# Note: this script must be sourced due to the following reasons:
+#    - we "return" from main body in some cases (for example when we need background install by another user)
+#    - we inject lots of environment variables / bash funcitons into the caller's scope, so it can start using them w/o re-login
+#    - also caller need all the bash funcitons injected to answer the question "was I right user or need to switch to some other user to get nodejs?".
+
+logger -t set_environment "debug: Installer started by $(whoami) on $(date --utc) under PWD: $(pwd)"
+
+# This script implements the installer logic of the "set_environment" project.
+# Project github page: [TODO: add a link to the new github location of this project]
+
+# Change directory into script's directory. This ensure all relative paths working correctly.
+cd $( dirname ${BASH_SOURCE[0]} ) || { echo "Error: failed to change directory to $( dirname ${BASH_SOURCE[0]} )" >&2; exit 1; }
+
+# Source common functions
+source src/ff_bash_functions || { echo "Error: failed to source common functions." >&2; exit 1; } 
+
+# Continue by calling OS-specific installer
+source "src/architecture/$( discover_os )/continue_install.sh" "$@" || { error "continue install returned bad code: ${?}"; exit 1; }
