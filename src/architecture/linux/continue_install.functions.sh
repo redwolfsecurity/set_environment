@@ -55,7 +55,7 @@ function assert_basic_components {
     assert_clean_exit apt_install_basic_packages
     
     # Install NTP and make sure timesyncd is disabled (not working in parallel)
-    assert_clean_exit replace_timesyncd_with_ntpd
+    # assert_clean_exit replace_timesyncd_with_ntpd
 
     # Before installing locally (into local ff_agent/) packages, like "n / npm / nodejs" we need to put in place ff_agent .bashrc and .profile
     # TODO: DO WE REALLY DEPEND ON THIS BEFORE INSTALLING n/npm/nodejs??
