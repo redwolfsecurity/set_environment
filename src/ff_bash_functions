@@ -2201,30 +2201,56 @@ function check_nodejs_installation {
   # Check nodejs is installed
   WHICH_NODE="$( which node )"
   CHECK_NAME='is_nodejs_installed'
-  [ "${WHICH_NODE}" != "" ] || { set_state "${FUNCNAME[0]}" "error_check_nodejs_installation_nodejs_not_installed"; ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; }
+  [ "${WHICH_NODE}" != "" ] || {
+    ERROR_CODE="error_check_nodejs_installation_nodejs_not_installed"
+    set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
+    ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; 
+  }
 
   # Check nodejs is not installed under /usr
-  [[ "${WHICH_NODE}" =~ ^/usr/ ]] && { set_state "${FUNCNAME[0]}" "error_check_nodejs_installation_wrong_installation_dir"; ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; }
+  [[ "${WHICH_NODE}" =~ ^/usr/ ]] && { 
+    ERROR_CODE="error_check_nodejs_installation_wrong_installation_dir"
+    set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
+    ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; 
+  }
 
   # Check npm is installed
   WHICH_NPM="$(which npm)" 
-  [ "${WHICH_NPM}" != "" ] || { set_state "${FUNCNAME[0]}" "error_check_nmp_installation_nodejs_not_installed"; ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; }
+  [ "${WHICH_NPM}" != "" ] || { 
+    ERROR_CODE="error_check_nmp_installation_nodejs_not_installed"
+    set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; 
+    ERRORS[${CHECK_NAME}]="${ERROR_CODE}";
+  }
 
   # Check nodejs is not installed under /usr
-  [[ "${WHICH_NPM}" =~ ^/usr/ ]] && { set_state "${FUNCNAME[0]}" "error_check_npm_installation_wrong_installation_dir"; ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; }
+  [[ "${WHICH_NPM}" =~ ^/usr/ ]] && { 
+    ERROR_CODE="error_check_npm_installation_wrong_installation_dir"
+    set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
+    ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; 
+  }
 
   # Get expected nodejs version
   local EXPECTED_VERSION="$( get_expected_nodejs_version )"
-  [ -z "${EXPECTED_VERSION}" ] && { set_state "${FUNCNAME[0]}" 'failed_to_get_expected_nodejs_version'; ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; }
+  [ -z "${EXPECTED_VERSION}" ] && { 
+    ERROR_CODE="failed_to_get_expected_nodejs_version"
+    set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
+    ERRORS[${CHECK_NAME}]="${ERROR_CODE}";
+  }
 
   # Get actual nodejs version
   local ACTUAL_VERSION="$( node --version )"
-  [ -z "${ACTUAL_VERSION}" ] && { set_state "${FUNCNAME[0]}" 'failed_to_get_actual_nodejs_version'; ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; }
+  [ -z "${ACTUAL_VERSION}" ] && {
+    ERROR_CODE="failed_to_get_actual_nodejs_version"
+    set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; 
+    ERRORS[${CHECK_NAME}]="${ERROR_CODE}";
+  }
 
   # Compare expected vs actual nodejs versions
   if [ "${EXPECTED_VERSION}" != "${ACTUAL_VERSION}" ]; then
     # Version mismatch
-    set_state "${FUNCNAME[0]}" 'error_mismatching_nodejs_versions'; ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; }
+    ERROR_CODE="error_mismatching_nodejs_versions"
+    set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; 
+    ERRORS[${CHECK_NAME}]="${ERROR_CODE}";
   fi
 
   # Check number of errors
