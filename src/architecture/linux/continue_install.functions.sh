@@ -63,7 +63,7 @@ function assert_basic_components {
     assert_clean_exit install_ff_bash_functions   # Install ff_bash_functions -> ff_agent/lib/bash/, or abort.
 
     # Install docker (not using "apt")
-    assert_clean_exit install_docker
+    #assert_clean_exit install_docker
 
     # Install nodejs suite and all its fixings (not using "apt")
     assert_clean_exit install_nodejs_suite
