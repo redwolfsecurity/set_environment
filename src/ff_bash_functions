@@ -1319,9 +1319,9 @@ function apt_reinstall {
 
     for PACKAGE in ${PACKAGES}
     do
-        sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} ${PACKAGES}
+        sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} ${PACKAGE}
         if [ ${?} -ne 0 ]; then
-            error "Error reinstalling packages: ${PACKAGES}"
+            error "Error reinstalling packages: ${PACKAGE}"
             return 1
         fi
     done
@@ -1337,9 +1337,9 @@ function apt_remove {
 
     for PACKAGE in ${PACKAGES}
     do
-        sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} "${PACKAGES}"
+        sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} "${PACKAGE}"
         if [ ${?} -ne 0 ]; then
-            error "Error removing packages: ${PACKAGES}"
+            error "Error removing packages: ${PACKAGE}"
             return 1
         fi
     done

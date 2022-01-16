@@ -537,7 +537,7 @@ function install_ff_agent {
 
     # If we are on arm64, we likely need to install some extra packages
     # This is done as a case, just in case we have other such architectural changes for other architectures.
-    case get_hardware_architecture in
+    case $( get_hardware_architecture ) in
       arm64)
         PACKAGES_TO_INSTALL=(
           libcurl4-openssl-dev
@@ -573,22 +573,19 @@ function install_nodejs_suite {
 ###############################################################################
 #
 # After install_node_ubuntu() reinstalled npm using "n" we need to put back in place some of the npm modules installed earlierput back in place some of the npm modules installed earlier.
-# Old location:
-#   /usr/local/lib/node_modules
-# New location:
-#   /home/ubuntu/ff_agent/.n/lib/node_modules
+# XXX - TODO: this shouldn't really be here at all I think.
 function install_required_npm_libraries {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Flush prior knowledge about npm packages (we move whole node/npm suite installation inside ff_agent/.n)
-  npm cache clear --force  || { set_state "${FUNCNAME[0]}" "error_npm_cache_clear"; return 1; }
+  # npm cache clear --force  || { set_state "${FUNCNAME[0]}" "error_npm_cache_clear"; return 1; }
 
   # Install required packages
-  npm install --global commander  || { set_state "${FUNCNAME[0]}" "error_npm_install_commander"; return 1; }
-  npm install --global casperjs   || { set_state "${FUNCNAME[0]}" "error_npm_install_casperjs"; return 1; }
-  npm install --global jsontool   || { set_state "${FUNCNAME[0]}" "error_npm_install_jsontool"; return 1; }
-  npm install --global slimerjs   || { set_state "${FUNCNAME[0]}" "error_npm_install_slimerjs"; return 1; }
-  npm install --global typescript || { set_state "${FUNCNAME[0]}" "error_npm_install_typescript"; return 1; }
+  # npm install --global commander  || { set_state "${FUNCNAME[0]}" "error_npm_install_commander"; return 1; }
+  # npm install --global casperjs   || { set_state "${FUNCNAME[0]}" "error_npm_install_casperjs"; return 1; }
+  # npm install --global json   || { set_state "${FUNCNAME[0]}" "error_npm_install_jsontool"; return 1; }
+  # npm install --global slimerjs   || { set_state "${FUNCNAME[0]}" "error_npm_install_slimerjs"; return 1; }
+  # npm install --global typescript || { set_state "${FUNCNAME[0]}" "error_npm_install_typescript"; return 1; }
 
   # Chage state and return success
   set_state "${FUNCNAME[0]}" 'success'
