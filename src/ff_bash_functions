@@ -12,14 +12,6 @@
 # https://unix.stackexchange.com/questions/22796/can-i-export-functions-in-bash
 
 
-###
-### BEGIN UTILITY FUNCTIONS
-###
-
-
-
-
-
 # Usage: assert_makedir directory
 # Make directory if it does not exist
 function assert_makedir {
@@ -236,8 +228,12 @@ export -f abort
 #     
 function is_shell_attribute_set { # attribute, like "e"
   case "$-" in
-    *"${1}"*) return 0 ;;
-    *)    return 1 ;;
+    *"${1}"*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
   esac
 }
 
@@ -2365,7 +2361,3 @@ function get_expected_nodejs_version {
   echo 'v16.13.0'
 }
 export -f get_expected_nodejs_version
-
-###
-### END UTILITY FUNCTIONS
-###

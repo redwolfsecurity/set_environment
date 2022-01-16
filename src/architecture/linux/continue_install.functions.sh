@@ -172,9 +172,6 @@ function apt_install_basic_packages {
     assert_clean_exit apt_update
     assert_clean_exit apt_upgrade
 
-    # Let's collect all missing packages in the SELECTED_PACKAGES array
-    local SELECTED_PACKAGES=()
-
     # Define list of all required packages (by category, comment why we need the package for non-obvious ones)
     local REQUIRED_PACKAGES=(
         # Consider removing everything below. They are not probably required for the 'base'
@@ -208,15 +205,11 @@ function apt_install_basic_packages {
         ca-certificates-mono # Common CA certificates (Mono keystore)
     )
 
-    # Iterate all required packages and collect only missing ones
-    for PACKAGE_NAME in ${REQUIRED_PACKAGES[@]}; do
-        add_to_install_if_missing "${PACKAGE_NAME}" SELECTED_PACKAGES
-    done
+    # Temporarily disabled because Dmitry broke it all
+    # add_to_install_if_missing ${REQUIRED_PACKAGES[@]}
 
-    # If we have any selected packages to install - install them.
-    if [[ ${#SELECTED_PACKAGES[@]} > 0 ]]; then
-        apt_install ${SELECTED_PACKAGES[@]} || { set_state "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
-    fi
+    apt_install ${REQUIRED_PACKAGES[@]} || { set_state "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
+
 
     set_state "${FUNCNAME[0]}" 'success'
     return 0
