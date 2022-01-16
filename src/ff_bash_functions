@@ -1301,9 +1301,9 @@ function apt_install {
     for PACKAGE in ${PACKAGES}
     do
         # Note: we suppress stdout noise (only stderr will still be "visible", but TODO: think of better way to collect evidences insted of just 1 large pile)
-        sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} ${PACKAGES} > /dev/null
+        sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} ${PACKAGE} > /dev/null
         if [ ${?} -ne 0 ]; then
-            error "Error installing packages: ${PACKAGES}"
+            error "Error installing package: ${PACKAGE}"
             return 1
         fi
     done
