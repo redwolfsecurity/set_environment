@@ -292,17 +292,21 @@ function terminal_initialize() {
     export TERM=dumb
   fi
 
-  if [ is_tty && command_exists tput ] ; then
+  FONT_STYLE_BOLD=""
+  FONT_STYLE_GREEN=""
+  FONT_STYLE_RED=""
+  FONT_STYLE_NORMAL=""
+  
+  is_tty || return
+
+  if [ command_exists tput ] ; then
       # If this is a TTY, These set of "t_*" variables allows us to decorate the output with some style (colour, boldness)
       FONT_STYLE_BOLD="$(tput bold)"
       FONT_STYLE_GREEN="$(tput setaf 2)"
       FONT_STYLE_RED="$(tput setaf 1)"
       FONT_STYLE_NORMAL="$(tput sgr0)"
     else
-      FONT_STYLE_BOLD=""
-      FONT_STYLE_GREEN=""
-      FONT_STYLE_RED=""
-      FONT_STYLE_NORMAL=""
+
   fi
 }
 export -f terminal_initialize
