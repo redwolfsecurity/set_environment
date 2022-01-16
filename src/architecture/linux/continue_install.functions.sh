@@ -207,6 +207,8 @@ function apt_install_basic_packages {
         ca-certificates-java # Common CA certificates (JKS keystore)
         ca-certificates-mono # Common CA certificates (Mono keystore)
 
+    )
+    
     # Iterate all required packages and collect only missing ones
     for PACKAGE_NAME in ${REQUIRED_PACKAGES[@]}; do
         add_to_install_if_missing "${PACKAGE_NAME}" SELECTED_PACKAGES
