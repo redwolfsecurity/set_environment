@@ -1300,15 +1300,15 @@ function apt_install {
     PACKAGES=${@}
     APT_COMMAND=install
 
-    # for PACKAGE in ${PACKAGES}
-    # do
+    for PACKAGE in ${PACKAGES}
+    do
         # Note: we suppress stdout noise (only stderr will still be "visible", but TODO: think of better way to collect evidences insted of just 1 large pile)
         sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} ${PACKAGES} > /dev/null
         if [ ${?} -ne 0 ]; then
             error "Error installing packages: ${PACKAGES}"
             return 1
         fi
-    # done
+    done
     return 0
 }
 export -f apt_install
@@ -1319,14 +1319,14 @@ function apt_reinstall {
     PACKAGES=${@}
     APT_COMMAND=reinstall
 
-    # for PACKAGE in ${PACKAGES}
-    # do
+    for PACKAGE in ${PACKAGES}
+    do
         sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} ${PACKAGES}
         if [ ${?} -ne 0 ]; then
             error "Error reinstalling packages: ${PACKAGES}"
             return 1
         fi
-    # done
+    done
     return 0
 }
 export -f apt_reinstall
@@ -1337,14 +1337,14 @@ function apt_remove {
     PACKAGES=${@}
     APT_COMMAND=remove
 
-    # for PACKAGE in ${PACKAGES}
-    # do
+    for PACKAGE in ${PACKAGES}
+    do
         sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} "${PACKAGES}"
         if [ ${?} -ne 0 ]; then
             error "Error removing packages: ${PACKAGES}"
             return 1
         fi
-    #done
+    done
 }
 export -f apt_remove
 

@@ -206,9 +206,8 @@ function apt_install_basic_packages {
         ca-certificates # Common CA certificates - Docker requires
         ca-certificates-java # Common CA certificates (JKS keystore)
         ca-certificates-mono # Common CA certificates (Mono keystore)
-
     )
-    
+
     # Iterate all required packages and collect only missing ones
     for PACKAGE_NAME in ${REQUIRED_PACKAGES[@]}; do
         add_to_install_if_missing "${PACKAGE_NAME}" SELECTED_PACKAGES
@@ -216,7 +215,7 @@ function apt_install_basic_packages {
 
     # If we have any selected packages to install - install them.
     if [[ ${#SELECTED_PACKAGES[@]} > 0 ]]; then
-        apt_install "${SELECTED_PACKAGES[@]}" || { set_state "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
+        apt_install ${SELECTED_PACKAGES[@]} || { set_state "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
     fi
 
     set_state "${FUNCNAME[0]}" 'success'
@@ -542,6 +541,20 @@ function install_ff_agent {
     
     # Define the version of ff_agent npm package to install from CDN
     VERSION='latest'
+
+    # If we are on arm64, we likely need to install some extra packages
+    # This is done as a case, just in case we have other such architectural changes for other architectures.
+    case get_hardware_architecture in
+      arm64)
+        PACKAGES_TO_INSTALL=(
+          libcurl4-openssl-dev
+          build-essential
+        )
+        apt_install ${PACKAGES_TO_INSTALL[@]} || { set_state "${FUNCNAME[0]}" 'terminal_error_unable_to_install_ff_agent_dependencies'; abort; }
+      ;;
+      *)
+      ;;
+    esac
     
     # Install ff_agent
     npm install "${CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}.tgz" || { set_state "${FUNCNAME[0]}" 'terminal_error_failed_to_install_ff_agent'; abort; }
