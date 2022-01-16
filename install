@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set +x
+#!/usr/bin/env bash -x
+
 # Caller must source this script.
 # Caller can check if set_environment was started by right user (after sourcing ". ./install.sh") by chkecking:
 #    - environment variable BEST_USER_TO_RUN_AS
