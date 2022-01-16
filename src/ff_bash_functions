@@ -650,7 +650,7 @@ export -f get_best_user_to_run_as
 function create_user {
   USERNAME="${1}"
 	if [ ! -z "${USERNAME}" ]; then
-		if can_sudo "${USER}"; then
+		if can_sudo "${USERNAME}"; then
         	# TODO: Make this multiplatform. Check what happens if we do this in a docker.
         	sudo adduser --disabled-password --gecos "" "${USERNAME}"
 			return ${?}
@@ -797,7 +797,7 @@ export -f is_container_healthy
 function is_user_in_group () {
   USERNAME="${1}"
   GROUP="${2}"
-  [ -z "${USER}" ] && return 1
+  [ -z "${USERNAME}" ] && return 1
   [ -z "${GROUP}" ] && return 1
   if getent group "${GROUP}" | grep -q "\b${USERNAME}\b"; then
       return 0

@@ -92,7 +92,8 @@ function create_npmrc_credentials {
     set_state "${FUNCNAME[0]}" 'started'
 
     # Check required environment variables are set
-    [ "${AGENT_HOME_DIR}" != "" ] || { set_state "${FUNCNAME[0]}" 'error_getting_agent_home_dir'; return 1; }
+    [ "${AGENT_HOME_DIR}" == "" ] && { set_state "${FUNCNAME[0]}" 'error_getting_agent_home_dir'; return 1; }
+    [ "${USER}" == "" ] && set_state "${FUNCNAME[0]}" 'error_user_environment_variable_unset'; return 1; }
 
     # TODO: Get these credentials from secret manager
     # TODO: .npmrc can substitue environment variables -- that's at least a touch more secure if we run npm from our FF framework
@@ -1111,7 +1112,7 @@ function check_if_need_background_install () {
     # It might already exist, but not be writable due to chmod changes
     if [ ! -w "${AGENT_HOME}" ]; then
         # TODO: The ${USER} environment is NOT set when running as 'root' in docker. Improve this.
-        error "AGENT_HOME at ${AGENT_HOME} is not writable by user ${USER}. Aborting."
+        error "AGENT_HOME at ${AGENT_HOME} is not writable by user $( whoami ). Aborting."
         ls -l $AGENT_HOME/..
         abort
     fi
