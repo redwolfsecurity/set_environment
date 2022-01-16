@@ -295,7 +295,7 @@ function terminal_initialize() {
   
   terminal_is_tty || return
 
-  if [ command_exists tput ] ; then
+  if command_exists tput ; then
       # If this is a TTY, These set of "t_*" variables allows us to decorate the output with some style (colour, boldness)
       FONT_STYLE_BOLD="$(tput bold)"
       FONT_STYLE_GREEN="$(tput setaf 2)"
@@ -313,7 +313,7 @@ export -f terminal_is_tty
 
 # Reset terminal state - sometimes useful if a command messes up terminal state
 function terminal_reset () {
-  [ is_tty && command_exists_tput ] && tput reset && tput sane
+  [ is_tty && command_exists tput ] && tput reset && tput sane
 }
 export -f terminal_reset
 
