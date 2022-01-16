@@ -297,7 +297,7 @@ function terminal_initialize() {
   FONT_STYLE_RED=""
   FONT_STYLE_NORMAL=""
   
-  is_tty || return
+  terminal_is_tty || return
 
   if [ command_exists tput ] ; then
       # If this is a TTY, These set of "t_*" variables allows us to decorate the output with some style (colour, boldness)
