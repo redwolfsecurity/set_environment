@@ -1,4 +1,4 @@
-#
+#!/bin/bash -
 # This script is a part of "set_environment" installer and should not be called directry.
 # It got sourced from src/architecture/linux/continue_install.sh
 #
@@ -96,7 +96,7 @@ function create_npmrc_credentials {
 
     # Check required environment variables are set
     [ "${AGENT_HOME_DIR}" == "" ] && { set_state "${FUNCNAME[0]}" 'error_getting_agent_home_dir'; return 1; }
-    [ "${USER}" == "" ] && set_state "${FUNCNAME[0]}" 'error_user_environment_variable_unset'; return 1; }
+    [ "${USER}" == "" ] && { set_state "${FUNCNAME[0]}" 'error_user_environment_variable_unset'; return 1; }
 
     # TODO: Get these credentials from secret manager
     # TODO: .npmrc can substitue environment variables -- that's at least a touch more secure if we run npm from our FF framework
