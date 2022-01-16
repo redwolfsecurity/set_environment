@@ -1,4 +1,4 @@
-#!/usr/bin/env bash -x
+#!/usr/bin/env bash
 
 # Caller must source this script.
 # Caller can check if set_environment was started by right user (after sourcing ". ./install.sh") by chkecking:
