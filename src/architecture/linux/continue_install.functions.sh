@@ -29,15 +29,21 @@ function install_set_environment_baseline {
     # Install set of basic packages, bash functions, .bashrc and .profile files
     assert_clean_exit assert_basic_components || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_assert_basic_components"; abort; }
 
+    # Note: assert_clean_exit aborts on error
+    assert_clean_exit install_ff_agent
+}
+
+function install_build_environment () {
     # Commented out: for "baseline" we don't use andy credentials
     # # Check that required credentials for npm and docker are set up -- abort otherwise. Note: assert_core_credentials
     # # creates ~/.npmrc, while "ensure_standard_environment" is trying to fix wrong owner "root" on ~/.npmrc.
     # # Chicken-and-the-egg proplem. Solved by fixing ownership locally right befoer trying to write into the ~/.npmrc file.
     # assert_core_credentials || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_assert_core_credentials"; abort; }
 
-    # Note: this require .npm to be already in-place (with secrets)
-    # Note: assert_clean_exit aborts on error
-    assert_clean_exit install_ff_agent
+    create_npmrc_credentials || { set_state "${FUNCNAME[0]}" 'error_creating_npmrc_credentials'; exit 1; }
+    assert_npmrc_credentials || { set_state "${FUNCNAME[0]}" 'error_asserting_npmrc_credentials'; exit 1; }
+    # Temporarily disabled -- our agents don't have our docker credentials!
+    # assert_docker_credentials
 }
 
 ###############################################################################
@@ -77,10 +83,7 @@ function assert_basic_components {
 #
 function assert_core_credentials {
     set_state "${FUNCNAME[0]}" 'started'
-    create_npmrc_credentials || { set_state "${FUNCNAME[0]}" 'error_creating_npmrc_credentials'; exit 1; }
-    assert_npmrc_credentials || { set_state "${FUNCNAME[0]}" 'error_asserting_npmrc_credentials'; exit 1; }
-    # Temporarily disabled -- our agents don't have our docker credentials!
-    # assert_docker_credentials
+    # TODO - we should be part of docker group. That's about it I think.
     set_state "${FUNCNAME[0]}" 'success'
 }
 
@@ -563,7 +566,6 @@ function install_ff_agent {
 function install_nodejs_suite {
     set_state "${FUNCNAME[0]}" 'started'
 
-    fix_pre_existing_npm_permissions_ubuntu || { set_state "${FUNCNAME[0]}" 'terminal_error_fixing_npm_permissions'; abort; }
     install_node_ubuntu                     || { set_state "${FUNCNAME[0]}" 'terminal_error_install_node'; abort; }
     install_required_npm_libraries          || { set_state "${FUNCNAME[0]}" 'terminal_error_install_required_npm_libraries'; abort; }
 
@@ -593,34 +595,7 @@ function install_required_npm_libraries {
   return 0
 }
 
-###############################################################################
-# Dependencies: 
-#   AGENT_HOME_DIR
-#   BEST_USER_TO_RUN_AS
-function fix_pre_existing_npm_permissions_ubuntu {
-    set_state "${FUNCNAME[0]}" 'started'
 
-    # Check dependency environment is set
-    [ -z "${AGENT_HOME_DIR}" ] && { set_state "${FUNCNAME[0]}" "error_environment_not_set_agent_home_dir"; return 1; }
-    [ -z "${BEST_USER_TO_RUN_AS}" ] && { set_state "${FUNCNAME[0]}" "error_environment_not_set_best_user_to_run_as"; return 1; }
-        
-    # This is a fix for previous sins we comitted with permissions. It tries to align permissions properly going forward
-    # Note: on agents we can't install npm's as ubuntu unless this is fixed
-    local FIX_OWNERSHIP_PATHS=(
-        ${AGENT_HOME_DIR}/.npm
-        ${AGENT_HOME_DIR}/.npmrc
-        ${AGENT_HOME_DIR}/.config
-        ${AGENT_HOME_DIR}/.cache
-    )
-
-    for FIX_OWNERSHIP_PATH in ${FIX_OWNERSHIP_PATHS[@]}; do 
-        # Note: the '-e' test will check if file OR directory exists
-        [ -e "${FIX_OWNERSHIP_PATH}" ] && sudo chown -R "${BEST_USER_TO_RUN_AS}:$(id -gn ${BEST_USER_TO_RUN_AS})" "${FIX_OWNERSHIP_PATH}"
-    done
-
-    set_state "${FUNCNAME[0]}" 'success'
-    return 0
-}
 
 ###############################################################################
 #
