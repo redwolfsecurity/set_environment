@@ -22,7 +22,13 @@ logger -t set_environment "debug: Installer started by $(whoami) on $(date --utc
 cd $( dirname ${BASH_SOURCE[0]} ) || { echo "Error: failed to change directory to $( dirname ${BASH_SOURCE[0]} )" >&2; exit 1; }
 
 # Source common functions
-source src/ff_bash_functions || { echo "Error: failed to source common functions." >&2; exit 1; } 
+source src/ff_bash_functions || { echo "Error: failed to source common functions." >&2; exit 1; }
+
+# Initialize terminal
+terminal_initialize
+
+# Set the SERVICE variable
+export SERVICE="set_environment"
 
 # Continue by calling OS-specific installer
-source "src/architecture/$( discover_os )/continue_install.sh" "$@" || { error "continue install returned bad code: ${?}"; exit 1; }
+source "src/architecture/$( discover_os )/continue_install.sh" "$@" || { error "continue_install.sh returned bad code: ${?}"; exit 1; }
