@@ -1158,6 +1158,7 @@ function background_install () {
 function setup_logging () {
 	set_script_logging 
 }
+export setup_logging
 
 ###############################################################################
 # Log this script stdout and err to a log file AND system logger
