@@ -305,8 +305,6 @@ function terminal_initialize() {
       FONT_STYLE_GREEN="$(tput setaf 2)"
       FONT_STYLE_RED="$(tput setaf 1)"
       FONT_STYLE_NORMAL="$(tput sgr0)"
-    else
-
   fi
 }
 export -f terminal_initialize
