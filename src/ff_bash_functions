@@ -303,7 +303,6 @@ function terminal_initialize() {
       FONT_STYLE_GREEN=""
       FONT_STYLE_RED=""
       FONT_STYLE_NORMAL=""
-    fi
   fi
 }
 export -f terminal_initialize
