@@ -9,7 +9,8 @@
 # On errror: function aborts (so no need to errorcheck on caller side)
 #
 function install_set_environment_baseline {
-    
+    set_state "${FUNCNAME[0]}" 'started'
+
     # Discover environment:
     #    - generate AGENT_URI and NAMESPACE (if missing in our "secrets")
     #    - set variables: IS_CONTAINER, IS_PORTAL, IS_LOCAL, IS_TRAFFIC_GENERATOR
@@ -31,9 +32,12 @@ function install_set_environment_baseline {
 
     # Note: assert_clean_exit aborts on error
     assert_clean_exit install_ff_agent
+
+    set_state "${FUNCNAME[0]}" 'success'
 }
 
 function install_build_environment () {
+    set_state "${FUNCNAME[0]}" 'started'
     # Commented out: for "baseline" we don't use andy credentials
     # # Check that required credentials for npm and docker are set up -- abort otherwise. Note: assert_core_credentials
     # # creates ~/.npmrc, while "ensure_standard_environment" is trying to fix wrong owner "root" on ~/.npmrc.
@@ -44,6 +48,8 @@ function install_build_environment () {
     assert_npmrc_credentials || { set_state "${FUNCNAME[0]}" 'error_asserting_npmrc_credentials'; exit 1; }
     # Temporarily disabled -- our agents don't have our docker credentials!
     # assert_docker_credentials
+
+    set_state "${FUNCNAME[0]}" 'success'
 }
 
 ###############################################################################
@@ -214,7 +220,6 @@ function apt_install_basic_packages {
 
     apt_install ${REQUIRED_PACKAGES[@]} || { set_state "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
 
-
     set_state "${FUNCNAME[0]}" 'success'
     return 0
 }
@@ -296,6 +301,7 @@ function apt_install_basic_packages {
 # Note: f-n also uses set_state()
 #
 function replace_timesyncd_with_ntpd {
+    set_state "${FUNCNAME[0]}" 'started'
 
     # Check if timesyncd is active (disable if active)
     IS_TIMESYNCD_ACTIVE=$( systemctl status systemd-timesyncd.service | grep -i active | awk '{print $2}' )  # returns 'active' or 'inactive'
