@@ -1,68 +1,60 @@
 # Set Environment
 
-This project will generate the environment in which a Agent will be initialized, providing the programs and tools for deployment
+## Set Environment goals
 
-These currently include:
-- Docker
-- C++ Compiler Tools
-- Automake
-- nodeJS
-- NPM
-- Grunt
-
-
-This project also contains functions and variables files that are needed to install any other parts of the Agent.
-
-This must be installed before any other parts of the Agent stack are.
+Set Environment has following goals:
+- To install the minimal baseline set of tools/dependencies to be able to:
+    - Run containers (docker)
+    - Run VMs
+    - Run at a host level our FF agent
+- To install the right version of nodejs
+- To install certain kinds of environments, beyond the very base one:
+    - Agent environment
+    - Build environment (build tools)
+    - Developer environment (developer tools and default configurations)
+        - For developers, to install extended sets of components (depending on the selected environments)
+    - Setup the environment to run certain kinds of systems
+        - System is a collection of components (typically microservices running in dockers)
+- To recursively install any dependencies for the environments (e.g. developer environment depends upon at least a build environment, and that depends upon the baseline environment).
+- The "set environment" looks up the information about the environment to install. It hasn't this information hard-coded within the "set environment" project.
+        - Example: ideally the "set environment" project gives us docker and nodejs from which we can pass the responsibility to install/configure other environments.
+- Trust: based on the kind of the system or environment. It installs the secrets for the selected environment.
+- To Install configurations (~/.gitconfig,  VSCode configuration, vim config, etc.)
+- Depending on the target environment: to install/uninstall some additional components, for example developers will need development secrets (example ~/.npmrc, development docker repository, ability to talk to "parent" system)
+- To provide logged in users with as much as possible useful reusable components / functions / packages / settings. Ideally after installing the "set environment" there should be no need to install anything else for productive work.
+- To self-check, detect if the setup is broken (example: someone deleted required files) and be able to self-fix.
 
 ## Getting Started
 
-In order to use this environment, you need only check out this project and run the **install.sh** script.
-
-### Prerequisites
-
-- In order to use this project, you will need to have git so you can clone this project. you can install git by using the following command:
-```bash
-sudo apt-get install git
-```
-- The Build Environment is designed to run on Ubuntu
-- Make sure you have root permissions before starting this installation
-- Make sure you have CONTENT_URL environment defined, which points to the web server (to download some of bootstrap content)
-
 ### Installing
 
-To install this project, you must start by navigating to the directory in which you would like to place it.
-
-Next you need to check out this project:
-```
-git clone https://<username>@github.com/redoki/build_environment .
-```
-where <username> is the username you wish to use to check out the project
-
-you will now be prompted to enter the password for the account you chose and when the authentication is finished, the project will be in your current directory
-
-:warning: DO NOT INSTALL THIS SCRIPT AS **root** USER
-
-Once you have successfully cloned the project, run the build script with the following command
-```
-bash install.sh
+In order to use this environment, you need to download this project from github and run installer by teh following commands:
+``` 
+git clone git@github.com:redwolfsecurity/set_environment.git
+cd set_environment
+./install
 ```
 
-## Testing
+### Testing
 
-This project currently only implements self testing, the tests are performed on startup and if it succeeds in installing all of the programs then it has cleared all tests
+After installation is complete you should open a new terminal window, so that added initialization would be able to inject "set environment" components into your environment (see your initialization files: ~/.bashrc and ~/.profile).
+Now you can run test function "is_set_environment_working()".
+Example call and expected output:
+```
+is_set_environment_working
+{"is_success": true}
+```
 
-## Now That You're Done
+### Now That You're Done
 
-Once this project is installed, your system now has the tools required to build an Agent on. The ff_bash_functions file is in /usr/local/bin and contains functions that are useful for other development projects, such as:
+Once this project is installed, your system now has the tools required to build an Agent on. The ff_bash_functions file is in ff_agent/ff_agent/lib/bash/ff_bash_function and contains functions that are useful for other development projects, such as:
 
 - assert_cd which ensures that a cd command is performed correctly
 - assert_clean_exit which makes sure a command exits cleanly and aborts the script if it does not
 - many other functions for organizing output which can be viewed by viewing the ff_bash_functions file in this git project
 
-
 ## License
 
-Copyright 2021 RedOki
+Copyright 2022 RedOki
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
