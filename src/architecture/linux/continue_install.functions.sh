@@ -1,4 +1,4 @@
-#
+#!/bin/bash -
 # This script is a part of "set_environment" installer and should not be called directry.
 # It got sourced from src/architecture/linux/continue_install.sh
 #
@@ -9,9 +9,6 @@
 # On errror: function aborts (so no need to errorcheck on caller side)
 #
 function install_set_environment_baseline {
-
-    # Service name representing this script (it is used in ff_bash_functions: like log(), abort(), successful_exit())
-    export SERVICE="set_environment"
     
     # Discover environment:
     #    - generate AGENT_URI and NAMESPACE (if missing in our "secrets")
@@ -32,15 +29,21 @@ function install_set_environment_baseline {
     # Install set of basic packages, bash functions, .bashrc and .profile files
     assert_clean_exit assert_basic_components || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_assert_basic_components"; abort; }
 
+    # Note: assert_clean_exit aborts on error
+    assert_clean_exit install_ff_agent
+}
+
+function install_build_environment () {
     # Commented out: for "baseline" we don't use andy credentials
     # # Check that required credentials for npm and docker are set up -- abort otherwise. Note: assert_core_credentials
     # # creates ~/.npmrc, while "ensure_standard_environment" is trying to fix wrong owner "root" on ~/.npmrc.
     # # Chicken-and-the-egg proplem. Solved by fixing ownership locally right befoer trying to write into the ~/.npmrc file.
     # assert_core_credentials || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_assert_core_credentials"; abort; }
 
-    # Note: this require .npm to be already in-place (with secrets)
-    # Note: assert_clean_exit aborts on error
-    assert_clean_exit install_ff_agent
+    create_npmrc_credentials || { set_state "${FUNCNAME[0]}" 'error_creating_npmrc_credentials'; exit 1; }
+    assert_npmrc_credentials || { set_state "${FUNCNAME[0]}" 'error_asserting_npmrc_credentials'; exit 1; }
+    # Temporarily disabled -- our agents don't have our docker credentials!
+    # assert_docker_credentials
 }
 
 ###############################################################################
@@ -80,10 +83,7 @@ function assert_basic_components {
 #
 function assert_core_credentials {
     set_state "${FUNCNAME[0]}" 'started'
-    create_npmrc_credentials || { set_state "${FUNCNAME[0]}" 'error_creating_npmrc_credentials'; exit 1; }
-    assert_npmrc_credentials || { set_state "${FUNCNAME[0]}" 'error_asserting_npmrc_credentials'; exit 1; }
-    # Temporarily disabled -- our agents don't have our docker credentials!
-    # assert_docker_credentials
+    # TODO - we should be part of docker group. That's about it I think.
     set_state "${FUNCNAME[0]}" 'success'
 }
 
@@ -95,7 +95,8 @@ function create_npmrc_credentials {
     set_state "${FUNCNAME[0]}" 'started'
 
     # Check required environment variables are set
-    [ "${AGENT_HOME_DIR}" != "" ] || { set_state "${FUNCNAME[0]}" 'error_getting_agent_home_dir'; return 1; }
+    [ "${AGENT_HOME_DIR}" == "" ] && { set_state "${FUNCNAME[0]}" 'error_getting_agent_home_dir'; return 1; }
+    [ "${USER}" == "" ] && { set_state "${FUNCNAME[0]}" 'error_user_environment_variable_unset'; return 1; }
 
     # TODO: Get these credentials from secret manager
     # TODO: .npmrc can substitue environment variables -- that's at least a touch more secure if we run npm from our FF framework
@@ -175,82 +176,44 @@ function apt_install_basic_packages {
     assert_clean_exit apt_update
     assert_clean_exit apt_upgrade
 
-    # Let's collect all missing packages in the SELECTED_PACKAGES array
-    local SELECTED_PACKAGES=()
-
     # Define list of all required packages (by category, comment why we need the package for non-obvious ones)
     local REQUIRED_PACKAGES=(
-
+        # Consider removing everything below. They are not probably required for the 'base'
         # System: package management
         apt-utils # apt-utils required to avoid error: debconf: delaying package configuration, since apt-utils is not installed
         apt-transport-https # APT transport for downloading via the HTTP Secure protocol (HTTPS)
-        gnupg2
         software-properties-common # Part of "apt": manage the repositories that you install software from (common)
-        # gettext-base # This package includes the gettext and ngettext programs which allow other packages to internationalize the messages given by shell scripts.
+
+        # Consider removing 'sudo' - it should ideally not be required.
+        # Also the set_environment concept might never need elevated permissions.
+        sudo
+        # Bash must exist, for we are running in bash
+        #bash
+
+        # Curl must exist for this script and many others
+        curl
+
+        # The ff_bash_functions require jq
+        jq
+
+        # This script requires grep
+        grep
+
+        # Docker requires these
+        gnupg2
+        lsb-release
 
         # System: CA certificates
-        ca-certificates # Common CA certificates
+        ca-certificates # Common CA certificates - Docker requires
         ca-certificates-java # Common CA certificates (JKS keystore)
         ca-certificates-mono # Common CA certificates (Mono keystore)
-
-        
-        # Utilities
-        #uuid-runtime # for uuidgen, which is used in discover_environment and few other places
-        #tree
-        #jq
-
-        # System: administration tools / interpreters
-        sudo # Provide limited super user privileges to specific users.
-        #iptables # Administration tool for IPv4/IPv6 packet filtering and NAT.
-
-        bash
-
-        # Install "clients"
-        #wget
-        curl
-        #telnet
-        #git
-
-        # Install languages
-        #python
-        #python3
-        #go   -- go and n/npm/node will be installed by other (than "apt") means, but listed here since are required components
-        #n
-        #npm
-        #nodejs
-
-        # Install editors
-        #nano
-        #vim # Basic editor.
-
-        # Install network related tools
-        #iproute2
-        #net-tools
-        #iputils-ping
-        #traceroute
-        #tcptraceroute
-        #openssh-server
-        #dnsutils
-        #nmap
-
-        # Install build tools
-        #build-essential
-        #libpcap-dev
-        #autogen
-        #autotools-dev
-        #automake
-        #libtool
     )
 
-    # Iterate all required packages and collect only missing ones
-    for PACKAGE_NAME in ${REQUIRED_PACKAGES[@]}; do
-        add_to_install_if_missing "${PACKAGE_NAME}" SELECTED_PACKAGES
-    done
+    # Temporarily disabled because Dmitry broke it all
+    # add_to_install_if_missing ${REQUIRED_PACKAGES[@]}
 
-    # If we have any selected packages to install - install them.
-    if [[ ${#SELECTED_PACKAGES[@]} > 0 ]]; then
-        apt_install "${SELECTED_PACKAGES[@]}" || { set_state "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
-    fi
+    apt_install ${REQUIRED_PACKAGES[@]} || { set_state "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
+
 
     set_state "${FUNCNAME[0]}" 'success'
     return 0
@@ -477,8 +440,10 @@ function install_ff_agent_bashrc {
       fi
   fi
 
+  # XXX - TODO - the code in .bashrc and .profile should be the same. This is duplicating code for nothing.
   # ---------------------------------------- .bashrc (begin) --------------------
   # Define location of two .bashrc files
+  # XXX TODO - - why are these being exported? They are not deleted after this step and pollute the namespace
   export STD_BASHRC_FILE="${AGENT_HOME_DIR}/.bashrc"    # example: /home/ubuntu/.bashrc
   export FF_AGENT_BASHRC_FILE="${AGENT_HOME}/.bashrc"   # example: /home/ubuntu/ff_agent/.bashrc
 
@@ -573,6 +538,20 @@ function install_ff_agent {
     
     # Define the version of ff_agent npm package to install from CDN
     VERSION='latest'
+
+    # If we are on arm64, we likely need to install some extra packages
+    # This is done as a case, just in case we have other such architectural changes for other architectures.
+    case $( get_hardware_architecture ) in
+      arm64)
+        PACKAGES_TO_INSTALL=(
+          libcurl4-openssl-dev
+          build-essential
+        )
+        apt_install ${PACKAGES_TO_INSTALL[@]} || { set_state "${FUNCNAME[0]}" 'terminal_error_unable_to_install_ff_agent_dependencies'; abort; }
+      ;;
+      *)
+      ;;
+    esac
     
     # Install ff_agent
     npm install "${CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}.tgz" || { set_state "${FUNCNAME[0]}" 'terminal_error_failed_to_install_ff_agent'; abort; }
@@ -587,7 +566,6 @@ function install_ff_agent {
 function install_nodejs_suite {
     set_state "${FUNCNAME[0]}" 'started'
 
-    fix_pre_existing_npm_permissions_ubuntu || { set_state "${FUNCNAME[0]}" 'terminal_error_fixing_npm_permissions'; abort; }
     install_node_ubuntu                     || { set_state "${FUNCNAME[0]}" 'terminal_error_install_node'; abort; }
     install_required_npm_libraries          || { set_state "${FUNCNAME[0]}" 'terminal_error_install_required_npm_libraries'; abort; }
 
@@ -598,56 +576,26 @@ function install_nodejs_suite {
 ###############################################################################
 #
 # After install_node_ubuntu() reinstalled npm using "n" we need to put back in place some of the npm modules installed earlierput back in place some of the npm modules installed earlier.
-# Old location:
-#   /usr/local/lib/node_modules
-# New location:
-#   /home/ubuntu/ff_agent/.n/lib/node_modules
+# XXX - TODO: this shouldn't really be here at all I think.
 function install_required_npm_libraries {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Flush prior knowledge about npm packages (we move whole node/npm suite installation inside ff_agent/.n)
-  npm cache clear --force  || { set_state "${FUNCNAME[0]}" "error_npm_cache_clear"; return 1; }
+  # npm cache clear --force  || { set_state "${FUNCNAME[0]}" "error_npm_cache_clear"; return 1; }
 
   # Install required packages
-  npm install --global commander  || { set_state "${FUNCNAME[0]}" "error_npm_install_commander"; return 1; }
-  npm install --global casperjs   || { set_state "${FUNCNAME[0]}" "error_npm_install_casperjs"; return 1; }
-  npm install --global jsontool   || { set_state "${FUNCNAME[0]}" "error_npm_install_jsontool"; return 1; }
-  npm install --global slimerjs   || { set_state "${FUNCNAME[0]}" "error_npm_install_slimerjs"; return 1; }
-  npm install --global typescript || { set_state "${FUNCNAME[0]}" "error_npm_install_typescript"; return 1; }
+  # npm install --global commander  || { set_state "${FUNCNAME[0]}" "error_npm_install_commander"; return 1; }
+  # npm install --global casperjs   || { set_state "${FUNCNAME[0]}" "error_npm_install_casperjs"; return 1; }
+  # npm install --global json   || { set_state "${FUNCNAME[0]}" "error_npm_install_jsontool"; return 1; }
+  # npm install --global slimerjs   || { set_state "${FUNCNAME[0]}" "error_npm_install_slimerjs"; return 1; }
+  # npm install --global typescript || { set_state "${FUNCNAME[0]}" "error_npm_install_typescript"; return 1; }
 
   # Chage state and return success
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
 
-###############################################################################
-# Dependencies: 
-#   AGENT_HOME_DIR
-#   BEST_USER_TO_RUN_AS
-function fix_pre_existing_npm_permissions_ubuntu {
-    set_state "${FUNCNAME[0]}" 'started'
 
-    # Check dependency environment is set
-    [ -z "${AGENT_HOME_DIR}" ] && { set_state "${FUNCNAME[0]}" "error_environment_not_set_agent_home_dir"; return 1; }
-    [ -z "${BEST_USER_TO_RUN_AS}" ] && { set_state "${FUNCNAME[0]}" "error_environment_not_set_best_user_to_run_as"; return 1; }
-        
-    # This is a fix for previous sins we comitted with permissions. It tries to align permissions properly going forward
-    # Note: on agents we can't install npm's as ubuntu unless this is fixed
-    local FIX_OWNERSHIP_PATHS=(
-        ${AGENT_HOME_DIR}/.npm
-        ${AGENT_HOME_DIR}/.npmrc
-        ${AGENT_HOME_DIR}/.config
-        ${AGENT_HOME_DIR}/.cache
-    )
-
-    for FIX_OWNERSHIP_PATH in ${FIX_OWNERSHIP_PATHS[@]}; do 
-        # Note: the '-e' test will check if file OR directory exists
-        [ -e "${FIX_OWNERSHIP_PATH}" ] && sudo chown -R "${BEST_USER_TO_RUN_AS}:$(id -gn ${BEST_USER_TO_RUN_AS})" "${FIX_OWNERSHIP_PATH}"
-    done
-
-    set_state "${FUNCNAME[0]}" 'success'
-    return 0
-}
 
 ###############################################################################
 #
@@ -974,6 +922,9 @@ function install_required_npm_libraries {
   npm cache clear --force  || { set_state "${FUNCNAME[0]}" "error_npm_cache_clear"; return 1; }
 
   # Install required packages
+  # XXX - TODO - None of these are needed I think. They are not in the spec. If a project needs them, it can put
+  # them in, else, they can be part of other projects, like buildtools.
+  # We also need to not isntall typescript here as baseline, it is only for the development environment
   npm install --global commander  || { set_state "${FUNCNAME[0]}" "error_npm_install_commander"; return 1; }
   npm install --global casperjs   || { set_state "${FUNCNAME[0]}" "error_npm_install_casperjs"; return 1; }
   npm install --global jsontool   || { set_state "${FUNCNAME[0]}" "error_npm_install_jsontool"; return 1; }
@@ -1019,7 +970,7 @@ function install_docker {
 
     # Get ID, RELEASE and DISTRO and verify the values are actually set
     ID=$( get_lsb_id ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
-    [ "${ID}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
+    [ "${LSB_ID}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
 
     RELEASE=$( get_lsb_release ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }  # 18.04, 20.04, ...
     [ "${RELEASE}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }
@@ -1027,8 +978,10 @@ function install_docker {
     DISTRO=$( get_lsb_codename ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; }  # bionic, focal, ...
     [ "${DISTRO}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; } 
 
+    ARCHITECTURE=$( get_hardware_architecture ) || { set_state "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
+
     # Only Ubuntu for now
-    if [ "${ID}" != "Ubuntu" ]; then
+    if [ "${LSB_ID}" != "Ubuntu" ]; then
         set_state "${FUNCNAME[0]}" "error_docker_install_unsupported_operating_system"
         return 1
     fi
@@ -1036,19 +989,35 @@ function install_docker {
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
     [ "${?}" != "0" ] && { set_state "${FUNCNAME[0]}" "failed_to_add_gpg_key"; return 1; }
 
-    sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu ${DISTRO} stable"
+    sudo add-apt-repository "deb [arch=${ARCHITECTURE}] https://download.docker.com/linux/ubuntu ${DISTRO} stable"
     [ "${?}" != "0" ] && { set_state "${FUNCNAME[0]}" "failed_to_add_repository"; return 1; }
 
     apt_update
 
     apt_install docker-ce || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_ce"; return 1; }
     apt_install docker-compose || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_compose"; return 1; }
+    # containerd is available as a daemon for Linux and Windows. It manages the complete container lifecycle of its host system, from image transfer and storage to container execution and supervision to low-level storage to network attachments and beyond.
+    apt_install containerd.io || { set_state "${FUNCNAME[0]}" "failed_to_install_containerd_io"; return 1; }
 
-    sudo usermod -aG docker ${BEST_USER_TO_RUN_AS}
-    if [ "${?}" != "0" ]; then set_state "${FUNCNAME[0]}" "failed_to_modify_docker_user_group"; return 1; fi
+    # Add ourselves as a user to be able to run docker
+    # XXX - todo, the docker group might not actually exist and should be checked.
+    # We might not have sudo, so we should request command to be run.
+    GROUP="docker"
+    # Check if user is in this group. If not, add them
+    if [ ! is_user_in_group "${BEST_USER_TO_RUN_AS}" "${GROUP}" ]; then
+      # Not in group
+      sudo usermod -aG "${GROUP}" "${BEST_USER_TO_RUN_AS}"
+      if [ "${?}" != "0" ]; then set_state "${FUNCNAME[0]}" "failed_to_modify_docker_user_group"; return 1; fi
+      # Now check that we actually are in the group. This will work in current shell because it reads the groups file directly
+      [ ! is_user_in_group "${BEST_USER_TO_RUN_AS}" "${GROUP}" ] || { set_state "${FUNCNAME[0]}" "failed_postcondition_user_in_group"; return 1; }
+    fi
+    
 
-    set_secret docker_release "$( docker --version )"
-    set_secret docker_compose_relase "$( docker-compose --version )"
+    # Postcondition checks
+    # Verify docker is properly set up
+    # Note we are running via sudo, and if we added user to the ${GROUP} then it won't be applied in this shell.
+    set_secret docker_release "$( sudo --user=${BEST_USER_TO_RUN_AS} docker --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_to_get_release"; return 1; }
+    set_secret docker_compose_release "$( sudo --user=${BEST_USER_TO_RUN_AS} docker-compose --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_compose_to_get_release"; return 1; }
 
     # Check if installed docker version is less than minimally required
     if [ "$( get_installed_docker_version )" -lt "${MINIMUM_VERSION}" ]; then
@@ -1118,7 +1087,7 @@ function check_if_need_background_install () {
     # It might already exist, but not be writable due to chmod changes
     if [ ! -w "${AGENT_HOME}" ]; then
         # TODO: The ${USER} environment is NOT set when running as 'root' in docker. Improve this.
-        error "AGENT_HOME at ${AGENT_HOME} is not writable by user ${USER}. Aborting."
+        error "AGENT_HOME at ${AGENT_HOME} is not writable by user $( whoami ). Aborting."
         ls -l $AGENT_HOME/..
         abort
     fi
@@ -1189,6 +1158,7 @@ function background_install () {
 function setup_logging () {
 	set_script_logging 
 }
+export setup_logging
 
 ###############################################################################
 # Log this script stdout and err to a log file AND system logger
