@@ -2212,6 +2212,8 @@ function s {
 # are in place and functioning as expected
 #
 function is_set_environment_working {
+  set_state "${FUNCNAME[0]}" "started"
+
   # Check if all expected environments are in place
   check_all_environment_variables_are_set || { set_state "${FUNCNAME[0]}" "failed_check_check_all_environment_variables_are_set"; return 1; }
 
@@ -2225,6 +2227,7 @@ function is_set_environment_working {
   # TODO: instead of "cherry-picking" what to check we should have 1:1 "doer/instaler" and corresponding "checker" functions defined, which we'll call here by list.
 
   # Return success
+  set_state "${FUNCNAME[0]}" "successs"
   return 0
 }
 export -f is_set_environment_working
