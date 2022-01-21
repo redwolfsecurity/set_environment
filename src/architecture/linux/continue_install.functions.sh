@@ -421,19 +421,17 @@ function install_ff_bash_functions {
 function install_ff_agent_bashrc {
   set_state "${FUNCNAME[0]}" 'started'
 
-  # Check required environment variables
-  if [ -z "${BEST_USER_TO_RUN_AS}" ]; then
-  	set_state "${FUNCNAME[0]}" "error_environment_not_set_best_user_to_run_as"
-    return 1
-  fi
-  if [ -z "${AGENT_HOME_DIR}" ]; then
-  	set_state "${FUNCNAME[0]}" "error_environment_not_set_agent_home_dir"
-    return 1
-  fi
-  if [ -z "${AGENT_HOME}" ]; then
-  	set_state "${FUNCNAME[0]}" "error_environment_not_set_agent_home"
-    return 1
-  fi
+  # Define required variables
+  local REQUIRED_VARIABLES=( 
+    BEST_USER_TO_RUN_AS
+    AGENT_HOME_DIR
+    AGENT_HOME
+  )
+
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error(details) was already reported by ensure_variable_not_empty()
+  done
   
   # Make sure ${AGENT_HOME} folder exist
   if [ ! -d "${AGENT_HOME}" ]; then
@@ -940,98 +938,6 @@ function install_required_npm_libraries {
   # Chage state and return success
   set_state "${FUNCNAME[0]}" 'success'
   return 0
-}
-
-###############################################################################
-#
-# Function installs docker. It takes 1 argement "minimum version", if not provided,
-# then by default version 19 will be used.
-#
-# Supports Ubuntu 16.04, 18.04, 20.04
-function install_docker {
-
-    set_state "${FUNCNAME[0]}" 'started'
-
-    # Check required environment variables are set
-    # Check required environment variables
-    if [ -z "${BEST_USER_TO_RUN_AS}" ]; then
-        set_state "${FUNCNAME[0]}" "error_environment_not_set_best_user_to_run_as"
-        return 1
-    fi
-
-    # Take MINIMUM_VERSION argument, if empty, then set default value
-    MINIMUM_VERSION="${1}"
-    if [ -z "${MINIMUM_VERSION}" ]; then
-        MINIMUM_VERSION=19
-    fi
-
-    # Check if docker is installed and has version >= minimally required
-    ACTUAL_VERSION="$( get_installed_docker_version )"
-    if [ ! -z "${ACTUAL_VERSION}" ] && [ "${ACTUAL_VERSION}" -ge "${MINIMUM_VERSION}" ]; then
-        set_state "${FUNCNAME[0]}" "no_action_already_installed"
-        return 0
-    fi
-
-    # OK We install since we don't have the minimum version, or docker is not installed
-
-    # Get ID, RELEASE and DISTRO and verify the values are actually set
-    ID=$( get_lsb_id ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
-    [ "${LSB_ID}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
-
-    RELEASE=$( get_lsb_release ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }  # 18.04, 20.04, ...
-    [ "${RELEASE}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }
-
-    DISTRO=$( get_lsb_codename ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; }  # bionic, focal, ...
-    [ "${DISTRO}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; } 
-
-    ARCHITECTURE=$( get_hardware_architecture ) || { set_state "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
-
-    # Only Ubuntu for now
-    if [ "${LSB_ID}" != "Ubuntu" ]; then
-        set_state "${FUNCNAME[0]}" "error_docker_install_unsupported_operating_system"
-        return 1
-    fi
-
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-    [ "${?}" != "0" ] && { set_state "${FUNCNAME[0]}" "failed_to_add_gpg_key"; return 1; }
-
-    sudo add-apt-repository "deb [arch=${ARCHITECTURE}] https://download.docker.com/linux/ubuntu ${DISTRO} stable"
-    [ "${?}" != "0" ] && { set_state "${FUNCNAME[0]}" "failed_to_add_repository"; return 1; }
-
-    apt_update
-
-    apt_install docker-ce || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_ce"; return 1; }
-    apt_install docker-compose || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_compose"; return 1; }
-    # containerd is available as a daemon for Linux and Windows. It manages the complete container lifecycle of its host system, from image transfer and storage to container execution and supervision to low-level storage to network attachments and beyond.
-    apt_install containerd.io || { set_state "${FUNCNAME[0]}" "failed_to_install_containerd_io"; return 1; }
-
-    # Add ourselves as a user to be able to run docker
-    # XXX - todo, the docker group might not actually exist and should be checked.
-    # We might not have sudo, so we should request command to be run.
-    GROUP="docker"
-    # Check if user is in this group. If not, add them
-    if [ ! is_user_in_group "${BEST_USER_TO_RUN_AS}" "${GROUP}" ]; then
-      # Not in group
-      sudo usermod -aG "${GROUP}" "${BEST_USER_TO_RUN_AS}"
-      if [ "${?}" != "0" ]; then set_state "${FUNCNAME[0]}" "failed_to_modify_docker_user_group"; return 1; fi
-      # Now check that we actually are in the group. This will work in current shell because it reads the groups file directly
-      [ ! is_user_in_group "${BEST_USER_TO_RUN_AS}" "${GROUP}" ] || { set_state "${FUNCNAME[0]}" "failed_postcondition_user_in_group"; return 1; }
-    fi
-    
-
-    # Postcondition checks
-    # Verify docker is properly set up
-    # Note we are running via sudo, and if we added user to the ${GROUP} then it won't be applied in this shell.
-    set_secret docker_release "$( sudo --user=${BEST_USER_TO_RUN_AS} docker --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_to_get_release"; return 1; }
-    set_secret docker_compose_release "$( sudo --user=${BEST_USER_TO_RUN_AS} docker-compose --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_compose_to_get_release"; return 1; }
-
-    # Check if installed docker version is less than minimally required
-    if [ "$( get_installed_docker_version )" -lt "${MINIMUM_VERSION}" ]; then
-    	set_state "${FUNCNAME[0]}" "failed_to_install_did_not_pass_version_check"
-	    return 1
-    fi
-
-    set_state "${FUNCNAME[0]}" 'success'
 }
 
 ###############################################################################

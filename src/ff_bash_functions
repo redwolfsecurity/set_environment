@@ -434,8 +434,15 @@ export -f choose_ff_agent_home
 #  on error - return nonzero code
 #
 function ensure_agent_home_exists {
+
+  # Define required variables
+  local REQUIRED_VARIABLES=( 
+    AGENT_HOME
+    BEST_USER_TO_RUN_AS
+  )
+
   # Check required environment variables are set
-  for VARIABLE_NAME in AGENT_HOME BEST_USER_TO_RUN_AS; do
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error(details) was already reported by ensure_variable_not_empty()
   done
 
@@ -504,6 +511,10 @@ export -f ensure_variable_not_empty
 # stop_pm2 solves the problem of pm2 running by multiple user (designated "choosen user" and "root").
 # stop_pm2 would stop all found pm2 instances and remove it from automatic startup.
 #
+# Dependency: environment variables must be set:
+#    - AGENT_HOME_DIR
+#    - BEST_USER_TO_RUN_AS
+#
 function stop_pm2 {
     set_state "${FUNCNAME[0]}" 'stopping'
 
@@ -527,6 +538,11 @@ function stop_pm2 {
     # sudo ps aux | grep pm2
     # sudo systemctl status pm2-${BEST_USER_TO_RUN_AS}
     # echo "--------------- debug_snapshot end -----------------"
+
+    # Check required environment variables are set: AGENT_HOME_DIR BEST_USER_TO_RUN_AS
+    for VARIABLE_NAME in AGENT_HOME_DIR BEST_USER_TO_RUN_AS; do
+      ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error(details) was already reported by ensure_variable_not_empty()
+    done
 
     # pm2 may not be  installed, so we have nothing to stop
     PM2=$( which pm2 )
@@ -2275,11 +2291,12 @@ export -f is_framework_api_defined
 function check_nodejs_installation {
 
   # Let's run all the checks and collect all the found errors into associative array (key = name of the check, value = error code)
+  declare -A CHECK_CODES
   declare -A ERRORS
 
   # Check nodejs is installed
-  WHICH_NODE="$( which node )"
   CHECK_NAME='is_nodejs_installed'
+  WHICH_NODE="$( which node )"
   [ "${WHICH_NODE}" != "" ] || {
     ERROR_CODE="error_check_nodejs_installation_nodejs_not_installed"
     set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
@@ -2287,6 +2304,7 @@ function check_nodejs_installation {
   }
 
   # Check nodejs is not installed under /usr
+  CHECK_NAME='is_nodejs_installed_into_right_path'
   [[ "${WHICH_NODE}" =~ ^/usr/ ]] && { 
     ERROR_CODE="error_check_nodejs_installation_wrong_installation_dir"
     set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
@@ -2294,6 +2312,7 @@ function check_nodejs_installation {
   }
 
   # Check npm is installed
+  CHECK_NAME='is_npm_installed'
   WHICH_NPM="$(which npm)" 
   [ "${WHICH_NPM}" != "" ] || { 
     ERROR_CODE="error_check_nmp_installation_nodejs_not_installed"
@@ -2302,6 +2321,7 @@ function check_nodejs_installation {
   }
 
   # Check nodejs is not installed under /usr
+  CHECK_NAME='is_npm_installed_into_right_path'
   [[ "${WHICH_NPM}" =~ ^/usr/ ]] && { 
     ERROR_CODE="error_check_npm_installation_wrong_installation_dir"
     set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
@@ -2309,6 +2329,7 @@ function check_nodejs_installation {
   }
 
   # Get expected nodejs version
+  CHECK_NAME='get_expected_nodejs_version'
   local EXPECTED_VERSION="$( get_expected_nodejs_version )"
   [ -z "${EXPECTED_VERSION}" ] && { 
     ERROR_CODE="failed_to_get_expected_nodejs_version"
@@ -2317,6 +2338,7 @@ function check_nodejs_installation {
   }
 
   # Get actual nodejs version
+  CHECK_NAME='get_actual_nodejs_version'
   local ACTUAL_VERSION="$( node --version )"
   [ -z "${ACTUAL_VERSION}" ] && {
     ERROR_CODE="failed_to_get_actual_nodejs_version"
@@ -2325,6 +2347,7 @@ function check_nodejs_installation {
   }
 
   # Compare expected vs actual nodejs versions
+  CHECK_NAME='is_nodejs_right_versions'
   if [ "${EXPECTED_VERSION}" != "${ACTUAL_VERSION}" ]; then
     # Version mismatch
     ERROR_CODE="error_mismatching_nodejs_versions"
@@ -2332,22 +2355,17 @@ function check_nodejs_installation {
     ERRORS[${CHECK_NAME}]="${ERROR_CODE}";
   fi
 
-  # Check number of errors
+  # # Iterate all errors
+  # for KEY in "${!ERRORS[@]}"; do
+  #   echo "  \"${KEY}\": \"${ERRORS[${KEY}]}\","
+  # done
+  
+  # List of all the checks done with their statuses
   if [ ${#ERRORS[@]} -eq 0 ]; then
     # No errors
-    echo '{"is_success": true}'
     return 0
   else
     # We found some errors
-    echo '{'
-
-    # Iterate all found errors
-    for KEY in "${!ERRORS[@]}"; do
-      echo "  \"${KEY}\": \"${ERRORS[${KEY}]}\","
-    done
-    echo '  "is_error": true'
-
-    echo '}'
     return 1
   fi
 
@@ -2361,3 +2379,95 @@ function get_expected_nodejs_version {
   echo 'v16.13.0'
 }
 export -f get_expected_nodejs_version
+
+###############################################################################
+#
+# Function installs docker. It takes 1 argement "minimum version", if not provided,
+# then by default version 19 will be used.
+#
+# Supports Ubuntu 16.04, 18.04, 20.04
+function install_docker {
+
+    set_state "${FUNCNAME[0]}" 'started'
+
+    # Check required environment variables are set
+    # Check required environment variables
+    if [ -z "${BEST_USER_TO_RUN_AS}" ]; then
+        set_state "${FUNCNAME[0]}" "error_environment_not_set_best_user_to_run_as"
+        return 1
+    fi
+
+    # Take MINIMUM_VERSION argument, if empty, then set default value
+    MINIMUM_VERSION="${1}"
+    if [ -z "${MINIMUM_VERSION}" ]; then
+        MINIMUM_VERSION=19
+    fi
+
+    # Check if docker is installed and has version >= minimally required
+    ACTUAL_VERSION="$( get_installed_docker_version )"
+    if [ ! -z "${ACTUAL_VERSION}" ] && [ "${ACTUAL_VERSION}" -ge "${MINIMUM_VERSION}" ]; then
+        set_state "${FUNCNAME[0]}" "no_action_already_installed"
+        return 0
+    fi
+
+    # OK We install since we don't have the minimum version, or docker is not installed
+
+    # Get ID, RELEASE and DISTRO and verify the values are actually set
+    ID=$( get_lsb_id ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
+    [ "${LSB_ID}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
+
+    RELEASE=$( get_lsb_release ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }  # 18.04, 20.04, ...
+    [ "${RELEASE}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }
+
+    DISTRO=$( get_lsb_codename ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; }  # bionic, focal, ...
+    [ "${DISTRO}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; } 
+
+    ARCHITECTURE=$( get_hardware_architecture ) || { set_state "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
+
+    # Only Ubuntu for now
+    if [ "${LSB_ID}" != "Ubuntu" ]; then
+        set_state "${FUNCNAME[0]}" "error_docker_install_unsupported_operating_system"
+        return 1
+    fi
+
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+    [ "${?}" != "0" ] && { set_state "${FUNCNAME[0]}" "failed_to_add_gpg_key"; return 1; }
+
+    sudo add-apt-repository "deb [arch=${ARCHITECTURE}] https://download.docker.com/linux/ubuntu ${DISTRO} stable"
+    [ "${?}" != "0" ] && { set_state "${FUNCNAME[0]}" "failed_to_add_repository"; return 1; }
+
+    apt_update
+
+    apt_install docker-ce || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_ce"; return 1; }
+    apt_install docker-compose || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_compose"; return 1; }
+    # containerd is available as a daemon for Linux and Windows. It manages the complete container lifecycle of its host system, from image transfer and storage to container execution and supervision to low-level storage to network attachments and beyond.
+    apt_install containerd.io || { set_state "${FUNCNAME[0]}" "failed_to_install_containerd_io"; return 1; }
+
+    # Add ourselves as a user to be able to run docker
+    # XXX - todo, the docker group might not actually exist and should be checked.
+    # We might not have sudo, so we should request command to be run.
+    GROUP="docker"
+    # Check if user is in this group. If not, add them
+    if [ ! is_user_in_group "${BEST_USER_TO_RUN_AS}" "${GROUP}" ]; then
+      # Not in group
+      sudo usermod -aG "${GROUP}" "${BEST_USER_TO_RUN_AS}"
+      if [ "${?}" != "0" ]; then set_state "${FUNCNAME[0]}" "failed_to_modify_docker_user_group"; return 1; fi
+      # Now check that we actually are in the group. This will work in current shell because it reads the groups file directly
+      [ ! is_user_in_group "${BEST_USER_TO_RUN_AS}" "${GROUP}" ] || { set_state "${FUNCNAME[0]}" "failed_postcondition_user_in_group"; return 1; }
+    fi
+
+    # Postcondition checks
+    # Verify docker is properly set up
+    # Note we are running via sudo, and if we added user to the ${GROUP} then it won't be applied in this shell.
+    set_secret docker_release "$( sudo --user=${BEST_USER_TO_RUN_AS} docker --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_to_get_release"; return 1; }
+    set_secret docker_compose_release "$( sudo --user=${BEST_USER_TO_RUN_AS} docker-compose --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_compose_to_get_release"; return 1; }
+
+    # Check if installed docker version is less than minimally required
+    if [ "$( get_installed_docker_version )" -lt "${MINIMUM_VERSION}" ]; then
+    	set_state "${FUNCNAME[0]}" "failed_to_install_did_not_pass_version_check"
+	    return 1
+    fi
+
+    set_state "${FUNCNAME[0]}" 'success'
+}
+export -f install_docker
