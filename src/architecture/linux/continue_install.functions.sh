@@ -30,9 +30,6 @@ function install_set_environment_baseline {
     # Install set of basic packages, bash functions, .bashrc and .profile files
     assert_clean_exit assert_basic_components || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_assert_basic_components"; abort; }
 
-    # Note: assert_clean_exit aborts on error
-    assert_clean_exit install_ff_agent
-
     set_state "${FUNCNAME[0]}" 'success'
 }
 
@@ -76,6 +73,9 @@ function assert_basic_components {
 
     # Install nodejs suite and all its fixings (not using "apt")
     assert_clean_exit install_nodejs_suite
+
+    # Note: assert_clean_exit aborts on error
+    assert_clean_exit install_ff_agent
 
     set_state "${FUNCNAME[0]}" 'success'
 }
