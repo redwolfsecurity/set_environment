@@ -77,9 +77,6 @@ function assert_basic_components {
     # Install nodejs suite and all its fixings (not using "apt")
     assert_clean_exit install_nodejs_suite
 
-    # Put back in place some of the npm modules installed earlier
-    assert_clean_exit install_required_npm_libraries
-
     set_state "${FUNCNAME[0]}" 'success'
 }
 
@@ -159,21 +156,6 @@ function assert_npmrc_credentials {
 # Install basic packages
 #
 #
-# TODO: Sort this list out - either through them out or move into appropriate section (baseline, development, build, etc.)
-#
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy cyrus-dev \                     - Cyrus
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy cyrus-dev \                  - Cyrus SASL - authentication abstraction library
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy gnupg-agent \                   - GNU privacy guard - cryptographic agent (dummy transitional package)
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy libcurl4-openssl-dev \
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy liblz4-dev \
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy musl \
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy musl-dev \                      - "mysl" is a standard C library
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy musl-tools \
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy openjdk-11-jdk  \               - java 11
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy pypy-setuptools \               - PyPy Distutils Enhancements: Extensions to the python-distutils for large or complex distributions
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy snmp \                          - SNMP (Simple Network Management Protocol) applications
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy zlib1g-dev
-#
 function apt_install_basic_packages {
 
     set_state "${FUNCNAME[0]}" 'started'
@@ -184,17 +166,9 @@ function apt_install_basic_packages {
 
     # Define list of all required packages (by category, comment why we need the package for non-obvious ones)
     local REQUIRED_PACKAGES=(
-        # Consider removing everything below. They are not probably required for the 'base'
-        # System: package management
         apt-utils # apt-utils required to avoid error: debconf: delaying package configuration, since apt-utils is not installed
         apt-transport-https # APT transport for downloading via the HTTP Secure protocol (HTTPS)
-        software-properties-common # Part of "apt": manage the repositories that you install software from (common)
-
-        # Consider removing 'sudo' - it should ideally not be required.
-        # Also the set_environment concept might never need elevated permissions.
-        sudo
-        # Bash must exist, for we are running in bash
-        #bash
+        software-properties-common # Part of "apt": manage the repositories that you install software from 3rd party repos (i.e. add their repo + gpg key)
 
         # Curl must exist for this script and many others
         curl
@@ -211,8 +185,6 @@ function apt_install_basic_packages {
 
         # System: CA certificates
         ca-certificates # Common CA certificates - Docker requires
-        ca-certificates-java # Common CA certificates (JKS keystore)
-        ca-certificates-mono # Common CA certificates (Mono keystore)
     )
 
     # Temporarily disabled because Dmitry broke it all
@@ -223,58 +195,6 @@ function apt_install_basic_packages {
     set_state "${FUNCNAME[0]}" 'success'
     return 0
 }
-
-# ##########################################################################################
-# #
-# # The following function defines the list of packages required to run "puppeteer" as a part
-# # of unit tests on our porjects.
-# # See the official "Puppeteer: Troubleshooting" page:
-# # https://github.com/puppeteer/puppeteer/blob/main/docs/troubleshooting.md
-# #
-# ##########################################################################################
-# function apt_install_puppeteer_dependencies {
-#   local REQUIRED_PACKAGES=(
-#     ca-certificates
-#     fonts-liberation
-#     libappindicator3-1
-#     libasound2
-#     libatk-bridge2.0-0
-#     libatk1.0-0
-#     libc6
-#     libcairo2
-#     libcups2
-#     libdbus-1-3
-#     libexpat1
-#     libfontconfig1
-#     libgbm1
-#     libgcc1
-#     libglib2.0-0
-#     libgtk-3-0
-#     libnspr4
-#     libnss3
-#     libpango-1.0-0
-#     libpangocairo-1.0-0
-#     libstdc++6
-#     libx11-6
-#     libx11-xcb1
-#     libxcb1
-#     libxcomposite1
-#     libxcursor1
-#     libxdamage1
-#     libxext6
-#     libxfixes3
-#     libxi6
-#     libxrandr2
-#     libxrender1
-#     libxss1
-#     libxtst6
-#     lsb-release
-#     wget
-#     xdg-utils
-#   )
-# }
-
-
 
 
 ###############################################################################
@@ -571,34 +491,10 @@ function install_nodejs_suite {
     set_state "${FUNCNAME[0]}" 'started'
 
     install_node_ubuntu                     || { set_state "${FUNCNAME[0]}" 'terminal_error_install_node'; abort; }
-    install_required_npm_libraries          || { set_state "${FUNCNAME[0]}" 'terminal_error_install_required_npm_libraries'; abort; }
 
     set_state "${FUNCNAME[0]}" 'success'
     return 0
 }
-
-###############################################################################
-#
-# After install_node_ubuntu() reinstalled npm using "n" we need to put back in place some of the npm modules installed earlierput back in place some of the npm modules installed earlier.
-# XXX - TODO: this shouldn't really be here at all I think.
-function install_required_npm_libraries {
-  set_state "${FUNCNAME[0]}" 'started'
-
-  # Flush prior knowledge about npm packages (we move whole node/npm suite installation inside ff_agent/.n)
-  # npm cache clear --force  || { set_state "${FUNCNAME[0]}" "error_npm_cache_clear"; return 1; }
-
-  # Install required packages
-  # npm install --global commander  || { set_state "${FUNCNAME[0]}" "error_npm_install_commander"; return 1; }
-  # npm install --global casperjs   || { set_state "${FUNCNAME[0]}" "error_npm_install_casperjs"; return 1; }
-  # npm install --global json   || { set_state "${FUNCNAME[0]}" "error_npm_install_jsontool"; return 1; }
-  # npm install --global slimerjs   || { set_state "${FUNCNAME[0]}" "error_npm_install_slimerjs"; return 1; }
-  # npm install --global typescript || { set_state "${FUNCNAME[0]}" "error_npm_install_typescript"; return 1; }
-
-  # Chage state and return success
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
-}
-
 
 
 ###############################################################################
@@ -906,34 +802,6 @@ function install_n {
 
   # Clean up tmp folder
   cd "${PREVIOUS_DIR}" ; rm -fr "${TMPDIR}"
-
-  # Chage state and return success
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
-}
-
-###############################################################################
-#
-# After install_node_ubuntu() reinstalled npm using "n" we need to put back in place some of the npm modules installed earlier.
-# Old location:
-#   /usr/local/lib/node_modules
-# New location:
-#   /home/ubuntu/ff_agent/.n/lib/node_modules
-function install_required_npm_libraries {
-  set_state "${FUNCNAME[0]}" 'started'
-
-  # Flush prior knowledge about npm packages (we move whole node/npm suite installation inside ff_agent/.n)
-  npm cache clear --force  || { set_state "${FUNCNAME[0]}" "error_npm_cache_clear"; return 1; }
-
-  # Install required packages
-  # XXX - TODO - None of these are needed I think. They are not in the spec. If a project needs them, it can put
-  # them in, else, they can be part of other projects, like buildtools.
-  # We also need to not isntall typescript here as baseline, it is only for the development environment
-  npm install --global commander  || { set_state "${FUNCNAME[0]}" "error_npm_install_commander"; return 1; }
-  npm install --global casperjs   || { set_state "${FUNCNAME[0]}" "error_npm_install_casperjs"; return 1; }
-  npm install --global jsontool   || { set_state "${FUNCNAME[0]}" "error_npm_install_jsontool"; return 1; }
-  npm install --global slimerjs   || { set_state "${FUNCNAME[0]}" "error_npm_install_slimerjs"; return 1; }
-  npm install --global typescript || { set_state "${FUNCNAME[0]}" "error_npm_install_typescript"; return 1; }
 
   # Chage state and return success
   set_state "${FUNCNAME[0]}" 'success'
