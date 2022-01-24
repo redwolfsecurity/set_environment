@@ -28,9 +28,6 @@ function install_set_environment_baseline {
     # Install set of basic packages, bash functions, .bashrc and .profile files
     assert_clean_exit assert_basic_components || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_assert_basic_components"; abort; }
 
-    # Note: assert_clean_exit aborts on error
-    assert_clean_exit install_ff_agent
-
     set_state "${FUNCNAME[0]}" 'success'
 }
 
@@ -59,6 +56,12 @@ function assert_basic_components {
     # Install nodejs suite and all its fixings (not using "apt")
     assert_clean_exit install_nodejs_suite
 
+<<<<<<< HEAD
+=======
+    # Note: assert_clean_exit aborts on error
+    assert_clean_exit install_ff_agent
+
+>>>>>>> 516c18b6b955d97d009e347848595c4a7c18a439
     set_state "${FUNCNAME[0]}" 'success'
 }
 
@@ -123,21 +126,6 @@ function assert_npmrc_credentials {
 # Install basic packages
 #
 #
-# TODO: Sort this list out - either through them out or move into appropriate section (baseline, development, build, etc.)
-#
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy cyrus-dev \                     - Cyrus
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy cyrus-dev \                  - Cyrus SASL - authentication abstraction library
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy gnupg-agent \                   - GNU privacy guard - cryptographic agent (dummy transitional package)
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy libcurl4-openssl-dev \
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy liblz4-dev \
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy musl \
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy musl-dev \                      - "mysl" is a standard C library
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy musl-tools \
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy openjdk-11-jdk  \               - java 11
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy pypy-setuptools \               - PyPy Distutils Enhancements: Extensions to the python-distutils for large or complex distributions
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy snmp \                          - SNMP (Simple Network Management Protocol) applications
-#      && DEBIAN_FRONTEND=noninteractive apt-get install -qy zlib1g-dev
-#
 function apt_install_basic_packages {
 
     set_state "${FUNCNAME[0]}" 'started'
@@ -148,17 +136,9 @@ function apt_install_basic_packages {
 
     # Define list of all required packages (by category, comment why we need the package for non-obvious ones)
     local REQUIRED_PACKAGES=(
-        # Consider removing everything below. They are not probably required for the 'base'
-        # System: package management
         apt-utils # apt-utils required to avoid error: debconf: delaying package configuration, since apt-utils is not installed
         apt-transport-https # APT transport for downloading via the HTTP Secure protocol (HTTPS)
-        software-properties-common # Part of "apt": manage the repositories that you install software from (common)
-
-        # Consider removing 'sudo' - it should ideally not be required.
-        # Also the set_environment concept might never need elevated permissions.
-        sudo
-        # Bash must exist, for we are running in bash
-        #bash
+        software-properties-common # Part of "apt": manage the repositories that you install software from 3rd party repos (i.e. add their repo + gpg key)
 
         # Curl must exist for this script and many others
         curl
@@ -175,8 +155,6 @@ function apt_install_basic_packages {
 
         # System: CA certificates
         ca-certificates # Common CA certificates - Docker requires
-        ca-certificates-java # Common CA certificates (JKS keystore)
-        ca-certificates-mono # Common CA certificates (Mono keystore)
     )
 
     # Temporarily disabled because Dmitry broke it all
@@ -188,6 +166,7 @@ function apt_install_basic_packages {
     return 0
 }
 
+<<<<<<< HEAD
 # ##########################################################################################
 # #
 # # The following function defines the list of packages required to run "puppeteer" as a part
@@ -308,6 +287,8 @@ function apt_install_basic_packages {
 #     if [ $? -ne 0 ]; then
 #         set_state "${FUNCNAME[0]}" 'failed'
 #     fi
+=======
+>>>>>>> 516c18b6b955d97d009e347848595c4a7c18a439
 
 #     # Start NTP (note: it is safe to try to start in case it is already running - this might happen if ntp was not installed and was just added 1st time by apt)
 #     sudo systemctl start ntp
@@ -551,6 +532,10 @@ function install_nodejs_suite {
     return 0
 }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 516c18b6b955d97d009e347848595c4a7c18a439
 ###############################################################################
 #
 function install_node_ubuntu {
