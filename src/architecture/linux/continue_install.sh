@@ -3,13 +3,13 @@
 # This is OS-family specific script to continue installing "set_environment" project.
 
 # Source OS-specific install functions
-. src/architecture/linux/continue_install.functions.sh
+. src/architecture/linux/continue_install.functions.sh || { error "Failed to source OS-specific install functions."; exit 1; }
+
+# Only proceed if started by the right/chosen user, else exit by "return". It is ok to "return" from main body when we sourcing installer.
+[ "$( check_if_need_background_install )" == "true" ] && { return; }
 
 # Install basic components. Note: on errror: function aborts (no need to error check)
-install_set_environment_baseline
-
-# Only proceed if "I am the right user", else exit by "return". It is ok to "return" from main body when we sourcing installer.
-[ "$( check_if_need_background_install )" == "true" ] && { return; }
+install_set_environment_baseline || { error "Failed to install_set_environment_baseline. Details: return code was: $?"; exit 1; }
 
 # Install additional comonents
 # TODO: if any arguments passed to installer, call corresponding installer (pass control to nodejs instller portion)

@@ -393,30 +393,38 @@ export -f get_home_directory_for_user
 
 ###############################################################################
 #
-# A proper user is one that can install packages and is not root.
-# Note: function will create ${AGENT_HOME} folder if it does not exist yet.
+# Function choose_ff_agent_home():
 #
-# Sets following environment variables:
+# Sets the following environment variables:
 #   BEST_USER_TO_RUN_AS - example: ubuntu
-#   AGENT_HOME_DIR      - example: /home/ubuntu
-#   AGENT_DIR_NAME      - example: ff_agent
 #   AGENT_HOME          - example: /home/ubuntu/ff_agent
 #
 # Return:
 #  on success - export environment variables and return 0
 #  on error - return nonzero code
 #
+# Baseline installer must choose the "best user" (not root, able to sudo).
+#
+# Reason why we must avoid using root user: if program started by root user and a security
+# flaw is exploited, the attacker has access to all the data and can directly control the system.
+# For example, it might install a trojan or key-logger into your kernel. We only escalate user
+# privileges when required and allowed/agreed to install dependency packages.
+#
+# Failure to choose the right user would end up in the terminal installation error:
+# "terminal_error_failed_to_discover_environment".
+#
 function choose_ff_agent_home {
     
     # These exports are our "return values"
     # Note: we should not: "export SOMEVAR=$( some_function_call ) || { error "error details"; abort; } " because export would hide actual exit call of the "some_function_call" and thus we'll miss an error!
-    BEST_USER_TO_RUN_AS=$( get_best_user_to_run_as ) || { error "Failed to get_best_user_to_run_as."; return 1; }
+    BEST_USER_TO_RUN_AS=$( get_best_user_to_run_as ) || { error "terminal_error_failed_to_choose_user"; return 1; }
     export BEST_USER_TO_RUN_AS
     
-    AGENT_HOME_DIR=$( get_home_directory_for_user "${BEST_USER_TO_RUN_AS}" ) || { error "Failed to get_home_directory_for_user"; return 1; }
-    export AGENT_HOME_DIR
+    # Even if this function run by some other/not-chosen" user, the AGENT_HOME_DIR would point to the "right/choosen" home. Example: /home/ubuntu
+    # Only when we run as ritgh/choosen user the AGENT_HOME_DIR and HOME have the same values.
+    local AGENT_HOME_DIR=$( get_home_directory_for_user "${BEST_USER_TO_RUN_AS}" ) || { error "terminal_error_failed_to_get_home_directory_for_choosen_user"; return 1; }
     
-    export AGENT_DIR_NAME="ff_agent"
+    local AGENT_DIR_NAME="ff_agent"
     export AGENT_HOME="${AGENT_HOME_DIR}/${AGENT_DIR_NAME}"
 }
 export -f choose_ff_agent_home
@@ -443,12 +451,12 @@ function ensure_agent_home_exists {
 
   # Check required environment variables are set
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error(details) was already reported by ensure_variable_not_empty()
+    ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
   done
 
   # Make sure ${AGENT_HOME} folder exist
   if [ ! -d "${AGENT_HOME}" ]; then
-      # Create new folder if missing
+      # ${AGENT_HOME} folder is missing: create new one.
       mkdir -p "${AGENT_HOME}"
       if [ ${?} -ne 0 ]; then
         # Failed to create ${AGENT_HOME} - report error() and abort()
@@ -456,8 +464,6 @@ function ensure_agent_home_exists {
         set_state "${FUNCNAME[0]}" "failed_to_create_agent_home"
         return 1
       fi
-      # Change ownership of AGENT_HOME to the BEST_USER_TO_RUN_AS (case: installer started by 'root')
-      sudo chown "${BEST_USER_TO_RUN_AS}:$(id -gn ${BEST_USER_TO_RUN_AS})" "${AGENT_HOME}"
   fi
 }
 export -f ensure_agent_home_exists
@@ -512,7 +518,6 @@ export -f ensure_variable_not_empty
 # stop_pm2 would stop all found pm2 instances and remove it from automatic startup.
 #
 # Dependency: environment variables must be set:
-#    - AGENT_HOME_DIR
 #    - BEST_USER_TO_RUN_AS
 #
 function stop_pm2 {
@@ -539,9 +544,9 @@ function stop_pm2 {
     # sudo systemctl status pm2-${BEST_USER_TO_RUN_AS}
     # echo "--------------- debug_snapshot end -----------------"
 
-    # Check required environment variables are set: AGENT_HOME_DIR BEST_USER_TO_RUN_AS
-    for VARIABLE_NAME in AGENT_HOME_DIR BEST_USER_TO_RUN_AS; do
-      ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error(details) was already reported by ensure_variable_not_empty()
+    # Check required environment variables are set: BEST_USER_TO_RUN_AS
+    for VARIABLE_NAME in BEST_USER_TO_RUN_AS; do
+      ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
     done
 
     # pm2 may not be  installed, so we have nothing to stop
@@ -597,12 +602,6 @@ function stop_pm2 {
     fi
     PROCS=$( ps auxw | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
     [ "${PROCS}" != "" ] && { set_state "${FUNCNAME[0]}" "assertion_failure_should_be_no_pm2_processes_running"; return 1; }
-    set_state "${FUNCNAME[0]}" 'assertion_success_no_pm2_processes'
-
-    # Just in case, make sure we own our own .pm2
-    if [ -d "${AGENT_HOME_DIR}/.pm2" ]; then
-      sudo chown -R "${BEST_USER_TO_RUN_AS}:$(id -gn ${BEST_USER_TO_RUN_AS})" ${AGENT_HOME_DIR}/.pm2 || { set_state "${FUNCNAME[0]}" "could_not_change_ownership_of_directory"; return 1; }
-    fi
 
     set_state "${FUNCNAME[0]}" 'success_stopped'
     return 0
@@ -856,8 +855,7 @@ function restart_containers {
     done
 
     if (( ${#CONTAINERS_TO_RESTART[@]} )); then
-        # TODO: Factor out sudo
-        sudo docker restart ${CONTAINERS_TO_RESTART[@]}
+        docker restart ${CONTAINERS_TO_RESTART[@]}
         return ${?}
     fi
 
@@ -1488,7 +1486,7 @@ function get_secret {
 
     # Case: We're looking for KEY=="AGENT_URI" and we are on a traffic_generator.
     # In this case AGENT_URI was already generated and stored to /etc/ff/configuration/agent_uri
-    # Let's retreive it from there and re-store it into our standardized place (by set_secret)
+    # Let's retreive it from there and re-store it by set_secret()
     if [ "${KEY}" == "agent_uri" ] && [ -f /etc/ff/configuration/agent_uri ]; then
       AGENT_URI="$( cat /etc/ff/configuration/agent_uri )"
       # Store "agent" to proper unified place for secrets, so we don't have to look for it in random places again next time.
@@ -1502,7 +1500,7 @@ function get_secret {
     # Case: We are on a legacy control server in Amazon
     for environment in production staging development
     do
-        ENVPATH="${AGENT_HOME_DIR}/.control/environment/${environment}"
+        ENVPATH="${HOME}/.control/environment/${environment}"
         if [ -e "${ENVPATH}" ]; then
             VALUE=$( grep -i "^${KEY}=" ${ENVPATH}/* | cut -d= -f2 | head -1 )
             if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
@@ -1745,7 +1743,7 @@ export -f generate_strong_password
 ###############################################################################
 #
 # Figure out environment - where are we?
-# Function sets secrets (by set_secret f-n calls), which stores them under ${AGENT_HOME_DIR}/ff_agent/secrets/ folder.
+# Function sets secrets (by set_secret f-n calls), which stores them under ${HOME}/ff_agent/secrets/ folder.
 # Function also sets corresponding environment variables:
 #     - is_container,
 #     - is_portal,
@@ -1780,7 +1778,7 @@ function discover_environment {
   # Choose proper user to run as create "ff_agent" folder (known as ${AGENT_HOME}).
   # The proper user is not root but user with sudo that can install packages.
   # We need to choose_ff_agent_home before we can set/get secrets.
-  # This sets some of environment variables: BEST_USER_TO_RUN_AS, AGENT_HOME_DIR, AGENT_DIR_NAME, AGENT_HOME.
+  # This sets some of environment variables: BEST_USER_TO_RUN_AS, AGENT_HOME.
   # Also creates AGENT_HOME directory.
   choose_ff_agent_home || { error "failed_to_choose_ff_agent_home"; return 1; }
   ensure_agent_home_exists || { error "failed_to_ensure_agent_home_exists"; return 1; }
@@ -1793,11 +1791,18 @@ function discover_environment {
     CONTENT_URL=$( get_secret "content_url" )
     
     # Make sure CONTENT_URL is now not empty or error out.
-    ensure_variable_not_empty 'CONTENT_URL' || { return 1; }  # Note: the error(details) was already reported by ensure_variable_not_empty()
+    ensure_variable_not_empty 'CONTENT_URL' || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
     
     # Export newly retrieved value
     export CONTENT_URL
   fi
+
+  # Remove trailing slash from CONTENT_URL, so it works correctly when we concatenate CONTENT_URL with our paths
+  CONTENT_URL="$( trim_slash "${CONTENT_URL}" )" || {
+    set_state "${FUNCNAME[0]}" "error_trim_slash_from_content_url"
+    return 1
+  }
+
   # Store/update CONTENT_URL value
   set_secret content_url "${CONTENT_URL}"
 
@@ -2208,6 +2213,35 @@ function s {
 }
 
 ###############################################################################
+# Utility function trim_slash():
+#   - Replaces all repeated slashes //[...] with a single slash /
+#   - Removes trailing slash unless it is also the leading slash (i.e., the root filepath /)
+#
+# Function is useful to remove trailing slashes from URL string for example "http://asdf.com///" -> "http://asdf.com"
+#
+# More details in this StackOverflow discussion: https://stackoverflow.com/a/69485442/7022062
+#
+# Some test cases:
+#   
+#   $ trim_slash "http://asdf.com/a/b/c/" "http://asdf.com///" "http://asdf.com/" "/" "///" "a/" "b/b/" "c/c////" 
+#
+# Expected output:
+#       http://asdf.com/a/b/c
+#       http://asdf.com
+#       http://asdf.com
+#       /
+#       /
+#       a
+#       b/b
+#       c/c
+#
+function trim_slash {
+  for s; do 
+    sed -E 's:(^/)?/*$:\1:' <<< "${s}"
+  done
+}
+
+###############################################################################
 # Utility function is_set_environment_working() checks if all the aspects of "set_environment"
 # are in place and functioning as expected
 #
@@ -2246,14 +2280,12 @@ function check_all_environment_variables_are_set {
 
     # "Dynamically learned" fields
     BEST_USER_TO_RUN_AS
-    AGENT_HOME_DIR
-    AGENT_DIR_NAME
     AGENT_HOME
   )
 
   # Check required environment variables are set
   for VARIABLE_NAME in ${ALL_EXPECTED_ENVRIONMENT_VARIABLES[@]}; do 
-    ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }    # Note: the error(details) was already reported by ensure_variable_not_empty()
+    ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }    # Note: the error details were already reported by ensure_variable_not_empty()
   done
 }
 export -f check_all_environment_variables_are_set
