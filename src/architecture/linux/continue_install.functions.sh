@@ -3,6 +3,9 @@
 # It got sourced from src/architecture/linux/continue_install.sh
 #
 
+# Make installation output more verbose so we can audit all the steps
+set -x
+
 ###############################################################################
 #
 # Continuation of the "set_environment". Installing baseline components.
@@ -231,7 +234,7 @@ function apt_install_basic_packages {
 # # end user devices like laptops, but it could definitely cause problems for distributed systems that want greater time precision.
 # # (source article: https://unix.stackexchange.com/questions/305643/ntpd-vs-systemd-timesyncd-how-to-achieve-reliable-ntp-syncing/464729#464729 )
 # #
-# # So install_ntp() disables "systemd-timesyncd" and leaves only "ntpd".
+# # So install_ntp disables "systemd-timesyncd" and leaves only "ntpd".
 # #
 # # Return value: 0 = success, 1 = failure
 # #
@@ -368,88 +371,102 @@ function install_ff_agent_bashrc {
   if [ ! -d "${AGENT_HOME}" ]; then
     # ${AGENT_HOME} folder is missing. Don't try to create it (it is responsibility of ensure_agent_home_exists()).
     # Report an error and abort.
-    error "AGENT_HOME=${AGENT_HOME} directory Does not exist. Aborting."
+    error "AGENT_HOME='${AGENT_HOME}' directory Does not exist. Aborting."
     abort
   fi
 
   # Define location of two profile files
-  local HOME_PROFILE_FILE="${HOME}/.profile"    # example: /home/ubuntu/.profile
-  FF_AGENT_PROFILE_FILE="${AGENT_HOME}/.profile"   # example: /home/ubuntu/ff_agent/.profile  (Note: FF_AGENT_PROFILE_FILE is not local, but shell environment used in other install functions)
+  local HOME_PROFILE_FILE="${HOME}/.profile"
+  FF_AGENT_PROFILE_FILE="${AGENT_HOME}/.profile"    # example: /home/ubuntu/ff_agent/.profile  (Note: FF_AGENT_PROFILE_FILE is not local, but shell environment used in other install functions)
 
   # Define location of .bashrc file
-  local HOME_BASHRC_FILE="${HOME}/.bashrc"    # example: /home/ubuntu/.bashrc
+  local HOME_BASHRC_FILE="${HOME}/.bashrc"
 
-  # ---------------------------------------- .bashrc (begin) -------------------- 
-  # Inject into the HOME_BASHRC_FILE: source the custom ${AGENT_HOME}/.profile
-  TARGET_FILE="${HOME_BASHRC_FILE}"
-  PATTERN="source \"${FF_AGENT_PROFILE_FILE}\""
-  if ! file_contains_pattern "${TARGET_FILE}" "${PATTERN}"; then
-    # Expected pattern is missing. Inject text
-    (
+  # --------------------------------------------------------------------
+  # Inject sourcing custom ff_agent/.profile into these files:
+  TARGET_FILES=( "${HOME_BASHRC_FILE}" "${HOME_PROFILE_FILE}" )
+
+  # Iterate target files
+  for TARGET_FILE in "${TARGET_FILES[@]}"; do
+    # Create TARGET_FILE if missing
+    if [ ! -f "${TARGET_FILE}" ]; then
+      (
+        cat <<EOT
+# File ${TARGET_FILE} created by set_environment ${FUNCNAME[0]}() on $(date --utc).
+EOT
+      ) > "${TARGET_FILE}" || { set_state "${FUNCNAME[0]}" "failed_to_create_file"; return 1; }
+    fi
+    
+    PATTERN="^source \"${FF_AGENT_PROFILE_FILE}\""
+    INJECT_CONTENT=$(
       cat <<EOT
-# Sourcing custom ff_agent/.bashrc file (injected by set_environment -> ff_bash_functions -> ${FUNCNAME[0]} on $(date --utc))
+# Sourcing ${FF_AGENT_PROFILE_FILE} injected by set_environment ${FUNCNAME[0]}() on $(date --utc).
 source "${FF_AGENT_PROFILE_FILE}"
 EOT
-    ) >> "${TARGET_FILE}" || {
-      set_state "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'; return 1; 
-    }
-  fi
-  # ---------------------------------------- .bashrc (end) --------------------
+    )
+    ERROR_CODE='error_injecting_source_custom_profile'
+      
+    # Do injection and check result
+    inject_into_file "${TARGET_FILE}" "${PATTERN}" "${INJECT_CONTENT}" || { set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; return 1; }
+  done
+  #
+  # --------------------------------------------------------------------
 
-  # ---------------------------------------- .profile (begin) --------------------
 
-  # Create "custom" .profile if missing
-  if [ ! -f "${FF_AGENT_PROFILE_FILE}" ]; then
-    (
-      cat <<EOT
-# Custom ff_agent .profile file (created by set_environment -> ff_bash_functions -> ${FUNCNAME[0]} on $(date --utc))
-EOT
-    ) > "${FF_AGENT_PROFILE_FILE}" || { set_state "${FUNCNAME[0]}" "failed_to_write_to_custom_profile"; return 1; }
-  fi
-
-  # Inject into HOME_PROFILE_FILE: source the custom FF_AGENT_PROFILE_FILE
-  TARGET_FILE="${HOME_PROFILE_FILE}"
-  PATTERN="^source \"${FF_AGENT_PROFILE_FILE}"
-  if ! file_contains_pattern "${TARGET_FILE}" "${PATTERN}"; then
-    # Expected line is missing. Inject text
-    (
-      cat <<EOT
-# Sourcing custom ff_agent/.profile file (injected by set_environment -> ff_bash_functions -> ${FUNCNAME[0]} on $(date --utc))
-source "${FF_AGENT_PROFILE_FILE}"
-EOT
-    ) >> "${TARGET_FILE}" || { set_state "${FUNCNAME[0]}" "failed_to_write_to_home_profile"; return 1; }
-  fi
+  # --------------------------------------------------------------------
+  # Inject sourcing ff_bash_functions
 
   # Define path to the installed ff_bash_functions
-  local FF_BASH_FUNCTIONS_INSTALLED_PATH="${AGENT_HOME}/lib/bash/ff_bash_functions"
+  local FF_BASH_FUNCTIONS_PATH="${AGENT_HOME}/lib/bash/ff_bash_functions"
 
   # Inject into the custom .profile to source ff_bash_functions (if missing)
   # Search expected line
   TARGET_FILE="${FF_AGENT_PROFILE_FILE}"
-  PATTERN="^source \"${FF_BASH_FUNCTIONS_INSTALLED_PATH}"
-  if ! file_contains_pattern "${TARGET_FILE}" "${PATTERN}"; then
-    # Line is missing, inject text
-    (
-      cat <<EOT    
-# Sourcing bash functions library from ${FF_BASH_FUNCTIONS_INSTALLED_PATH} (added by set_environment -> ff_bash_functions -> ${FUNCNAME[0]} on $(date --utc))
-source "${FF_BASH_FUNCTIONS_INSTALLED_PATH}"
+  PATTERN="^source \"${FF_BASH_FUNCTIONS_PATH}"
+  INJECT_CONTENT=$(
+    cat <<EOT    
+# Sourcing bash functions library from ${FF_BASH_FUNCTIONS_PATH} injected by set_environment ${FUNCNAME[0]}() on $(date --utc).
+source "${FF_BASH_FUNCTIONS_PATH}"
 EOT
-    ) >> ${TARGET_FILE} || { set_state "${FUNCNAME[0]}" "error_writing_to_custom_profile"; return 1; }
+  ) 
+  ERROR_CODE='error_injecting_source_ff_bash_functions'
+
+  # Create TARGET_FILE if missing
+  if [ ! -f "${TARGET_FILE}" ]; then
+    (
+      cat <<EOT
+# File ${TARGET_FILE} created by set_environment ${FUNCNAME[0]}() on $(date --utc).
+EOT
+    ) > "${TARGET_FILE}" || { set_state "${FUNCNAME[0]}" "failed_to_create_file"; return 1; }
   fi
 
+  # Do injection and check result
+  inject_into_file "${TARGET_FILE}" "${PATTERN}" "${INJECT_CONTENT}" || { set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; return 1; }
+  #
+  # --------------------------------------------------------------------
+  
+
+  # --------------------------------------------------------------------
   # Inject into the custom .profile call to "discover_environment"
   TARGET_FILE="${FF_AGENT_PROFILE_FILE}"
-  PATTERN="discover_environment"
-  if ! file_contains_pattern "${TARGET_FILE}" "${PATTERN}"; then
-    # Line is missing, inject text
-    (
+  PATTERN="^discover_environment"
+  INJECT_CONTENT=$(
       cat <<EOT    
 discover_environment
 EOT
-    ) >> ${TARGET_FILE} || { set_state "${FUNCNAME[0]}" "error_writing_to_custom_profile"; return 1; }
-  fi
+  )
+  ERROR_CODE='error_injecting_discover_environment_call_to_custom_profile'
 
-  # Define path to ff_agent/bin folder, which we will inject into PATH
+  # Do injection and check result
+  inject_into_file "${TARGET_FILE}" "${PATTERN}" "${INJECT_CONTENT}" || { set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; return 1; }
+  #
+  # --------------------------------------------------------------------
+  
+
+  # --------------------------------------------------------------------
+  # Inject into the custom .profile: path to ${FF_AGENT_BIN} must be part of the PATH
+  
+  # Define the path to ff_agent/bin folder, which we will inject into PATH
   local FF_AGENT_BIN="${AGENT_HOME}/bin"
 
   # Update PATH variable (if it not yet contains expected string)
@@ -458,20 +475,21 @@ EOT
     export PATH="${FF_AGENT_BIN}:${PATH}" || { set_state "${FUNCNAME[0]}" 'error_modifying_path'; return 1; }
   fi
 
-  # Inject into the custom .profile: path to ${FF_AGENT_BIN} must be part of the PATH
-  # Search expected line
   TARGET_FILE="${FF_AGENT_PROFILE_FILE}"
-  PATTERN="export PATH=\"${FF_AGENT_BIN}"
-  if ! file_contains_pattern "${TARGET_FILE}" "${PATTERN}"; then
-    # Line is missing, inject text
-    (
+  PATTERN="^export PATH=\"${FF_AGENT_BIN}"
+  INJECT_CONTENT=$(
       cat <<EOT   
 export PATH="${FF_AGENT_BIN}:${PATH}"
 EOT
-    ) >> ${FF_AGENT_PROFILE_FILE} || { set_state "${FUNCNAME[0]}" "error_writing_to_custom_profile"; return 1; }
-  fi
-  # ---------------------------------------- .profile (end) --------------------
-    
+  )
+  
+  ERROR_CODE='error_injecting_ff_agent_bin_path_to_custom_profile'
+
+  # Do injection and check result
+  inject_into_file "${TARGET_FILE}" "${PATTERN}" "${INJECT_CONTENT}" || { set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; return 1; }
+  #
+  # --------------------------------------------------------------------
+  
   # Chage state and return success
   set_state "${FUNCNAME[0]}" 'success'
   return 0
@@ -880,16 +898,15 @@ function add_to_install_if_missing {
 # Dependency:
 #   BEST_USER_TO_RUN_AS - must be set
 #
-function check_if_need_background_install () {
+function check_if_need_background_install {
 
     # Check required environment variables are set
     [ "${BEST_USER_TO_RUN_AS}" != "" ] || { set_state "${FUNCNAME[0]}" 'terminal_error_getting_best_user_to_run_as'; abort; }
 
     # It might already exist, but not be writable due to chmod changes
-    if [ ! -w "${AGENT_HOME}" ]; then
+    if [ -f "${AGENT_HOME}" ] && [ ! -w "${AGENT_HOME}" ]; then
         # TODO: The ${USER} environment is NOT set when running as 'root' in docker. Improve this.
         error "AGENT_HOME at ${AGENT_HOME} is not writable by user $( whoami ). Aborting."
-        ls -l $AGENT_HOME/..
         abort
     fi
 
@@ -927,7 +944,7 @@ function check_if_need_background_install () {
 #   - Running that script as correct target user.
 #
 # TODO: it seems the tmp directory created by "mktemp" never got deleted.
-function background_install () {
+function background_install {
 
     # Take the only argument: target username to "run as"
     USER_TO_RUN_AS="${1}"
@@ -956,13 +973,13 @@ function background_install () {
 
 ###############################################################################
 #
-function setup_logging () {
+function setup_logging {
 	set_script_logging 
 }
 
 ###############################################################################
 # Log this script standard output and standard error to a log file AND system logger
-function set_script_logging () {
+function set_script_logging {
 
   # Note: we can not yet call "set_state" on that early stages
  	#set_state "${FUNCNAME[0]}" 'started'

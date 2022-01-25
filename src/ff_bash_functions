@@ -53,7 +53,7 @@ function assert_clean_exit {
   "${@}"
   local STATUS=${?}
   if [ ${STATUS} -ne 0 ]; then
-     log "ERROR: Command \"${@}\"did not exit cleanly."
+     log "ERROR: Command \"${@}\" did not exit cleanly."
      abort
   # else
   # 	log "SUCCESS: ${@}"
@@ -183,10 +183,10 @@ export -f help
 # Category: file
 # Utility function - injects text into the end of existing file.
 # 
-# Function serch regular expression PATTERN in the existing file by the given TARGET_FILENAME and if missing, then
-# the INJECT_CONTENT got injected at the end of the TARGET_FILENAME.
+# Function serch regular expression PATTERN in the existing file by the given TARGET_FILE and if missing, then
+# the INJECT_CONTENT got injected at the end of the TARGET_FILE.
 # Return:
-#  code 0 - succesful injection (or PATTERN already present in the TARGET_FILENAME)
+#  code 0 - succesful injection (or PATTERN already present in the TARGET_FILE)
 #  code 1 - failed to inject (not enough permissions, target file does not exist etc.)
 #           In case of error: the error will be reported by error() function (to standard output and into logger)
 #
@@ -199,8 +199,8 @@ export -f help
 #
 # Usage example:
 #
-#   TARGET_FILENAME="/tmp/some_file.txt"
-#   echo "creating example target file" > "${TARGET_FILENAME}"
+#   TARGET_FILE="/tmp/some_file.txt"
+#   echo "creating example target file" > "${TARGET_FILE}"
 #   PATTERN="source \"${FF_AGENT_PROFILE_FILE}\""
 #
 #   # This will probably loose EOL for multi-line content(?)
@@ -214,42 +214,42 @@ export -f help
 # EOT
 #     )
 #
-#   inject_into_file "${TARGET_FILENAME}" "${PATTERN}" "${INJECT_CONTENT}"
+#   inject_into_file "${TARGET_FILE}" "${PATTERN}" "${INJECT_CONTENT}"
 #   if [ $? -ne 0 ]; then
-#     echo "Error: failed to inject into the file: '${TARGET_FILENAME}'"
+#     echo "Error: failed to inject into the file: '${TARGET_FILE}'"
 #   else
-#     echo "Successfully injected text into the file: '${TARGET_FILENAME}'"
+#     echo "Successfully injected text into the file: '${TARGET_FILE}'"
 #   fi
 #
 function inject_into_file {
-  TARGET_FILENAME="${1}"
+  TARGET_FILE="${1}"
   PATTERN="${2}"
   INJECT_CONTENT="${3}"
 
   # Check inputs aren't empty
-  [ -z "${TARGET_FILENAME}" ] && { error "${FUNCNAME[0]}" "error_target_filename_is_blank"; return 1; }
+  [ -z "${TARGET_FILE}" ] && { error "${FUNCNAME[0]}" "error_target_file_is_blank"; return 1; }
   [ -z "${PATTERN}" ] && { error "${FUNCNAME[0]}" "error_pattern_is_blank"; return 1; }
   [ -z "${INJECT_CONTENT}" ] && { error "${FUNCNAME[0]}" "error_inject_content_is_blank"; return 1; }
 
   # Check the target file exists
-  if [ ! -f "${TARGET_FILENAME}" ]; then
-    error "${FUNCNAME[0]}" "error_target_file_does_not_exist: '${TARGET_FILENAME}'"
+  if [ ! -f "${TARGET_FILE}" ]; then
+    error "${FUNCNAME[0]}" "error_target_file_does_not_exist: '${TARGET_FILE}'"
     return 1
   fi
 
-  # Check if file TARGET_FILENAME contains the PATTERN
-  if ! file_contains_pattern "${TARGET_FILENAME}" "${PATTERN}"; then
+  # Check if file TARGET_FILE contains the PATTERN
+  if ! file_contains_pattern "${TARGET_FILE}" "${PATTERN}"; then
     # Expected pattern is missing. Inject text.
     
     # Inject extra EOL if last line of the file missing EOL and file is not empty
-    if ! does_file_have_eol_at_the_end "${TARGET_FILENAME}"; then
-      echo "" >> "${TARGET_FILENAME}" || {
+    if ! does_file_have_eol_at_the_end "${TARGET_FILE}"; then
+      echo "" >> "${TARGET_FILE}" || {
         error "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'; return 1; 
       }
     fi
 
-    # Append INJECT_CONTENT to the end of the TARGET_FILENAME
-    echo "${INJECT_CONTENT}" >> "${TARGET_FILENAME}" || {
+    # Append INJECT_CONTENT to the end of the TARGET_FILE
+    echo "${INJECT_CONTENT}" >> "${TARGET_FILE}" || {
       error "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'; return 1; 
     }
   fi

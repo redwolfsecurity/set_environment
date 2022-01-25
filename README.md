@@ -38,12 +38,7 @@ cd set_environment
 ### Testing
 
 After installation is complete you should open a new terminal window, so that added initialization would be able to inject "set environment" components into your environment (see your initialization files: ~/.bashrc and ~/.profile).
-Now you can run test function "is_set_environment_working()".
-Example call and expected output:
-```
-is_set_environment_working
-{"is_success": true}
-```
+Now you can run test function "is_set_environment_working".
 
 ### Now That You're Done
 
