@@ -2421,16 +2421,23 @@ export -f get_expected_nodejs_version
 # then by default version 19 will be used.
 #
 # Supports Ubuntu 16.04, 18.04, 20.04
+#
+# Require environment variables set:
+#   - BEST_USER_TO_RUN_AS
+#
 function install_docker {
 
     set_state "${FUNCNAME[0]}" 'started'
 
+    # Define required variables
+    local REQUIRED_VARIABLES=(
+      BEST_USER_TO_RUN_AS
+    )
+
     # Check required environment variables are set
-    # Check required environment variables
-    if [ -z "${BEST_USER_TO_RUN_AS}" ]; then
-        set_state "${FUNCNAME[0]}" "error_environment_not_set_best_user_to_run_as"
-        return 1
-    fi
+    for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+      ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
+    done
 
     # Take MINIMUM_VERSION argument, if empty, then set default value
     MINIMUM_VERSION="${1}"

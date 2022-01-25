@@ -346,6 +346,10 @@ function install_ff_bash_functions {
 # Сreate a new ff_agent/.profile file and source it from the ~/.bashrc
 # and ~/.profile files of the selected user.
 #
+# Require environment variables set:
+#   - BEST_USER_TO_RUN_AS
+#   - AGENT_HOME
+#
 function install_ff_agent_bashrc {
   set_state "${FUNCNAME[0]}" 'started'
 
@@ -643,10 +647,9 @@ function install_node_ubuntu {
 #   https://zacharytodd.com/posts/n-version-manager/
 # 
 #
-# Dependency:
-#    Environment variables must be set:
-#     - FF_AGENT_PROFILE_FILE
-#     - AGENT_HOME
+# Require environment variables set:
+#   - FF_AGENT_PROFILE_FILE
+#   - AGENT_HOME
 #
 # Official n github page:
 #   https://github.com/tj/n
@@ -655,15 +658,16 @@ function install_node_ubuntu {
 function install_n {
   set_state "${FUNCNAME[0]}" "installing"
 
-  if [ -z "${FF_AGENT_PROFILE_FILE}" ]; then
-  	set_state "${FUNCNAME[0]}" "error_environment_not_set_ff_agent_profile_file"
-    return 1
-  fi
+  # Define required variables
+  local REQUIRED_VARIABLES=(
+    FF_AGENT_PROFILE_FILE
+    AGENT_HOME
+  )
 
-  if [ -z "${AGENT_HOME}" ]; then
-  	set_state "${FUNCNAME[0]}" "error_environment_not_set_agent_home"
-    return 1
-  fi
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
+  done
 
   # Check custom .profile file exists
   if [ ! -f "${FF_AGENT_PROFILE_FILE}" ]; then
