@@ -178,9 +178,89 @@ function help {
 }
 export -f help
 
+
 ###############################################################################
-# Utility loging function to stderr
-# Require ${SERVICE} to be defined. Proudce all the output in the std error stream.
+# Category: file
+# Utility function - injects text into the end of existing file.
+# 
+# Function serch regular expression PATTERN in the existing file by the given TARGET_FILENAME and if missing, then
+# the INJECT_CONTENT got injected at the end of the TARGET_FILENAME.
+# Return:
+#  code 0 - succesful injection (or PATTERN already present in the TARGET_FILENAME)
+#  code 1 - failed to inject (not enough permissions, target file does not exist etc.)
+#           In case of error: the error will be reported by error() function (to standard output and into logger)
+#
+# Note: if existing file have missing EOL in last line, extra EOL will be injected before injectint the content.
+#
+# Pattern is the POSIX regular expression:
+#    https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap09.html#tag_09_04
+# but with platform-specific extensions (which vary in extent and can be incompatible).
+# On Linux platforms (GNU userland), see man grep; on macOS/BSD platforms, see man re_format.
+#
+# Usage example:
+#
+#   TARGET_FILENAME="/tmp/some_file.txt"
+#   echo "creating example target file" > "${TARGET_FILENAME}"
+#   PATTERN="source \"${FF_AGENT_PROFILE_FILE}\""
+#
+#   # This will probably loose EOL for multi-line content(?)
+#   INJECT_CONTENT=$(
+#       cat <<EOT
+# # Sourcing custom ff_agent/.bashrc file (injected by set_environment -> ff_bash_functions -> ${FUNCNAME[0]} on $(date --utc))
+# source "${FF_AGENT_PROFILE_FILE}"
+# injected line #3
+# injected line #4
+#
+# EOT
+#     )
+#
+#   inject_into_file "${TARGET_FILENAME}" "${PATTERN}" "${INJECT_CONTENT}"
+#   if [ $? -ne 0 ]; then
+#     echo "Error: failed to inject into the file: '${TARGET_FILENAME}'"
+#   else
+#     echo "Successfully injected text into the file: '${TARGET_FILENAME}'"
+#   fi
+#
+function inject_into_file {
+  TARGET_FILENAME="${1}"
+  PATTERN="${2}"
+  INJECT_CONTENT="${3}"
+
+  # Check inputs aren't empty
+  [ -z "${TARGET_FILENAME}" ] && { error "${FUNCNAME[0]}" "error_target_filename_is_blank"; return 1; }
+  [ -z "${PATTERN}" ] && { error "${FUNCNAME[0]}" "error_pattern_is_blank"; return 1; }
+  [ -z "${INJECT_CONTENT}" ] && { error "${FUNCNAME[0]}" "error_inject_content_is_blank"; return 1; }
+
+  # Check the target file exists
+  if [ ! -f "${TARGET_FILENAME}" ]; then
+    error "${FUNCNAME[0]}" "error_target_file_does_not_exist: '${TARGET_FILENAME}'"
+    return 1
+  fi
+
+  # Check if file TARGET_FILENAME contains the PATTERN
+  if ! file_contains_pattern "${TARGET_FILENAME}" "${PATTERN}"; then
+    # Expected pattern is missing. Inject text.
+    
+    # Inject extra EOL if last line of the file missing EOL and file is not empty
+    if ! does_file_have_eol_at_the_end "${TARGET_FILENAME}"; then
+      echo "" >> "${TARGET_FILENAME}" || {
+        error "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'; return 1; 
+      }
+    fi
+
+    # Append INJECT_CONTENT to the end of the TARGET_FILENAME
+    echo "${INJECT_CONTENT}" >> "${TARGET_FILENAME}" || {
+      error "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'; return 1; 
+    }
+  fi
+  
+  return 0
+}
+export -f inject_into_file
+
+###############################################################################
+# Utility loging function to report given string to both: standard error stream and send it to logger
+# Require ${SERVICE} to be defined. Proudce all the output into both: standard error stream and send it to logger.
 #
 # Usage example:
 #   log "Some event happened."
@@ -958,10 +1038,14 @@ export -f file_contains_pattern
 #   - returns value 0 if file has EOL at the end (or file is empty)
 #   - returns nonzero value in case file doesn't have EOL at the end
 #
+# Note: function does not check if file exist and does not return errors (return binary outcome: code 0 = yes, EOL is present or empty file, code 1 = EOL is missing in last line)
+#
 # Function is used to avoid concatination of more than one name/vale pairs into configuration files (be it yaml or .env files).
 #
 function does_file_have_eol_at_the_end {
     FILENAME="${1}"
+
+    # Check if file is empty
     if [ ! -s "${FILENAME}" ]; then
         # Note: For our needs (to avoid concatination of name/value lines) we consider empty file as having EOL (i.e. safe to append more name/values)
         # The file is empty.

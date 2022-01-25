@@ -390,7 +390,7 @@ function install_ff_agent_bashrc {
 # Sourcing custom ff_agent/.bashrc file (injected by set_environment -> ff_bash_functions -> ${FUNCNAME[0]} on $(date --utc))
 source "${FF_AGENT_PROFILE_FILE}"
 EOT
-    ) >> "${HOME_BASHRC_FILE}" || {
+    ) >> "${TARGET_FILE}" || {
       set_state "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'; return 1; 
     }
   fi
@@ -417,7 +417,7 @@ EOT
 # Sourcing custom ff_agent/.profile file (injected by set_environment -> ff_bash_functions -> ${FUNCNAME[0]} on $(date --utc))
 source "${FF_AGENT_PROFILE_FILE}"
 EOT
-    ) >> "${HOME_PROFILE_FILE}" || { set_state "${FUNCNAME[0]}" "failed_to_write_to_home_profile"; return 1; }
+    ) >> "${TARGET_FILE}" || { set_state "${FUNCNAME[0]}" "failed_to_write_to_home_profile"; return 1; }
   fi
 
   # Define path to the installed ff_bash_functions
