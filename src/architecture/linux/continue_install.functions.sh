@@ -56,12 +56,9 @@ function assert_basic_components {
     # Install nodejs suite and all its fixings (not using "apt")
     assert_clean_exit install_nodejs_suite
 
-<<<<<<< HEAD
-=======
     # Note: assert_clean_exit aborts on error
     assert_clean_exit install_ff_agent
 
->>>>>>> 516c18b6b955d97d009e347848595c4a7c18a439
     set_state "${FUNCNAME[0]}" 'success'
 }
 
@@ -166,7 +163,6 @@ function apt_install_basic_packages {
     return 0
 }
 
-<<<<<<< HEAD
 # ##########################################################################################
 # #
 # # The following function defines the list of packages required to run "puppeteer" as a part
@@ -287,8 +283,6 @@ function apt_install_basic_packages {
 #     if [ $? -ne 0 ]; then
 #         set_state "${FUNCNAME[0]}" 'failed'
 #     fi
-=======
->>>>>>> 516c18b6b955d97d009e347848595c4a7c18a439
 
 #     # Start NTP (note: it is safe to try to start in case it is already running - this might happen if ntp was not installed and was just added 1st time by apt)
 #     sudo systemctl start ntp
@@ -532,10 +526,6 @@ function install_nodejs_suite {
     return 0
 }
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 516c18b6b955d97d009e347848595c4a7c18a439
 ###############################################################################
 #
 function install_node_ubuntu {
