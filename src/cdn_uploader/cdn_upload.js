@@ -10,11 +10,11 @@ let cdn_distribution = process.argv[ 5 ]
 
 // CREDENTIALS
 // Credenetials are passed via environment variables. E.g.:
-// export AWS_ACCESS_KEY_ID=xxx
+// export AWS_ACCESS_KEY_ID=***
 //   # The access key for your AWS account.
-// $ export AWS_SECRET_ACCESS_KEY=xxx
+// $ export AWS_SECRET_ACCESS_KEY=***
 //    # The secret access key for your AWS account.
-// $ export AWS_SESSION_TOKEN=xxxx
+// $ export AWS_SESSION_TOKEN=***
 //    # The session key for your AWS account. This is needed only when you are using temporary credentials.
 //   # The AWS_SECURITY_TOKEN environment variable can also be used, but is only supported for backward compatibility purposes.
 //   # AWS_SESSION_TOKEN is supported by multiple AWS SDKs

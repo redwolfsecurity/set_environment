@@ -12,55 +12,9 @@
 # https://unix.stackexchange.com/questions/22796/can-i-export-functions-in-bash
 
 
-# Usage: assert_makedir directory
-# Make directory if it does not exist
-function assert_makedir {
-  if [ -d "${1}" ]; then
-     log "INFO: Directory \"${1}\" exists, skipping creation."
-  else
-     assert_clean_exit mkdir "${1}"
-  fi
-  return 0
-}
-export -f assert_makedir
+### BEGIN USAGE/HELP FUNCTION
 
-# Usage: assert_cd directory
-function assert_cd {
-
-  # Check first if it is a directory.
-  if [ ! -d "${1}" ]; then
-     log "ERROR: Can not enter directory \"${1}\" -- it is not a directory."
-     abort
-  fi
-
-  # Directory exists, now enter it. May fail due to permissions.
-  if [ -d "${1}" ]; then
-     assert_clean_exit cd "${1}"
-  else
-     log "ERROR: Can not enter directory \"${1}\""
-     log "SUGGEST: check user ID and directory permissions."
-     abort
-  fi
-
-  return 0
-}
-export -f assert_cd
-
-# Usage: assert_clean_exit command
-# Ensures command must exit cleanly (0) else will abort the entire system
-function assert_clean_exit {
-  #echo "TRY: ${@}"
-  "${@}"
-  local STATUS=${?}
-  if [ ${STATUS} -ne 0 ]; then
-     log "ERROR: Command \"${@}\" did not exit cleanly."
-     abort
-  # else
-  # 	log "SUCCESS: ${@}"
-  fi
-}
-export -f assert_clean_exit
-
+###############################################################################
 # Ask for value and store it in variable
 # @param ${1} reference Variable
 # @param ${2} string Question
@@ -98,6 +52,7 @@ function ask_for_value {
 }
 export -f ask_for_value
 
+###############################################################################
 # Ask for question and read user input Y/n
 # @param ${1} string Question
 # @return  Success (0) if user enter Y, Failure (1) on n
@@ -119,14 +74,133 @@ function ask_for_yn {
 }
 export -f ask_for_yn
 
+###############################################################################
 # Check if a command exists. A command could be a function, something in path, a direct path to a command
 # This will return in stdout the path to the command, and will return 0 if the command exists, otherwise 1
-function command_exists () {
+function command_exists {
   command -v "${1}"
   return $?
 }
 export -f command_exists
 
+# TODO: make another f-n to generate this list (see help(), but only print f-ns we added using "set_environment" instead of all buildin f-ns)
+
+###############################################################################
+# Utility help function
+# This will list all the defined bash funcitons *build in" and our "custom" ones.
+function help {
+    echo "Builtin functions:"
+    typeset -F | cut -d' ' -f3
+}
+export -f help
+
+### END USAGE/HELP FUNCTION
+
+### BEGIN APT WRAPPER FUNCTIONS
+
+###############################################################################
+# Utility wrapper around apt install for safer headless operation
+function apt_install {
+    PACKAGES=${@}
+    APT_COMMAND=install
+
+    for PACKAGE in ${PACKAGES}
+    do
+        # Note: we suppress stdout noise (only stderr will still be "visible", but TODO: think of better way to collect evidences insted of just 1 large pile)
+        sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} ${PACKAGE} > /dev/null
+        if [ ${?} -ne 0 ]; then
+            error "Error installing package: ${PACKAGE}"
+            return 1
+        fi
+    done
+    return 0
+}
+export -f apt_install
+
+###############################################################################
+# Utility wrapper to list all the files by given package name (even if package not installed).
+# As for reverse checking files from packages apt-file would be the best bet.
+#
+# Discussion: https://serverfault.com/a/1059513/413686
+#
+# Usage:
+#    apt_list <package name>
+#
+# Example: 
+#    apt_list libjansson-dev
+#
+function apt_list {
+    apt-get download -o Dir::Cache::archives="./" --print-uris "$@" |awk -F\' '{print $2}' | xargs -I '{}' curl -skL '{}' | dpkg-deb -c /dev/stdin 
+}
+export -f apt_list
+
+###############################################################################
+# Utility wrapper around apt reinstall for safer headless operation
+function apt_reinstall {
+    PACKAGES=${@}
+    APT_COMMAND=reinstall
+
+    for PACKAGE in ${PACKAGES}
+    do
+        sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} ${PACKAGE}
+        if [ ${?} -ne 0 ]; then
+            error "Error reinstalling packages: ${PACKAGE}"
+            return 1
+        fi
+    done
+    return 0
+}
+export -f apt_reinstall
+
+###############################################################################
+# Utility wrapper around apt_remove for safer headless operation
+function apt_remove {
+    PACKAGES=${@}
+    APT_COMMAND=remove
+
+    for PACKAGE in ${PACKAGES}
+    do
+        sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} "${PACKAGE}"
+        if [ ${?} -ne 0 ]; then
+            error "Error removing packages: ${PACKAGE}"
+            return 1
+        fi
+    done
+}
+export -f apt_remove
+
+###############################################################################
+# Utility wrapper around apt_update for safer headless operation
+function apt_update {
+    APT_COMMAND=update
+    sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND}
+    if [ ${?} -ne 0 ]; then
+       error "updating packages"
+       return 1
+    fi
+    return 0
+}
+export -f apt_update
+
+###############################################################################
+# Utility wrapper around apt_update for safer headless operation
+function apt_upgrade {
+    APT_COMMAND=upgrade
+    # Note: we suppress stdout noise (only stderr will still be "visible", but TODO: think of better way to collect evidences insted of just 1 large pile)
+    sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} > /dev/null
+    if [ ${?} -ne 0 ]; then
+       error "Error upgrading packages"
+       return 1
+    fi
+    return 0
+}
+export -f apt_upgrade
+
+### END APT WRAPPER FUNCTIONS
+
+### BEGIN UTILITY FUNCTIONS: STRINGS 
+
+###############################################################################
 # Check if a value exists in an array
 # @param ${1} mixed  Needle
 # @param ${2} array  Haystack
@@ -143,6 +217,7 @@ function in_array {
 }
 export -f in_array
 
+###############################################################################
 # Return index or needle in haystack, otherwise 255
 # Bash range for return value from fn is (0-255) this is why when I return -1 it's 255
 # @param ${1} mixed  Needle
@@ -161,23 +236,154 @@ function index_of {
 }
 export -f index_of
 
+###############################################################################
+# Utility function trim_slash():
+#   - Replaces all repeated slashes //[...] with a single slash /
+#   - Removes trailing slash unless it is also the leading slash (i.e., the root filepath /)
+#
+# Function is useful to remove trailing slashes from URL string for example "http://acme.com///" -> "http://acme.com"
+#
+# More details in this StackOverflow discussion: https://stackoverflow.com/a/69485442/7022062
+#
+# Some test cases:
+#   
+#   $ trim_slash "http://acme.com/a/b/c/" "http://acme.com///" "http://acme.com/" "/" "///" "a/" "b/b/" "c/c////" 
+#
+# Expected output:
+#       http://acme.com/a/b/c
+#       http://acme.com
+#       http://acme.com
+#       /
+#       /
+#       a
+#       b/b
+#       c/c
+#
+function trim_slash {
+  for s; do 
+    sed -E 's:(^/)?/*$:\1:' <<< "${s}"
+  done
+}
 
+### END UTILITY FUNCTIONS: STRINGS 
 
-# Table of contents
-# generated by command:
-#    cat ./src/ff_bash_functions | grep '^### BEGIN\|^### END\|^function' | sed 's/^function /    - /g' |  sed 's/{//g'
-# TODO: regenerate list of functions when stable/finished
-# TODO: make another f-n to generate this list (see help(), but only print f-ns we added using "set_environment" instead of all buildin f-ns)
+### BEGIN UTILITY FUNCTIONS: FILE
 
 ###############################################################################
-# Utility help function
-# This will list all the defined bash funcitons *build in" and our "custom" ones.
-function help {
-    echo "Builtin functions:"
-    typeset -F | cut -d' ' -f3
-}
-export -f help
+# Usage: assert_cd directory
+function assert_cd {
 
+  # Check first if it is a directory.
+  if [ ! -d "${1}" ]; then
+     log "ERROR: Can not enter directory \"${1}\" -- it is not a directory."
+     abort
+  fi
+
+  # Directory exists, now enter it. May fail due to permissions.
+  if [ -d "${1}" ]; then
+     assert_clean_exit cd "${1}"
+  else
+     log "ERROR: Can not enter directory \"${1}\""
+     log "SUGGEST: check user ID and directory permissions."
+     abort
+  fi
+
+  return 0
+}
+export -f assert_cd
+
+###############################################################################
+# Usage: assert_makedir directory
+# Make directory if it does not exist
+function assert_makedir {
+  if [ -d "${1}" ]; then
+     log "INFO: Directory \"${1}\" exists, skipping creation."
+  else
+     assert_clean_exit mkdir "${1}"
+  fi
+  return 0
+}
+export -f assert_makedir
+
+###############################################################################
+# Category: file
+# Utility function - checks if given file has "EOL" at the end of the file. It gets the path to the file as the only argument and:
+#   - returns value 0 if file has EOL at the end (or file is empty)
+#   - returns nonzero value in case file doesn't have EOL at the end
+#
+# Note: function does not check if file exist and does not return errors (return binary outcome: code 0 = yes, EOL is present or empty file, code 1 = EOL is missing in last line)
+#
+# Function is used to avoid concatination of more than one name/vale pairs into configuration files (be it yaml or .env files).
+#
+function does_file_have_eol_at_the_end {
+    FILENAME="${1}"
+
+    # Check if file is empty
+    if [ ! -s "${FILENAME}" ]; then
+        # Note: For our needs (to avoid concatination of name/value lines) we consider empty file as having EOL (i.e. safe to append more name/values)
+        # The file is empty.
+        # Note: function does_file_have_eol_at_the_end() got empty file. 
+        # For our needs (to avoid concatination of name/value lines) 
+        # we consider empty file as having EOL (i.e. safe to append more name/values)
+        return 0
+    # -z - true if the length of string is zero
+    # -n - true if the length of string is nonzero
+    elif [ -z "$(tail -c 1 <"${FILENAME}")" ]; then
+        # The file ends with a newline or with a null byte,
+        return 0
+    else
+        # The file does not end with a newline nor with a null byte.
+        return 1
+    fi
+}
+export -f does_file_have_eol_at_the_end
+
+###############################################################################
+# Utility function f
+# Search recursively from current location for files or directories starting with a prefix prefix, case insensitive
+# @param $1 string package name
+# @param $2 array  package list to append
+# @return  Success if value exists, Failure otherwise
+# Usage: f prefix
+# Example: f index  # Will show all files or directories starting with 'index'
+function f {
+    FILE_PREFIX="${1}"
+    if [ "${FILE_PREFIX}" != "" ]; then
+        find . -iname "${FILE_PREFIX}*"
+        return $?
+    else
+        echo "Find files with prefix, starting from current working directory down recursively." 1>&2
+        echo "Usage: f index" 1>&2
+        return 1
+    fi
+}
+
+###############################################################################
+# Category: file
+# Utility function - Easy way to check if a file contains a pattern
+function file_contains_pattern {
+    FILE="${1}"
+    PATTERN="${2}"
+
+    if [ ! -e "${FILE}" ]; then
+        return 1
+    fi
+    if [  -z "${PATTERN}" ]; then
+        return 1
+    fi
+    grep --quiet --text "${PATTERN}" "${FILE}"
+}
+export -f file_contains_pattern
+
+###############################################################################
+# Category: file
+# Utility function - Easy way to check if a glob matches.
+# This is a bash builtin wrapper. e.g. glob_matches '/tmp/abc*' will return 0 or 1
+function glob_matches {
+	compgen -G ${@} >/dev/null
+	return ${?}
+}
+export -f glob_matches
 
 ###############################################################################
 # Category: file
@@ -259,834 +465,37 @@ function inject_into_file {
 export -f inject_into_file
 
 ###############################################################################
-# Utility loging function to report given string to both: standard error stream and send it to logger
-# Require ${SERVICE} to be defined. Proudce all the output into both: standard error stream and send it to logger.
-#
-# Usage example:
-#   log "Some event happened."
-#
-# Example output:
-#   Tue 07 Sep 2021 07:29:02 PM UTC: SomeService: Some event happened.
-#
-function log {
-  if [ "${SERVICE}" != "" ]; then
-    local LOGGER_TAG="--tag '${SERVICE}'"
-  fi
-   
-  echo "$(date --utc): ${SERVICE}: ${@}" | tee >(logger ${LOGGER_TAG} ) >&2
-}
-export -f log
-
-###############################################################################
-# Utility error logging function
-function error {
-    log error "${@}"
-}
-export -f error
-
-###############################################################################
-# Utility abort / exit function - called when terminal conditions
-function abort {
-    error "abort called - aborting ${@}"
-    set_state ${SERVICE}_last_run_state abort
-    exit 1
-}
-export -f abort
-
-###############################################################################
-# Utility is_shell_attribute_set function
-# See discussion: https://stackoverflow.com/a/34709224/7022062
-# Usage example:
-#     set -x
-#     if is_shell_attribute_set x; then echo "xtrace enabled" ; else echo "xtrace disabled"; fi # xtrace enabled
-#
-#     set -e
-#     if is_shell_attribute_set e; then echo "yes"; else echo "no"; fi # yes
-#
-#     set +e
-#     if is_shell_attribute_set e; then echo "yes"; else echo "no"; fi # no
-#     
-function is_shell_attribute_set { # attribute, like "e"
-  case "$-" in
-    *"${1}"*)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
-###############################################################################
-# Utility is_shell_attribute_set function
-# See discussion: https://stackoverflow.com/a/34709224/7022062
-# Usage example:
-#     set -o pipefail
-#     if is_shell_option_set pipefail; then echo "yes"; else echo "no"; fi # yes
-#
-#     set +o pipefail
-#     if is_shell_option_set pipefail; then echo "yes"; else echo "no"; fi # no
-#
-function is_shell_option_set { # option, like "pipefail"
-  case "$(set -o | grep "${1}")" in
-    *on) return 0 ;;
-    *)   return 1 ;;
-  esac
-}
-
-
-###############################################################################
-#
-function successful_exit {
-    set_state ${SERVICE}_last_run_state success
-    log ${SERVICE}_last_run_state success
-
-    # Anthony May 8 2021 - I am choosing to leave the hotpatch for now.
-    # Any 'secrets' it has are already installed on the filesystem, so there is no reason to remove it.
-
-    exit 0
-}
-export -f successful_exit
-
-# Check if terminal is interactive
-# This is useful in cases where we might wish to ask a question
-# If you run this script from ssh, it will return 255 (e.g. ssh hostname "terminal_is_interactive" )
-function terminal_is_interactive () {
-  command_exists tty && tty -s && return 0 || return 1
-  return 1 # Default, it isn't.
-}
-export -f terminal_is_interactive
-
-# Initialize the terminal
-# Ensures that TERM is set
-# Ensures we set up colours only if TERM is set, else empty strings
-# Works even if we don't have tput command, which we might not
-function terminal_initialize() {
-  
-  # If we do not have a terminal type, set up dumb
-  if [ -z "${TERM}" ]; then
-    export TERM=dumb
-  fi
-
-  FONT_STYLE_BOLD=""
-  FONT_STYLE_GREEN=""
-  FONT_STYLE_RED=""
-  FONT_STYLE_NORMAL=""
-  
-  terminal_is_tty || return
-
-  if command_exists tput ; then
-      # If this is a TTY, These set of "t_*" variables allows us to decorate the output with some style (colour, boldness)
-      FONT_STYLE_BOLD="$(tput bold)"
-      FONT_STYLE_GREEN="$(tput setaf 2)"
-      FONT_STYLE_RED="$(tput setaf 1)"
-      FONT_STYLE_NORMAL="$(tput sgr0)"
-  fi
-}
-export -f terminal_initialize
-
-# Check if this terminal is a TTY
-function terminal_is_tty () {
-    [ -t 0 ] && return 0 || return 1
-}
-export -f terminal_is_tty
-
-# Reset terminal state - sometimes useful if a command messes up terminal state
-function terminal_reset () {
-  [ is_tty && command_exists tput ] && tput reset && tput sane
-}
-export -f terminal_reset
-
-
-###############################################################################
-# Category: time
-# Utility function to get Unix epoch time in milliseconds
-# Usage example:
-#   "current epoch_ms value is: $( get_epoch_ms )"
-function get_epoch_ms {
-    # TODO - Make this compatible with Darwin (MACOS) where date works differently.
-    # For details on "date" command on Linux vs Darwin see discussion: 
-    # https://stackoverflow.com/questions/9804966/date-command-does-not-follow-linux-specifications-mac-os-x-lion
-    echo "$( date +%s%N | cut -b1-13 )"  # https://serverfault.com/a/151112/413686>
-}
-export -f get_epoch_ms
-
-
-###############################################################################
-# Category: environment
-# Utility function - Get LSB ID - e.g. Ubuntu
-function get_lsb_id {
-    lsb_release --short --id
-}
-export -f get_lsb_id
-
-###############################################################################
-# Category: environment
-# Utility function - Get release - e.g. 16.04, 18.04, 20.04
-function get_lsb_release {
-    lsb_release --short --release
-}
-export -f get_lsb_release
-
-###############################################################################
-# Category: environment
-# Utility function - Get codename - e.g. breezy, focal, ..
-function get_lsb_codename {
-    lsb_release --short --codename
-}
-export -f get_lsb_codename
-
-###############################################################################
-# Category: environment
-# Utility function - Get hardware architecture (e.g. arm64, amd64)
-function get_hardware_architecture {
-    dpkg --print-architecture 
-}
-export -f get_hardware_architecture
-
-###############################################################################
-# Category: identity
-# Utility function - Check if User Exists
-function user_exists {
-    # TODO: OSX doesn't have getent. Find Equivalent
-    if [ -z "$(getent passwd ${1})" ]; then
-        return 1 # User does not exist
-    else
-        return 0 # Exists
-    fi
-}
-export -f user_exists
-
-###############################################################################
-# Category: identity
-# Utility function - Get home directory for user
-function get_home_directory_for_user {
-    # TODO: OSX doesn't have getent. Find Equivalent
-    HOME_DIR=$( getent passwd "${1}" | cut -d: -f6 )
-    if [ -z "${HOME_DIR}" ]; then
-        return 1
-    else
-        echo "${HOME_DIR}"
-    fi
-}
-export -f get_home_directory_for_user
-
-###############################################################################
-#
-# Function choose_ff_agent_home():
-#
-# Sets the following environment variables:
-#   BEST_USER_TO_RUN_AS - example: ubuntu
-#   AGENT_HOME          - example: /home/ubuntu/ff_agent
-#
-# Return:
-#  on success - export environment variables and return 0
-#  on error - return nonzero code
-#
-# Baseline installer must choose the "best user" (not root, able to sudo).
-#
-# Reason why we must avoid using root user: if program started by root user and a security
-# flaw is exploited, the attacker has access to all the data and can directly control the system.
-# For example, it might install a trojan or key-logger into your kernel. We only escalate user
-# privileges when required and allowed/agreed to install dependency packages.
-#
-# Failure to choose the right user would end up in the terminal installation error:
-# "terminal_error_failed_to_discover_environment".
-#
-function choose_ff_agent_home {
-    
-    # These exports are our "return values"
-    # Note: we should not: "export SOMEVAR=$( some_function_call ) || { error "error details"; abort; } " because export would hide actual exit call of the "some_function_call" and thus we'll miss an error!
-    BEST_USER_TO_RUN_AS=$( get_best_user_to_run_as ) || { error "terminal_error_failed_to_choose_user"; return 1; }
-    export BEST_USER_TO_RUN_AS
-    
-    # Even if this function run by some other/not-chosen" user, the AGENT_HOME_DIR would point to the "right/choosen" home. Example: /home/ubuntu
-    # Only when we run as ritgh/choosen user the AGENT_HOME_DIR and HOME have the same values.
-    local AGENT_HOME_DIR=$( get_home_directory_for_user "${BEST_USER_TO_RUN_AS}" ) || { error "terminal_error_failed_to_get_home_directory_for_choosen_user"; return 1; }
-    
-    local AGENT_DIR_NAME="ff_agent"
-    export AGENT_HOME="${AGENT_HOME_DIR}/${AGENT_DIR_NAME}"
-}
-export -f choose_ff_agent_home
-
-###############################################################################
-#
-# Function makes sure ${AGENT_HOME} folder exist. If not - tries to create it.
-#
-# Require environment variables set:
-#   - AGENT_HOME
-#   - BEST_USER_TO_RUN_AS
-#
-# Return:
-#  on success - return 0
-#  on error - return nonzero code
-#
-function ensure_agent_home_exists {
-
-  # Define required variables
-  local REQUIRED_VARIABLES=( 
-    AGENT_HOME
-    BEST_USER_TO_RUN_AS
-  )
-
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
-  done
-
-  # Make sure ${AGENT_HOME} folder exist
-  if [ ! -d "${AGENT_HOME}" ]; then
-      # ${AGENT_HOME} folder is missing: create new one.
-      mkdir -p "${AGENT_HOME}"
-      if [ ${?} -ne 0 ]; then
-        # Failed to create ${AGENT_HOME} - report error() and abort()
-        # error "Did not find AGENT_HOME directory at ${AGENT_HOME}. Tried to create it but failed. Aborting."
-        set_state "${FUNCNAME[0]}" "failed_to_create_agent_home"
-        return 1
-      fi
-  fi
-}
-export -f ensure_agent_home_exists
-
-###############################################################################
-#
-# Function checks if variable given by name is defined.
-# Function takes the only argument: variable name.
-# Return:
-#    on "success" (variable is defined) - return 0
-#    on "error" (varialbe not devined) - return non zero code and callse error(error_details)
-#
-function ensure_variable_defined {
-  local NAME="$1"
-  [[ -z "${NAME}" ]] && { error "error_ensure_variable_defined_no_arguments"; return 1; }  # Check: NAME is not blank
-  [[ -v "${NAME}" ]] && { return 0; }  # Check: variable by NAME is defined
-
-  # Create meaningful error code, which include lowcase variable name
-  local ERROR_CODE=$( echo "error_expected_variable_not_set_${NAME}" | tr '[:upper:]' '[:lower:]' )
-
-  # Report an error and return nonzero code.
-  error "${ERROR_CODE}"
-  return 1
-}
-export -f ensure_variable_defined
-
-###############################################################################
-#
-# Function checks if variable given by name is defined and has non-empty value.
-# Function takes the only argument: variable name.
-# Return:
-#    on "success" (variable is defined and non-empty) - return 0
-#    on "error" (varialbe not defined or has empty value) - return nonzero code and callse error(error_details)
-#
-function ensure_variable_not_empty {
-  local NAME="$1"
-  [[ -z "${NAME}" ]] && { error "error_ensure_variable_not_empty_no_arguments"; return 1; }  # Check: NAME itself is not blank
-  [[ -v "${NAME}" ]] && [[ ! -z "${!NAME}" ]] && { return 0; }  # Check: variable by NAME is defined and not empty
-
-  # Create meaningful error code, which include lowcase variable name
-  local ERROR_CODE=$( echo "error_ensure_variable_not_empty_${NAME}" | tr '[:upper:]' '[:lower:]' )
-
-  # Report an error and return nonzero code.
-  error "${ERROR_CODE}"
-  return 1
-}
-export -f ensure_variable_not_empty
-
-###############################################################################
-#
-# stop_pm2 solves the problem of pm2 running by multiple user (designated "choosen user" and "root").
-# stop_pm2 would stop all found pm2 instances and remove it from automatic startup.
-#
-# Dependency: environment variables must be set:
-#    - BEST_USER_TO_RUN_AS
-#
-function stop_pm2 {
-    set_state "${FUNCNAME[0]}" 'stopping'
-
-    # # There was a problem inside stop_pm2() due to npm re-installed in a new location
-    # # We used this "snapshot" which happened to be useful.
-    # # TODO: let's add even more useful findings here and move it into the ff_bash_funcions as "debug_snapshot()"
-    # echo "--------------- debug_snapshot begin -----------------"
-    # date
-    # pwd
-    # whoami
-    # which n
-    # which npm
-    # which node
-    # n --version
-    # npm --version
-    # node --version
-    # echo ${PATH}
-    # echo ${N_PREFIX}  # expected result: /home/ubuntu/ff_agent/.n
-    # pm2 ps
-    # which pm2
-    # sudo ps aux | grep pm2
-    # sudo systemctl status pm2-${BEST_USER_TO_RUN_AS}
-    # echo "--------------- debug_snapshot end -----------------"
-
-    # Check required environment variables are set: BEST_USER_TO_RUN_AS
-    for VARIABLE_NAME in BEST_USER_TO_RUN_AS; do
-      ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
-    done
-
-    # pm2 may not be  installed, so we have nothing to stop
-    PM2=$( which pm2 )
-    if [ -z "${PM2}" ]; then
-      set_state "${FUNCNAME[0]}" 'pm2_executable_not_found_error'
-      return 1
-    fi
-
-    timeout 5 ${PM2} unstartup
-    timeout 5 ${PM2} kill
-    timeout 5 sudo ${PM2} unstartup
-    timeout 5 sudo ${PM2} kill
-
-    # Kill all processes mentioning pm2 owned by me. This is a tad aggressive, but
-    # pm2 has some stupid process names
-    ps auxw | grep ^${BEST_USER_TO_RUN_AS} | grep -i pm2 | grep -v grep | grep -v hotpatch
-    PROCS=$( ps auxw | grep ^${BEST_USER_TO_RUN_AS} | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
-    if [ "${PROCS}" != "" ]; then
-      kill ${PROCS}
-    fi
-    PROCS=$( ps auxw | grep ^${BEST_USER_TO_RUN_AS} | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
-    [ "${PROCS}" != "" ] && { set_state "${FUNCNAME[0]}" "assertion_failure_should_be_no_pm2_processes_owned_by_user"; return 1; }
-    set_state "${FUNCNAME[0]}" "assertion_success_no_pm2_processes_owned_by_user"
-
-    # Disable any root style services
-    for ACTION in stop disable
-    do
-      sudo systemctl "${ACTION}" pm2-${BEST_USER_TO_RUN_AS}
-    done
-
-    # Tell root to remove the startup entry for itself.
-    # Otherwise, on a reboot, it might come back
-    timeout 5 sudo pm2 unstartup
-    pm2 kill
-
-    # Kill any root processes lingering
-    ps auxw | grep root | grep -i pm2 | grep -v grep | grep -v hotpatch
-    PROCS=$( ps auxw | grep root | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
-    if [ "${PROCS}" != "" ]; then
-      kill ${PROCS}
-    fi
-    PROCS=$( ps auxw | grep root | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
-    [ "${PROCS}" != "" ] && { set_state "${FUNCNAME[0]}" "assertion_failure_should_be_no_pm2_processes_owned_by_root"; return 1; }
-    set_state "${FUNCNAME[0]}" 'assertion_success_no_pm2_processes_owned_by_root'
-
-    # Post condition, there is no pm2 process running for any user
-    ps auxw | grep -i pm2 | grep -v grep
-    PROCS=$( ps auxw | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
-    if [ "${PROCS}" != "" ]; then
-      set_state "${FUNCNAME[0]}" 'could_not_stop_all_pm2_processes_error'
-      return 1
-    fi
-    PROCS=$( ps auxw | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
-    [ "${PROCS}" != "" ] && { set_state "${FUNCNAME[0]}" "assertion_failure_should_be_no_pm2_processes_running"; return 1; }
-
-    set_state "${FUNCNAME[0]}" 'success_stopped'
-    return 0
-}
-export -f stop_pm2
-
-###############################################################################
-#
-# Find out the best user to run as.
-# Return:
-#  on success - return a string (username to use).
-#  on error - log error() and abort() execution
-#
-# The logic "best user" selection:
-# We don't run as root, or root-like account.
-# We would like an account that can install packages to set the environment up correctly.
-# We check the following user accounts candidates: "ff_agent", "ubuntu" or current user.
-# Selected user should have rights to install packages. Ideally locally, but one step at a time.
-#
-function get_best_user_to_run_as {
-
-    POTENTIAL_USERS=( ff_agent ubuntu ${USER} )
-
-    if effectively_root
-    then
-        # Look for a better user.
-        for POTENTIAL_USER in ${POTENTIAL_USERS[@]}
-        do
-            if user_exists ${POTENTIAL_USER}
-            then
-                if can_sudo "${POTENTIAL_USER}"
-                then
-                    echo "${POTENTIAL_USER}"
-                    return 0
-                fi
-            fi
-        done
-
-        error "Current user ${USER} is effectively root and this script can not run as root."
-        error "Tried to find other users to run as (${POTENTIAL_USERS}) but was not successful."
-        abort
-
-    else
-        # We aren't root. But can we sudo? We need that to currently install certain packages.
-        if can_sudo "${USER}"
-        then
-            echo "${USER}"
-            return 0
-        else
-            error "User ${USER} can not sudo. Currently sudo is required to install packages. Please run from a non-root account with sudo privileges."
-            exit 1
-        fi
-    fi
-
-}
-export -f get_best_user_to_run_as
-
-###############################################################################
-# Category: identity
-# Utility function - Create User, with a disabled password
-function create_user {
-  USERNAME="${1}"
-	if [ ! -z "${USERNAME}" ]; then
-		if can_sudo "${USERNAME}"; then
-        	# TODO: Make this multiplatform. Check what happens if we do this in a docker.
-        	sudo adduser --disabled-password --gecos "" "${USERNAME}"
-			return ${?}
-		fi
-	fi
-	return 1
-}
-export -f create_user
-
-###############################################################################
-# Category: authorization
-# Utility function - Am I root? Return 0 if I am, 1 if not
-function effectively_root {
-    if  [ "${EUID}" -eq 0 ]; then
-        return 0 # I have root powers
-    else
-        return 1 # Don't have root powers
-    fi
-}
-export -f effectively_root
-
-###############################################################################
-# Category: authorization
-# Utility function - Can I sudo?
-# @param1 user_to_check
-function can_sudo {
-    USER_TO_CHECK="${1}"
-
-    USER_CAN_SUDO=1  # Assume they can't. 1 is an error code meaning we can't.
-
-    # SUDOers can be defined in a few places - /etc/sudoers and /etc/sudoers.d/*
-    # Note: /etc/sudoers is old and bad
-    if sudo --non-interactive --list --other-user="${USER_TO_CHECK}" &>/dev/null true
-    then
-        USER_CAN_SUDO=0
-    else
-        if groups "${USER_TO_CHECK}" 2>/dev/null | grep --text "\<sudo\>" &> /dev/null; then
-            USER_CAN_SUDO=0 # I can sudo
-        else
-            USER_CAN_SUDO=1 # I can't sudo
-        fi
-    fi
-
-    # TODO: If user can sudo, have that user check if they are in old /etc/sudoers or new form
-    # and emit error otherwise.
-
-    return ${USER_CAN_SUDO}
-}
-export -f can_sudo
-
-###############################################################################
-# Category: process
-# Utility function - Get cmdline of parent process ID -- useful to know who is starting us
-# E.g. if [ $( get_ppid_cmd | grep --text -c node ) -gt "0" ] -> will let you check if your parent process is nodejs
-function get_ppid_cmd {
-    PPID_CMD=$( cat /proc/${PPID}/cmdline )
-    echo "${PPID_CMD}"
-}
-export -f get_ppid_cmd
-
-###############################################################################
-# Category: container
-# Utility function - Get Docker Version
-function get_installed_docker_version {
-    DOCKER_PATH=$( command -v docker )
-    if [ -z "${DOCKER_PATH}" ]; then
-        return 1
-    else
-        DOCKER_VERSION=$( ${DOCKER_PATH} -v | cut -d" " -f 3 | cut -d"." -f 1 )
-        echo "${DOCKER_VERSION}"
-    fi
-}
-export -f get_installed_docker_version
-
-###############################################################################
-# Category: container
-# Utility function - Check if container exists
-#
-# Usage example:
-#    if container_name_exists "some_container_name"; then
-#       # Yes, container by given name does exist.
-#    else
-#       # No such container found
-#    fi
-#
-function container_name_exists {
-    CONTAINER_NAME="${1}"
-    # -z - true if the length of string is zero
-    # -n - true if the length of string is nonzero
-    if [ -z "${CONTAINER_NAME}" ]; then
-        error "error_no_container_name_specified"
-        return 2
-    fi
-    CONTAINER_ID=$(docker inspect --format="{{.Id}}" ${CONTAINER_NAME} 2> /dev/null)
-    if [[ "${CONTAINER_ID}" ]]; then
-        return 0
-    else
-        return 1
-    fi
-}
-export -f container_name_exists
-
-###############################################################################
-# Category: container
-# Utility function - Check if docker container running. This checks if it is running, but it could be in a 'restart' loop.
-function is_container_running () {
-    CONTAINER_NAME="${1}"
-    if [ -z "${CONTAINER_NAME}" ]; then
-        error "error_no_container_name_specified"
-        return 2
-    fi
-    if [ "$( docker container inspect -f '{{.State.Running}}' ${CONTAINER_NAME} )" == "true" ]; then
-        return 0
-    else
-        return 1
-    fi
-}
-export -f is_container_running
-
-###############################################################################
-# Category: container
-# Utility function - Check if docker container healthy or not. This checks if the container is actually in the state 'running' vs. restarting
-function is_container_healthy () {
-    CONTAINER_NAME="${1}"
-
-    # -z - true if the length of string is zero
-    # -n - true if the length of string is nonzero
-    if [ -z "${CONTAINER_NAME}" ]; then
-        error "error_no_container_name_specified"
-        return 2
-    fi
-    if [ "$( docker container inspect -f '{{.State.Status}}' ${CONTAINER_NAME} )" == "running" ]; then
-        return 0
-    else
-        return 1
-    fi
-}
-export -f is_container_healthy
-
-###############################################################################
-# Category: aaa
-# Utility function - check if user is in a group
-# Usage: is_user_in_group "user" "group"
-function is_user_in_group () {
-  USERNAME="${1}"
-  GROUP="${2}"
-  [ -z "${USERNAME}" ] && return 1
-  [ -z "${GROUP}" ] && return 1
-  if getent group "${GROUP}" | grep -q "\b${USERNAME}\b"; then
-      return 0
-  else
-      return 1
-  fi
-}
-export -f is_user_in_group
-
-###############################################################################
-# Category: container
-# Utility function - Restart docker containers
-function restart_containers {
-
-    # THIS CHECK FAILS:
-    # + return 0
-    # + CONTAINERS=(control_backend service_metric_proxy control_proxy real_browser service_provisioning delivery_discover)
-    # + restart_containers control_backend service_metric_proxy control_proxy real_browser service_provisioning delivery_discover
-    # + '[' -z control_backend service_metric_proxy control_proxy real_browser service_provisioning delivery_discover ']'
-    # /home/ubuntu/ff_agent/bin/hotpatch: line 434: [: too many arguments
-    # + CONTAINERS=(${@})
-    # + CONTAINERS_TO_RESTART=()
-    # + for CONTAINER in ${CONTAINERS[@]}
-    # + container_name_exists control_backend
-    # ... and it keep working normally
-
-    # if [ -z "${@}" ]; then
-    #     error "error_no_container_names_specified"
-    #     return 2
-    # fi
-    CONTAINERS=(${@})
-    CONTAINERS_TO_RESTART=()
-    for CONTAINER in ${CONTAINERS[@]}
-    do
-        # We only restart a container if it is defined
-        if container_name_exists "${CONTAINER}"
-        then
-            CONTAINERS_TO_RESTART+=( ${CONTAINER} )
-        fi
-    done
-
-    if (( ${#CONTAINERS_TO_RESTART[@]} )); then
-        docker restart ${CONTAINERS_TO_RESTART[@]}
-        return ${?}
-    fi
-
-    return 1
-}
-export -f restart_containers
-
-###############################################################################
-# Category: container
-# Utility function - Restart docker containers
-# Function gets container name (case sensitive) (can be partial) as the only input argument and
-# tries to find all matching containers (even if they're in stopped state). Then for every found
-# container it will "docker stop" and "docker remove" them.
-# Runction return code 0 on success
-#
-function stop_and_remove_container_by_name {
-  CONTAINER_NAME="${1}"
-
-  # Check the container name isn't blank
-  if [ "${CONTAINER_NAME}" == "" ]; then
-    return 1
-  fi
-
-  # Count existing container(s) by given docker name
-  FOUND_CONTAINERS_COUNT=$( docker ps -a | grep "${CONTAINER_NAME}" | wc -l )
-
-  # Check if we found >1
-  if [ ${FOUND_CONTAINERS_COUNT} -gt 1 ]; then
-    # Yes, we found >1 containers to stop/remove         
-    for DOCKER_ID in $(docker ps -a | grep "${CONTAINER_NAME}" | awk '{print $1}'); do
-      # Make sure DOCKER_ID is not a blank string
-      if [ "${DOCKER_ID}" == "" ]; then
-        # TODO: shall the utility f-n use set_state?
-        return 1
-      fi
-
-      # Try to stop and remove the container
-      docker stop "${DOCKER_ID}"
-      docker rm "${DOCKER_ID}"
-
-      # Sometimes container can be in the broken state, in this case even after stopping and removing it
-      # the DOCKER_ID is still visible in the "docker ps" list. In this cas we need to kill -9 corresponding
-      # process on the host level:
-      STILL_PRESENT_DOCKER_ID=$( docker ps -a | grep "${DOCKER_ID}" | wc -l )
-      if [ "${STILL_PRESENT_DOCKER_ID}" != "" ]; then
-        # Yes, we have found "unstoppable" docker. Kill -9 the corresponding process now
-        PID_TO_KILL_COUNT=$( sudo ps aux | grep "${DOCKER_ID}" | wc -l )
-        PID_TO_KILL=$( sudo ps aux | grep "${DOCKER_ID}" )
-        if [ ${PID_TO_KILL_COUNT} -ne 1 ]; then
-          # Something went wrong, we supposed to find exactly ONE pid to terminate.
-          return 1
-        fi
-        
-        # Send "kill -9" signal to the found process
-        sudo kill -9 "${PID_TO_KILL}" || { set_state "${FUNCNAME[0]}" 'error_killing_process'; return 1; }
-
-        # The "unstoppable" docker terminated, now we can safely remove the container
-        docker rm "${DOCKER_ID}"
-      fi
-    done
-
-    # Cleanup some space
-    docker system prune -a -f
-  fi
-
-  return 0
-}
-export -f stop_and_remove_container_by_name
-
-###############################################################################
 # Category: file
-# Utility function - Easy way to check if a glob matches.
-# This is a bash builtin wrapper. e.g. glob_matches '/tmp/abc*' will return 0 or 1
-function glob_matches {
-	compgen -G ${@} >/dev/null
-	return ${?}
-}
-export -f glob_matches
-
-###############################################################################
-# Category: file
-# Utility function - Easy way to check if a file contains a pattern
-function file_contains_pattern {
-    FILE="${1}"
-    PATTERN="${2}"
-
-    if [ ! -e "${FILE}" ]; then
-        return 1
-    fi
-    if [  -z "${PATTERN}" ]; then
-        return 1
-    fi
-    grep --quiet --text "${PATTERN}" "${FILE}"
-}
-export -f file_contains_pattern
-
-###############################################################################
-# Category: file
-# Utility function - checks if given file has "EOL" at the end of the file. It gets the path to the file as the only argument and:
-#   - returns value 0 if file has EOL at the end (or file is empty)
-#   - returns nonzero value in case file doesn't have EOL at the end
+# Utility function -  parses given file and removes all lines containing a match by the given regular expression.
 #
-# Note: function does not check if file exist and does not return errors (return binary outcome: code 0 = yes, EOL is present or empty file, code 1 = EOL is missing in last line)
+# Usage example:
+#   remove_all_lines_by_regexp "Some line matcher regexp \(.*\)"  /some/path/to/the/file.txt
 #
-# Function is used to avoid concatination of more than one name/vale pairs into configuration files (be it yaml or .env files).
-#
-function does_file_have_eol_at_the_end {
-    FILENAME="${1}"
-
-    # Check if file is empty
-    if [ ! -s "${FILENAME}" ]; then
-        # Note: For our needs (to avoid concatination of name/value lines) we consider empty file as having EOL (i.e. safe to append more name/values)
-        # The file is empty.
-        # Note: function does_file_have_eol_at_the_end() got empty file. 
-        # For our needs (to avoid concatination of name/value lines) 
-        # we consider empty file as having EOL (i.e. safe to append more name/values)
-        return 0
-    # -z - true if the length of string is zero
-    # -n - true if the length of string is nonzero
-    elif [ -z "$(tail -c 1 <"${FILENAME}")" ]; then
-        # The file ends with a newline or with a null byte,
-        return 0
-    else
-        # The file does not end with a newline nor with a null byte.
-        return 1
-    fi
-}
-export -f does_file_have_eol_at_the_end
-
-###############################################################################
-# Category: file
-# Utility function - truncates file to zero
-#
-# Return codes
-#   0 - success
+# Return codes:
+#   0 - successfully removed lines
+#   1 - missing regular expression
 #   2 - missing target filename
 #   3 - target file does not exist
 #   4 - not enough permissions to read the target file
 #   5 - not enough permissions to writ the target file
-#   6 - failed to truncate the target file (expected size didn't drop to zero)
+#   6 - the pattern was not found (in some cases this might be 'success' because some lines were already removed successfully before)
+#   7 - failed to search by given pattern (most probably bad regex pattern)
+#   8 - editor return an error (most probably bad regex pattern
+#   9 - zero lines removed (despite the pattern was found and editor didn't error out and we have all the permissions)
 #
-# Usage example:
-#   truncate_file /some/path/to/the/file.txt
-#
-# Note: if you truncating the log file, which is actively used by running process(es) there might be the case
-# when right after you truncated the file it was written to before we checked the size, so error code 6 might
-# be not an error in these cases.
-#
-function truncate_file {
+function remove_all_lines_by_regexp {
+
+  # Get regexp argument
+  REGEX="${1}"
+  
+  # Check is is not empty string
+  if [ "${REGEX}" == "" ]; then
+    # Error: missing regular expression
+    return 1
+  fi
+
   # Get filename argument
-  TARGET_FILE="${1}"
+  TARGET_FILE="${2}"
 
   # Check filename is not blank
   if [ "${TARGET_FILE}" == "" ]; then
@@ -1112,25 +521,52 @@ function truncate_file {
     return 5
   fi
 
-  # Check if file is not empty, then truncate it to zero
-  if [ -s "${TARGET_FILE}" ]; then
-    # File is not empty.
-    # Warning: don't "sudo" here, for files with permissions like "-rw-rw-r--" truncate won't have access by root user
-    truncate --size=0 "${TARGET_FILE}" || { set_state "${FUNCNAME[0]}" 'error_trancating_file'; return 1; }
-  else
-    # File is already empty
-    return 0
-  fi
+  # Try to find by given regexp
+  # Note: we collect grep output even though "-q" is used: to cover all the error cases and
+  # not spill output to stderr/stdout. We might enrich return error with more details later
+  # (examaple: bad syntax in the used regex).
+  GREP_OUTPUT=$( grep -q "${REGEX}" "${TARGET_FILE}" 2>&1 )
+  GREP_CODE=${?}
 
-  # Final check: file must have zero size now
-  if [ -s file ]; then
-    # Error: File is not empty after truncation
+  # Check if the pattern is found
+  if [ ${GREP_CODE} -eq 1 ]; then
+    # The pattern was not found
     return 6
   fi
+  if [ ${GREP_CODE} -gt 1 ]; then
+    # Error: 7 - failed to search by given pattern.
+    return 7
+  fi
+  
+  # Take a note on the current number of lines
+  LINE_COUNT_BEFORE_CHANGE="$( cat "${TARGET_FILE}" | wc -l )"
 
-  return 0
+  # Found line in the target file. Edit file:
+  EDITOR_OUTPUT=$( sed -i "/${REGEX}/d" "${TARGET_FILE}" 2>&1 )
+
+  # Check if stream editor error out.
+  # Example: bad pattern would return code=1 and error message: sed: -e expression #1, char 8: unterminated address regex
+  EDITOR_CODE=${?}
+  if [ ${EDITOR_CODE} -ne 0 ]; then
+    # Error: editor return an error (most probably bad regex pattern)
+    return 8
+  fi
+
+  # Count the number of deleted lines
+  # Note: sed always return 0, so it won't let us know how many changes were done
+  LINE_COUNT_AFTER_CHANGE="$( cat "${TARGET_FILE}" | wc -l )"
+  DELETED_LINES_COUNT=$(( LINE_COUNT_BEFORE_CHANGE - LINE_COUNT_AFTER_CHANGE ))
+
+  # Check the number of deleted lines
+  if [ ${DELETED_LINES_COUNT} -gt 0 ]; then
+    # Success
+    return 0
+  else
+    # Somehow the number of lines did't change even though we found the pattern (obviously an error).
+    return 9
+  fi
 }
-export -f truncate_file
+export -f remove_all_lines_by_regexp
 
 ###############################################################################
 # Category: file
@@ -1260,37 +696,48 @@ function replace_all_lines_by_regexp {
 export -f replace_all_lines_by_regexp
 
 ###############################################################################
+# Utility function s
+# Search from current directory for files containing keyword (case insensitive)
+# Ignores node_modules directory
+# @param $1 pattern
+# @return  Success if keyword exists, Failure otherwise
+# Usage: s pattern
+function s {
+#!/bin/bash -
+    GREP_OPTIONS="--color=always"
+    PATTERN="${1}"
+    if [ "${PATTERN}" != "" ]; then
+        find . -name "*" -type f -not -path "*node_modules*" -exec grep -i --text --line-number -H "${PATTERN}" {} \;
+        return $?
+    else
+        echo "Search files in a subtree for a regex. Case insensitive." 1>&2
+        echo "Usage: s pattern" 1>&2
+        return 1
+    fi
+}
+
+###############################################################################
 # Category: file
-# Utility function -  parses given file and removes all lines containing a match by the given regular expression.
+# Utility function - truncates file to zero
 #
-# Usage example:
-#   remove_all_lines_by_regexp "Some line matcher regexp \(.*\)"  /some/path/to/the/file.txt
-#
-# Return codes:
-#   0 - successfully removed lines
-#   1 - missing regular expression
+# Return codes
+#   0 - success
 #   2 - missing target filename
 #   3 - target file does not exist
 #   4 - not enough permissions to read the target file
 #   5 - not enough permissions to writ the target file
-#   6 - the pattern was not found (in some cases this might be 'success' because some lines were already removed successfully before)
-#   7 - failed to search by given pattern (most probably bad regex pattern)
-#   8 - editor return an error (most probably bad regex pattern
-#   9 - zero lines removed (despite the pattern was found and editor didn't error out and we have all the permissions)
+#   6 - failed to truncate the target file (expected size didn't drop to zero)
 #
-function remove_all_lines_by_regexp {
-
-  # Get regexp argument
-  REGEX="${1}"
-  
-  # Check is is not empty string
-  if [ "${REGEX}" == "" ]; then
-    # Error: missing regular expression
-    return 1
-  fi
-
+# Usage example:
+#   truncate_file /some/path/to/the/file.txt
+#
+# Note: if you truncating the log file, which is actively used by running process(es) there might be the case
+# when right after you truncated the file it was written to before we checked the size, so error code 6 might
+# be not an error in these cases.
+#
+function truncate_file {
   # Get filename argument
-  TARGET_FILE="${2}"
+  TARGET_FILE="${1}"
 
   # Check filename is not blank
   if [ "${TARGET_FILE}" == "" ]; then
@@ -1316,151 +763,541 @@ function remove_all_lines_by_regexp {
     return 5
   fi
 
-  # Try to find by given regexp
-  # Note: we collect grep output even though "-q" is used: to cover all the error cases and
-  # not spill output to stderr/stdout. We might enrich return error with more details later
-  # (examaple: bad syntax in the used regex).
-  GREP_OUTPUT=$( grep -q "${REGEX}" "${TARGET_FILE}" 2>&1 )
-  GREP_CODE=${?}
+  # Check if file is not empty, then truncate it to zero
+  if [ -s "${TARGET_FILE}" ]; then
+    # File is not empty.
+    # Warning: don't "sudo" here, for files with permissions like "-rw-rw-r--" truncate won't have access by root user
+    truncate --size=0 "${TARGET_FILE}" || { set_state "${FUNCNAME[0]}" 'error_trancating_file'; return 1; }
+  else
+    # File is already empty
+    return 0
+  fi
 
-  # Check if the pattern is found
-  if [ ${GREP_CODE} -eq 1 ]; then
-    # The pattern was not found
+  # Final check: file must have zero size now
+  if [ -s file ]; then
+    # Error: File is not empty after truncation
     return 6
   fi
-  if [ ${GREP_CODE} -gt 1 ]; then
-    # Error: 7 - failed to search by given pattern.
-    return 7
+
+  return 0
+}
+export -f truncate_file
+
+### END UTILITY FUNCTIONS: FILE
+
+
+
+
+
+
+### BEGIN UTILITY FUNCITONS: LOGGING / PROCESS CONTROl
+
+###############################################################################
+# Utility abort / exit function - called when terminal conditions
+function abort {
+    error "abort called - aborting ${@}"
+    set_state ${SERVICE}_last_run_state abort
+    exit 1
+}
+export -f abort
+
+###############################################################################
+# Usage: assert_clean_exit command
+# Ensures command must exit cleanly (0) else will abort the entire system
+function assert_clean_exit {
+  #echo "TRY: ${@}"
+  "${@}"
+  local STATUS=${?}
+  if [ ${STATUS} -ne 0 ]; then
+     log "ERROR: Command \"${@}\" did not exit cleanly."
+     abort
+  # else
+  # 	log "SUCCESS: ${@}"
   fi
+}
+export -f assert_clean_exit
+
+###############################################################################
+# Utility error logging function
+function error {
+    log error "${@}"
+}
+export -f error
+
+###############################################################################
+# Utility loging function to report given string to both: standard error stream and send it to logger
+# Require ${SERVICE} to be defined. Proudce all the output into both: standard error stream and send it to logger.
+#
+# Usage example:
+#   log "Some event happened."
+#
+# Example output:
+#   Tue 07 Sep 2021 07:29:02 PM UTC: SomeService: Some event happened.
+#
+function log {
+  if [ "${SERVICE}" != "" ]; then
+    local LOGGER_TAG="--tag '${SERVICE}'"
+  fi
+   
+  echo "$(date --utc): ${SERVICE}: ${@}" | tee >(logger ${LOGGER_TAG} ) >&2
+}
+export -f log
+
+###############################################################################
+#
+function successful_exit {
+    set_state ${SERVICE}_last_run_state success
+    log ${SERVICE}_last_run_state success
+    exit 0
+}
+export -f successful_exit
+
+### END UTILITY FUNCITONS: LOGGING / PROCESS CONTROl
+
+
+
+
+### BEGIN UTILITY FUNCITONS: TERMINAL / SHELL
+
+###############################################################################
+#
+# Function checks if variable given by name is defined.
+# Function takes the only argument: variable name.
+# Return:
+#    on "success" (variable is defined) - return 0
+#    on "error" (varialbe not devined) - return non zero code and callse error(error_details)
+#
+function ensure_variable_defined {
+  local NAME="$1"
+  [[ -z "${NAME}" ]] && { error "error_ensure_variable_defined_no_arguments"; return 1; }  # Check: NAME is not blank
+  [[ -v "${NAME}" ]] && { return 0; }  # Check: variable by NAME is defined
+
+  # Create meaningful error code, which include lowcase variable name
+  local ERROR_CODE=$( echo "error_expected_variable_not_set_${NAME}" | tr '[:upper:]' '[:lower:]' )
+
+  # Report an error and return nonzero code.
+  error "${ERROR_CODE}"
+  return 1
+}
+export -f ensure_variable_defined
+
+###############################################################################
+#
+# Function checks if variable given by name is defined and has non-empty value.
+# Function takes the only argument: variable name.
+# Return:
+#    on "success" (variable is defined and non-empty) - return 0
+#    on "error" (varialbe not defined or has empty value) - return nonzero code and callse error(error_details)
+#
+function ensure_variable_not_empty {
+  local NAME="$1"
+  [[ -z "${NAME}" ]] && { error "error_ensure_variable_not_empty_no_arguments"; return 1; }  # Check: NAME itself is not blank
+  [[ -v "${NAME}" ]] && [[ ! -z "${!NAME}" ]] && { return 0; }  # Check: variable by NAME is defined and not empty
+
+  # Create meaningful error code, which include lowcase variable name
+  local ERROR_CODE=$( echo "error_ensure_variable_not_empty_${NAME}" | tr '[:upper:]' '[:lower:]' )
+
+  # Report an error and return nonzero code.
+  error "${ERROR_CODE}"
+  return 1
+}
+export -f ensure_variable_not_empty
+
+###############################################################################
+# Utility is_shell_attribute_set function
+# See discussion: https://stackoverflow.com/a/34709224/7022062
+# Usage example:
+#     set -x
+#     if is_shell_attribute_set x; then echo "xtrace enabled" ; else echo "xtrace disabled"; fi # xtrace enabled
+#
+#     set -e
+#     if is_shell_attribute_set e; then echo "yes"; else echo "no"; fi # yes
+#
+#     set +e
+#     if is_shell_attribute_set e; then echo "yes"; else echo "no"; fi # no
+#     
+function is_shell_attribute_set {
+  case "$-" in
+    *"${1}"*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+###############################################################################
+# Utility is_shell_attribute_set function
+# See discussion: https://stackoverflow.com/a/34709224/7022062
+# Usage example:
+#     set -o pipefail
+#     if is_shell_option_set pipefail; then echo "yes"; else echo "no"; fi # yes
+#
+#     set +o pipefail
+#     if is_shell_option_set pipefail; then echo "yes"; else echo "no"; fi # no
+#
+function is_shell_option_set {
+  case "$(set -o | grep "${1}")" in
+    *on) return 0 ;;
+    *)   return 1 ;;
+  esac
+}
+
+###############################################################################
+# Initialize the terminal
+# Ensures that TERM is set
+# Ensures we set up colours only if TERM is set, else empty strings
+# Works even if we don't have tput command, which we might not
+function terminal_initialize {
   
-  # Take a note on the current number of lines
-  LINE_COUNT_BEFORE_CHANGE="$( cat "${TARGET_FILE}" | wc -l )"
-
-  # Found line in the target file. Edit file:
-  EDITOR_OUTPUT=$( sed -i "/${REGEX}/d" "${TARGET_FILE}" 2>&1 )
-
-  # Check if stream editor error out.
-  # Example: bad pattern would return code=1 and error message: sed: -e expression #1, char 8: unterminated address regex
-  EDITOR_CODE=${?}
-  if [ ${EDITOR_CODE} -ne 0 ]; then
-    # Error: editor return an error (most probably bad regex pattern)
-    return 8
+  # If we do not have a terminal type, set up dumb
+  if [ -z "${TERM}" ]; then
+    export TERM=dumb
   fi
 
-  # Count the number of deleted lines
-  # Note: sed always return 0, so it won't let us know how many changes were done
-  LINE_COUNT_AFTER_CHANGE="$( cat "${TARGET_FILE}" | wc -l )"
-  DELETED_LINES_COUNT=$(( LINE_COUNT_BEFORE_CHANGE - LINE_COUNT_AFTER_CHANGE ))
+  FONT_STYLE_BOLD=""
+  FONT_STYLE_GREEN=""
+  FONT_STYLE_RED=""
+  FONT_STYLE_NORMAL=""
+  
+  terminal_is_tty || return
 
-  # Check the number of deleted lines
-  if [ ${DELETED_LINES_COUNT} -gt 0 ]; then
-    # Success
-    return 0
-  else
-    # Somehow the number of lines did't change even though we found the pattern (obviously an error).
-    return 9
+  if command_exists tput ; then
+      # If this is a TTY, These set of "t_*" variables allows us to decorate the output with some style (colour, boldness)
+      FONT_STYLE_BOLD="$(tput bold)"
+      FONT_STYLE_GREEN="$(tput setaf 2)"
+      FONT_STYLE_RED="$(tput setaf 1)"
+      FONT_STYLE_NORMAL="$(tput sgr0)"
   fi
 }
-export -f remove_all_lines_by_regexp
+export -f terminal_initialize
 
 ###############################################################################
-# Utility wrapper around apt_update for safer headless operation
-function apt_update {
-    APT_COMMAND=update
-    sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND}
-    if [ ${?} -ne 0 ]; then
-       error "updating packages"
-       return 1
+# Check if terminal is interactive
+# This is useful in cases where we might wish to ask a question
+# If you run this script from ssh, it will return 255 (e.g. ssh hostname "terminal_is_interactive" )
+function terminal_is_interactive {
+  command_exists tty && tty -s && return 0 || return 1
+  return 1 # Default, it isn't.
+}
+export -f terminal_is_interactive
+
+###############################################################################
+# Check if this terminal is a TTY
+function terminal_is_tty {
+    [ -t 0 ] && return 0 || return 1
+}
+export -f terminal_is_tty
+
+###############################################################################
+# Reset terminal state - sometimes useful if a command messes up terminal state
+function terminal_reset {
+  [ is_tty && command_exists tput ] && tput reset && tput sane
+}
+export -f terminal_reset
+
+### END UTILITY FUNCITONS: TERMINAL / SHELL
+
+
+### BEGIN UTILITY FUNCTIONS: PROCESS
+
+###############################################################################
+# Category: process
+# stop_pm2 solves the problem of pm2 running by multiple user (designated "choosen user" and "root").
+# stop_pm2 would stop all found pm2 instances and remove it from automatic startup.
+#
+# Dependency: environment variables must be set:
+#    - BEST_USER_TO_RUN_AS
+#
+function stop_pm2 {
+    set_state "${FUNCNAME[0]}" 'stopping'
+
+    # # There was a problem inside stop_pm2() due to npm re-installed in a new location
+    # # We used this "snapshot" which happened to be useful.
+    # # TODO: let's add even more useful findings here and move it into the ff_bash_funcions as "debug_snapshot()"
+    # echo "--------------- debug_snapshot begin -----------------"
+    # date
+    # pwd
+    # whoami
+    # which n
+    # which npm
+    # which node
+    # n --version
+    # npm --version
+    # node --version
+    # echo ${PATH}
+    # echo ${N_PREFIX}  # expected result: /home/ubuntu/ff_agent/.n
+    # pm2 ps
+    # which pm2
+    # sudo ps aux | grep pm2
+    # sudo systemctl status pm2-${BEST_USER_TO_RUN_AS}
+    # echo "--------------- debug_snapshot end -----------------"
+
+    # Check required environment variables are set: BEST_USER_TO_RUN_AS
+    for VARIABLE_NAME in BEST_USER_TO_RUN_AS; do
+      ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
+    done
+
+    # pm2 may not be  installed, so we have nothing to stop
+    PM2=$( which pm2 )
+    if [ -z "${PM2}" ]; then
+      set_state "${FUNCNAME[0]}" 'pm2_executable_not_found_error'
+      return 1
     fi
-    return 0
-}
-export -f apt_update
 
-###############################################################################
-# Utility wrapper around apt_update for safer headless operation
-function apt_upgrade {
-    APT_COMMAND=upgrade
-    # Note: we suppress stdout noise (only stderr will still be "visible", but TODO: think of better way to collect evidences insted of just 1 large pile)
-    sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} > /dev/null
-    if [ ${?} -ne 0 ]; then
-       error "Error upgrading packages"
-       return 1
+    timeout 5 ${PM2} unstartup
+    timeout 5 ${PM2} kill
+    timeout 5 sudo ${PM2} unstartup
+    timeout 5 sudo ${PM2} kill
+
+    # Kill all processes mentioning pm2 owned by me. This is a tad aggressive, but
+    # pm2 has some stupid process names
+    ps auxw | grep ^${BEST_USER_TO_RUN_AS} | grep -i pm2 | grep -v grep | grep -v hotpatch
+    PROCS=$( ps auxw | grep ^${BEST_USER_TO_RUN_AS} | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
+    if [ "${PROCS}" != "" ]; then
+      kill ${PROCS}
     fi
+    PROCS=$( ps auxw | grep ^${BEST_USER_TO_RUN_AS} | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
+    [ "${PROCS}" != "" ] && { set_state "${FUNCNAME[0]}" "assertion_failure_should_be_no_pm2_processes_owned_by_user"; return 1; }
+    set_state "${FUNCNAME[0]}" "assertion_success_no_pm2_processes_owned_by_user"
+
+    # Disable any root style services
+    for ACTION in stop disable
+    do
+      sudo systemctl "${ACTION}" pm2-${BEST_USER_TO_RUN_AS}
+    done
+
+    # Tell root to remove the startup entry for itself.
+    # Otherwise, on a reboot, it might come back
+    timeout 5 sudo pm2 unstartup
+    pm2 kill
+
+    # Kill any root processes lingering
+    ps auxw | grep root | grep -i pm2 | grep -v grep | grep -v hotpatch
+    PROCS=$( ps auxw | grep root | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
+    if [ "${PROCS}" != "" ]; then
+      kill ${PROCS}
+    fi
+    PROCS=$( ps auxw | grep root | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
+    [ "${PROCS}" != "" ] && { set_state "${FUNCNAME[0]}" "assertion_failure_should_be_no_pm2_processes_owned_by_root"; return 1; }
+    set_state "${FUNCNAME[0]}" 'assertion_success_no_pm2_processes_owned_by_root'
+
+    # Post condition, there is no pm2 process running for any user
+    ps auxw | grep -i pm2 | grep -v grep
+    PROCS=$( ps auxw | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
+    if [ "${PROCS}" != "" ]; then
+      set_state "${FUNCNAME[0]}" 'could_not_stop_all_pm2_processes_error'
+      return 1
+    fi
+    PROCS=$( ps auxw | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
+    [ "${PROCS}" != "" ] && { set_state "${FUNCNAME[0]}" "assertion_failure_should_be_no_pm2_processes_running"; return 1; }
+
+    set_state "${FUNCNAME[0]}" 'success_stopped'
     return 0
 }
-export -f apt_upgrade
+export -f stop_pm2
+
+### END UTILITY FUNCTIONS: PROCESS
+
+
+### BEGIN UTILITY FUNCTIONS: CONTAINERS
 
 ###############################################################################
-# Utility wrapper around apt install for safer headless operation
-function apt_install {
-    PACKAGES=${@}
-    APT_COMMAND=install
+# Category: container
+# Utility function - Check if container exists
+#
+# Usage example:
+#    if container_name_exists "some_container_name"; then
+#       # Yes, container by given name does exist.
+#    else
+#       # No such container found
+#    fi
+#
+function container_name_exists {
+    CONTAINER_NAME="${1}"
+    # -z - true if the length of string is zero
+    # -n - true if the length of string is nonzero
+    if [ -z "${CONTAINER_NAME}" ]; then
+        error "error_no_container_name_specified"
+        return 2
+    fi
+    CONTAINER_ID=$(docker inspect --format="{{.Id}}" ${CONTAINER_NAME} 2> /dev/null)
+    if [[ "${CONTAINER_ID}" ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+export -f container_name_exists
 
-    for PACKAGE in ${PACKAGES}
+###############################################################################
+# Category: container
+# Utility function - Get Docker Version
+function get_installed_docker_version {
+    DOCKER_PATH=$( command -v docker )
+    if [ -z "${DOCKER_PATH}" ]; then
+        return 1
+    else
+        DOCKER_VERSION=$( ${DOCKER_PATH} -v | cut -d" " -f 3 | cut -d"." -f 1 )
+        echo "${DOCKER_VERSION}"
+    fi
+}
+export -f get_installed_docker_version
+
+###############################################################################
+# Category: container
+# Utility function - Check if docker container healthy or not. This checks if the container is actually in the state 'running' vs. restarting
+function is_container_healthy {
+    CONTAINER_NAME="${1}"
+
+    # -z - true if the length of string is zero
+    # -n - true if the length of string is nonzero
+    if [ -z "${CONTAINER_NAME}" ]; then
+        error "error_no_container_name_specified"
+        return 2
+    fi
+    if [ "$( docker container inspect -f '{{.State.Status}}' ${CONTAINER_NAME} )" == "running" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+export -f is_container_healthy
+
+###############################################################################
+# Category: container
+# Utility function - Check if docker container running. This checks if it is running, but it could be in a 'restart' loop.
+function is_container_running {
+    CONTAINER_NAME="${1}"
+    if [ -z "${CONTAINER_NAME}" ]; then
+        error "error_no_container_name_specified"
+        return 2
+    fi
+    if [ "$( docker container inspect -f '{{.State.Running}}' ${CONTAINER_NAME} )" == "true" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+export -f is_container_running
+
+###############################################################################
+# Category: container
+# Utility function - Restart docker containers
+function restart_containers {
+
+    # THIS CHECK FAILS:
+    # + return 0
+    # + CONTAINERS=(control_backend service_metric_proxy control_proxy real_browser service_provisioning delivery_discover)
+    # + restart_containers control_backend service_metric_proxy control_proxy real_browser service_provisioning delivery_discover
+    # + '[' -z control_backend service_metric_proxy control_proxy real_browser service_provisioning delivery_discover ']'
+    # /home/ubuntu/ff_agent/bin/hotpatch: line 434: [: too many arguments
+    # + CONTAINERS=(${@})
+    # + CONTAINERS_TO_RESTART=()
+    # + for CONTAINER in ${CONTAINERS[@]}
+    # + container_name_exists control_backend
+    # ... and it keep working normally
+
+    # if [ -z "${@}" ]; then
+    #     error "error_no_container_names_specified"
+    #     return 2
+    # fi
+    CONTAINERS=(${@})
+    CONTAINERS_TO_RESTART=()
+    for CONTAINER in ${CONTAINERS[@]}
     do
-        # Note: we suppress stdout noise (only stderr will still be "visible", but TODO: think of better way to collect evidences insted of just 1 large pile)
-        sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} ${PACKAGE} > /dev/null
-        if [ ${?} -ne 0 ]; then
-            error "Error installing package: ${PACKAGE}"
-            return 1
+        # We only restart a container if it is defined
+        if container_name_exists "${CONTAINER}"
+        then
+            CONTAINERS_TO_RESTART+=( ${CONTAINER} )
         fi
     done
-    return 0
+
+    if (( ${#CONTAINERS_TO_RESTART[@]} )); then
+        docker restart ${CONTAINERS_TO_RESTART[@]}
+        return ${?}
+    fi
+
+    return 1
 }
-export -f apt_install
+export -f restart_containers
 
 ###############################################################################
-# Utility wrapper around apt reinstall for safer headless operation
-function apt_reinstall {
-    PACKAGES=${@}
-    APT_COMMAND=reinstall
+# Category: container
+# Utility function - Restart docker containers
+# Function gets container name (case sensitive) (can be partial) as the only input argument and
+# tries to find all matching containers (even if they're in stopped state). Then for every found
+# container it will "docker stop" and "docker remove" them.
+# Runction return code 0 on success
+#
+function stop_and_remove_container_by_name {
+  CONTAINER_NAME="${1}"
 
-    for PACKAGE in ${PACKAGES}
-    do
-        sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} ${PACKAGE}
-        if [ ${?} -ne 0 ]; then
-            error "Error reinstalling packages: ${PACKAGE}"
-            return 1
+  # Check the container name isn't blank
+  if [ "${CONTAINER_NAME}" == "" ]; then
+    return 1
+  fi
+
+  # Count existing container(s) by given docker name
+  FOUND_CONTAINERS_COUNT=$( docker ps -a | grep "${CONTAINER_NAME}" | wc -l )
+
+  # Check if we found >1
+  if [ ${FOUND_CONTAINERS_COUNT} -gt 1 ]; then
+    # Yes, we found >1 containers to stop/remove         
+    for DOCKER_ID in $(docker ps -a | grep "${CONTAINER_NAME}" | awk '{print $1}'); do
+      # Make sure DOCKER_ID is not a blank string
+      if [ "${DOCKER_ID}" == "" ]; then
+        # TODO: shall the utility f-n use set_state?
+        return 1
+      fi
+
+      # Try to stop and remove the container
+      docker stop "${DOCKER_ID}"
+      docker rm "${DOCKER_ID}"
+
+      # Sometimes container can be in the broken state, in this case even after stopping and removing it
+      # the DOCKER_ID is still visible in the "docker ps" list. In this cas we need to kill -9 corresponding
+      # process on the host level:
+      STILL_PRESENT_DOCKER_ID=$( docker ps -a | grep "${DOCKER_ID}" | wc -l )
+      if [ "${STILL_PRESENT_DOCKER_ID}" != "" ]; then
+        # Yes, we have found "unstoppable" docker. Kill -9 the corresponding process now
+        PID_TO_KILL_COUNT=$( sudo ps aux | grep "${DOCKER_ID}" | wc -l )
+        PID_TO_KILL=$( sudo ps aux | grep "${DOCKER_ID}" )
+        if [ ${PID_TO_KILL_COUNT} -ne 1 ]; then
+          # Something went wrong, we supposed to find exactly ONE pid to terminate.
+          return 1
         fi
+        
+        # Send "kill -9" signal to the found process
+        sudo kill -9 "${PID_TO_KILL}" || { set_state "${FUNCNAME[0]}" 'error_killing_process'; return 1; }
+
+        # The "unstoppable" docker terminated, now we can safely remove the container
+        docker rm "${DOCKER_ID}"
+      fi
     done
-    return 0
+
+    # Cleanup some space
+    docker system prune -a -f
+  fi
+
+  return 0
 }
-export -f apt_reinstall
+export -f stop_and_remove_container_by_name
+
+### END UTILITY FUNCTIONS: DOCKERS
+
+
+### BEGIN UTILITY FUNCTIONS: STATE/SECRETS
 
 ###############################################################################
-# Utility wrapper around apt_remove for safer headless operation
-function apt_remove {
-    PACKAGES=${@}
-    APT_COMMAND=remove
-
-    for PACKAGE in ${PACKAGES}
-    do
-        sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} "${PACKAGE}"
-        if [ ${?} -ne 0 ]; then
-            error "Error removing packages: ${PACKAGE}"
-            return 1
-        fi
-    done
+# Utility function
+function generate_strong_password {
+    # Works on Linux and Mac
+    # Makes password 16 characters long
+    dd if=/dev/urandom count=1 2> /dev/null | uuencode -m - | sed -ne 2p | cut -c-16
 }
-export -f apt_remove
-
-
-###############################################################################
-# Utility wrapper to list all the files by given package name (even if package not installed).
-# As for reverse checking files from packages apt-file would be the best bet.
-#
-# Discussion: https://serverfault.com/a/1059513/413686
-#
-# Usage:
-#    apt_list <package name>
-#
-# Example: 
-#    apt_list libjansson-dev
-#
-apt_list () {
-    apt-get download -o Dir::Cache::archives="./" --print-uris "$@" |awk -F\' '{print $2}' | xargs -I '{}' curl -skL '{}' | dpkg-deb -c /dev/stdin 
-}
-export -f apt_list
+export -f generate_strong_password
 
 ###############################################################################
 # Utility function, getting secret value by given secret key name.
@@ -1599,6 +1436,51 @@ function get_secret {
     return 1
 }
 export -f get_secret
+
+###############################################################################
+# Function get_state() allows to get state set (by string name).
+# Return value:
+#   - if state found by given state name, print its value to standard output and return code 0
+#   - if state not found, print nothing into standard output and return code 1
+#
+function get_state {
+  # Preserve current xtrace state
+  if is_shell_attribute_set x; then
+    XTRACE_WAS_ENABLED=true
+  fi
+
+  set  +x # Disble xtrace to avoid priting secrets
+
+  # Get 1 argument: state name
+  STATE="${1}"
+  
+  # Make sure "${AGENT_HOME}" is not empty
+  if [ -z "${AGENT_HOME}" ]; then
+      error "Can not set state. AGENT_HOME variable not defined. State would have been set to ${STATE}=${VALUE}"
+      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+      return 1
+  fi
+
+  # Construct path to the state file
+  STATE_DIR="${AGENT_HOME}/state"
+  STATE_FILE="${STATE_DIR}/${STATE}"
+
+  # Check if state file exists
+  if [ -f "${STATE_FILE}" ]; then
+    # State file found, try to print it's content and preserve result code
+    VALUE="$( cat "${STATE_FILE}" )"
+    EXIT_CODE=$?
+    # Print value to standard output
+    echo -n "${VALUE}"
+    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+    return $EXIT_CODE
+  else
+    # Error: state file not found. Restore xtrace and eturn code 1
+    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+    return 1
+  fi
+}
+export -f get_state
 
 ###############################################################################
 # Utility function
@@ -1770,59 +1652,122 @@ EOF
 }
 export -f set_state
 
+### END UTILITY FUNCTIONS: STATE/SECRETS
+
+
+
+### BEGIN UTILITY FUNCTIONS: USER / GROUPS
+
 ###############################################################################
-# Function get_state() allows to get state set (by string name).
-# Return value:
-#   - if state found by given state name, print its value to standard output and return code 0
-#   - if state not found, print nothing into standard output and return code 1
+# Utility function check_group_exists takes one argument (group name) and return 0 if such group exists.
+# Return:
+#  0 - group exists
+#  non-zero code - group does not exist or no arguments given
 #
-function get_state {
-  # Preserve current xtrace state
-  if is_shell_attribute_set x; then
-    XTRACE_WAS_ENABLED=true
-  fi
+# Usage example:
+#   if ! check_group_exists 'docker'; then error "Group docker does not exist"; fi
+#
+function check_group_exists {
+  # Take argument
+  local GROUP="${1}"
 
-  set  +x # Disble xtrace to avoid priting secrets
-
-  # Get 1 argument: state name
-  STATE="${1}"
-  
-  # Make sure "${AGENT_HOME}" is not empty
-  if [ -z "${AGENT_HOME}" ]; then
-      error "Can not set state. AGENT_HOME variable not defined. State would have been set to ${STATE}=${VALUE}"
-      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
-      return 1
-  fi
-
-  # Construct path to the state file
-  STATE_DIR="${AGENT_HOME}/state"
-  STATE_FILE="${STATE_DIR}/${STATE}"
-
-  # Check if state file exists
-  if [ -f "${STATE_FILE}" ]; then
-    # State file found, try to print it's content and preserve result code
-    VALUE="$( cat "${STATE_FILE}" )"
-    EXIT_CODE=$?
-    # Print value to standard output
-    echo -n "${VALUE}"
-    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
-    return $EXIT_CODE
-  else
-    # Error: state file not found. Restore xtrace and eturn code 1
-    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+  # Check argument is not empty
+  if [ -z "${GROUP}" ]; then
+    error "check_group_exists() called with no arguments"
     return 1
   fi
+
+  # Check if the group exist by given groupname
+  getent group "${GROUP}" >/dev/null
 }
-export -f get_state
+export -f check_group_exists
 
 ###############################################################################
-# Utility function
-function generate_strong_password {
-    # Works on Linux and Mac
-    # Makes password 16 characters long
-    dd if=/dev/urandom count=1 2> /dev/null | uuencode -m - | sed -ne 2p | cut -c-16
+# Category: identity
+# Utility function - Create User, with a disabled password
+function create_user {
+  USERNAME="${1}"
+	if [ ! -z "${USERNAME}" ]; then
+		if can_sudo "${USERNAME}"; then
+        	# TODO: Make this multiplatform. Check what happens if we do this in a docker.
+        	sudo adduser --disabled-password --gecos "" "${USERNAME}"
+			return ${?}
+		fi
+	fi
+	return 1
 }
-export -f generate_strong_password
+export -f create_user
+
+###############################################################################
+# Category: authorization
+# Utility function - Am I root? Return 0 if I am, 1 if not
+function effectively_root {
+    if  [ "${EUID}" -eq 0 ]; then
+        return 0 # I have root powers
+    else
+        return 1 # Don't have root powers
+    fi
+}
+export -f effectively_root
+
+###############################################################################
+# Category: identity
+# Utility function - Get home directory for user
+function get_home_directory_for_user {
+    # TODO: OSX doesn't have getent. Find Equivalent
+    HOME_DIR=$( getent passwd "${1}" | cut -d: -f6 )
+    if [ -z "${HOME_DIR}" ]; then
+        return 1
+    else
+        echo "${HOME_DIR}"
+    fi
+}
+export -f get_home_directory_for_user
+
+###############################################################################
+# Category: process
+# Utility function - Get cmdline of parent process ID -- useful to know who is starting us
+# E.g. if [ $( get_ppid_cmd | grep --text -c node ) -gt "0" ] -> will let you check if your parent process is nodejs
+function get_ppid_cmd {
+    PPID_CMD=$( cat /proc/${PPID}/cmdline )
+    echo "${PPID_CMD}"
+}
+export -f get_ppid_cmd
+
+###############################################################################
+# Utility function - check if user is in a group
+# Usage: is_user_in_group "user" "group"
+function is_user_in_group {
+  USERNAME="${1}"
+  GROUP="${2}"
+  [ -z "${USERNAME}" ] && return 1
+  [ -z "${GROUP}" ] && return 1
+  if getent group "${GROUP}" | grep -q "\b${USERNAME}\b"; then
+      return 0
+  else
+      return 1
+  fi
+}
+export -f is_user_in_group
+
+###############################################################################
+# Category: identity
+# Utility function - Check if User Exists
+function user_exists {
+    # TODO: OSX doesn't have getent. Find Equivalent
+    if [ -z "$(getent passwd ${1})" ]; then
+        return 1 # User does not exist
+    else
+        return 0 # Exists
+    fi
+}
+export -f user_exists
+
+### END UTILITY FUNCTIONS: USER / GROUPS
+
+
+
+### BEGIN DISCOVER FUNTIONS
 
 ###############################################################################
 #
@@ -2016,31 +1961,6 @@ export discover_optional_environment_variable
 
 ###############################################################################
 #
-# F-n discover_required_environment_variable is similar to discover_optional_environment_variable, but after an attempt
-# to discover variable it checks if the value was actually found/set and if not, then error out.
-#
-function discover_required_environment_variable {
-  local NAME="$1"
-  local DEFAULT_VALUE="$2"
-
-  # Check inputs: NAME can be empty
-  [ -z "${NAME}" ] && { return 1; }
-
-  # Try to discover
-  discover_optional_environment_variable "${NAME}" "${DEFAULT_VALUE}"
-
-  # Check: must be discovered, otherwise error out
-  if [[ ! -v "${NAME}" ]]; then
-      # Variable '${NAME}' is not defined, but required. Return an error.
-      return 1
-  fi
-
-  return 0
-}
-
-
-###############################################################################
-#
 # discover_os() tries to identify operating system type/version and return it as a string.
 # In case of error it will return string: "unknown"
 #
@@ -2075,6 +1995,269 @@ function discover_os {
     echo "${OS_FAMILY}"
 }
 export -f discover_os
+
+###############################################################################
+#
+# F-n discover_required_environment_variable is similar to discover_optional_environment_variable, but after an attempt
+# to discover variable it checks if the value was actually found/set and if not, then error out.
+#
+function discover_required_environment_variable {
+  local NAME="$1"
+  local DEFAULT_VALUE="$2"
+
+  # Check inputs: NAME can be empty
+  [ -z "${NAME}" ] && { return 1; }
+
+  # Try to discover
+  discover_optional_environment_variable "${NAME}" "${DEFAULT_VALUE}"
+
+  # Check: must be discovered, otherwise error out
+  if [[ ! -v "${NAME}" ]]; then
+      # Variable '${NAME}' is not defined, but required. Return an error.
+      return 1
+  fi
+
+  return 0
+}
+
+###############################################################################
+# Category: time
+# Utility function to get Unix epoch time in milliseconds
+# Usage example:
+#   "current epoch_ms value is: $( get_epoch_ms )"
+function get_epoch_ms {
+    # TODO - Make this compatible with Darwin (MACOS) where date works differently.
+    # For details on "date" command on Linux vs Darwin see discussion: 
+    # https://stackoverflow.com/questions/9804966/date-command-does-not-follow-linux-specifications-mac-os-x-lion
+    echo "$( date +%s%N | cut -b1-13 )"  # https://serverfault.com/a/151112/413686>
+}
+export -f get_epoch_ms
+
+###############################################################################
+# Category: environment
+# Utility function - Get hardware architecture (e.g. arm64, amd64)
+function get_hardware_architecture {
+    dpkg --print-architecture 
+}
+export -f get_hardware_architecture
+
+###############################################################################
+# Category: environment
+# Utility function - Get codename - e.g. breezy, focal, ..
+function get_lsb_codename {
+    lsb_release --short --codename
+}
+export -f get_lsb_codename
+
+###############################################################################
+# Category: environment
+# Utility function - Get LSB ID - e.g. Ubuntu
+function get_lsb_id {
+    lsb_release --short --id
+}
+export -f get_lsb_id
+
+###############################################################################
+# Category: environment
+# Utility function - Get release - e.g. 16.04, 18.04, 20.04
+function get_lsb_release {
+    lsb_release --short --release
+}
+export -f get_lsb_release
+
+### END DISCOVER FUNCTIONS
+
+
+### BEGIN SET ENVIRONMENT FUNCTIONS
+
+###############################################################################
+# Utility function check_all_environment_variables_are_set() checks if all the expected environment variables are set
+# On success: reuturn 0
+# On failure: return nonzero code
+#
+function check_all_environment_variables_are_set {
+
+  # Define list of expected non-empty variables
+  local ALL_EXPECTED_ENVRIONMENT_VARIABLES=(
+    # "General" fields
+    FF_HOST
+
+    # "Dynamically learned" fields
+    BEST_USER_TO_RUN_AS
+    AGENT_HOME
+  )
+
+  # Check required environment variables are set
+  for VARIABLE_NAME in ${ALL_EXPECTED_ENVRIONMENT_VARIABLES[@]}; do 
+    ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }    # Note: the error details were already reported by ensure_variable_not_empty()
+  done
+}
+export -f check_all_environment_variables_are_set
+
+###############################################################################
+# Utility function check_nodejs_installation() checks if nodejs is installed under right path (TODO: and right version)
+# On success: reuturn 0
+# On failure: return nonzero code
+#
+function check_nodejs_installation {
+
+  # Let's run all the checks and collect all the found errors into associative array (key = name of the check, value = error code)
+  declare -A CHECK_CODES
+  declare -A ERRORS
+
+  # Check nodejs is installed
+  CHECK_NAME='is_nodejs_installed'
+  WHICH_NODE="$( which node )"
+  [ "${WHICH_NODE}" != "" ] || {
+    ERROR_CODE="error_check_nodejs_installation_nodejs_not_installed"
+    set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
+    ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; 
+  }
+
+  # Check nodejs is not installed under /usr
+  CHECK_NAME='is_nodejs_installed_into_right_path'
+  [[ "${WHICH_NODE}" =~ ^/usr/ ]] && { 
+    ERROR_CODE="error_check_nodejs_installation_wrong_installation_dir"
+    set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
+    ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; 
+  }
+
+  # Check npm is installed
+  CHECK_NAME='is_npm_installed'
+  WHICH_NPM="$(which npm)" 
+  [ "${WHICH_NPM}" != "" ] || { 
+    ERROR_CODE="error_check_nmp_installation_nodejs_not_installed"
+    set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; 
+    ERRORS[${CHECK_NAME}]="${ERROR_CODE}";
+  }
+
+  # Check nodejs is not installed under /usr
+  CHECK_NAME='is_npm_installed_into_right_path'
+  [[ "${WHICH_NPM}" =~ ^/usr/ ]] && { 
+    ERROR_CODE="error_check_npm_installation_wrong_installation_dir"
+    set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
+    ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; 
+  }
+
+  # Get expected nodejs version
+  CHECK_NAME='get_expected_nodejs_version'
+  local EXPECTED_VERSION="$( get_expected_nodejs_version )"
+  [ -z "${EXPECTED_VERSION}" ] && { 
+    ERROR_CODE="failed_to_get_expected_nodejs_version"
+    set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
+    ERRORS[${CHECK_NAME}]="${ERROR_CODE}";
+  }
+
+  # Get actual nodejs version
+  CHECK_NAME='get_actual_nodejs_version'
+  local ACTUAL_VERSION="$( node --version )"
+  [ -z "${ACTUAL_VERSION}" ] && {
+    ERROR_CODE="failed_to_get_actual_nodejs_version"
+    set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; 
+    ERRORS[${CHECK_NAME}]="${ERROR_CODE}";
+  }
+
+  # Compare expected vs actual nodejs versions
+  CHECK_NAME='is_nodejs_right_versions'
+  if [ "${EXPECTED_VERSION}" != "${ACTUAL_VERSION}" ]; then
+    # Version mismatch
+    ERROR_CODE="error_mismatching_nodejs_versions"
+    set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; 
+    ERRORS[${CHECK_NAME}]="${ERROR_CODE}";
+  fi
+
+  # # Iterate all errors
+  # for KEY in "${!ERRORS[@]}"; do
+  #   echo "  \"${KEY}\": \"${ERRORS[${KEY}]}\","
+  # done
+  
+  # List of all the checks done with their statuses
+  if [ ${#ERRORS[@]} -eq 0 ]; then
+    # No errors
+    return 0
+  else
+    # We found some errors
+    return 1
+  fi
+}
+export -f check_nodejs_installation
+
+###############################################################################
+#
+# Function choose_ff_agent_home:
+#
+# Sets the following environment variables:
+#   BEST_USER_TO_RUN_AS - example: ubuntu
+#   AGENT_HOME          - example: /home/ubuntu/ff_agent
+#
+# Return:
+#  on success - export environment variables and return 0
+#  on error - return nonzero code
+#
+# Baseline installer must choose the "best user" (not root, able to sudo).
+#
+# Reason why we must avoid using root user: if program started by root user and a security
+# flaw is exploited, the attacker has access to all the data and can directly control the system.
+# For example, it might install a trojan or key-logger into your kernel. We only escalate user
+# privileges when required and allowed/agreed to install dependency packages.
+#
+# Failure to choose the right user would end up in the terminal installation error:
+# "terminal_error_failed_to_discover_environment".
+#
+function choose_ff_agent_home {
+    
+    # These exports are our "return values"
+    # Note: we should not: "export SOMEVAR=$( some_function_call ) || { error "error details"; abort; } " because export would hide actual exit call of the "some_function_call" and thus we'll miss an error!
+    BEST_USER_TO_RUN_AS=$( get_best_user_to_run_as ) || { error "terminal_error_failed_to_choose_user"; return 1; }
+    export BEST_USER_TO_RUN_AS
+    
+    # Even if this function run by some other/not-chosen" user, the AGENT_HOME_DIR would point to the "right/choosen" home. Example: /home/ubuntu
+    # Only when we run as ritgh/choosen user the AGENT_HOME_DIR and HOME have the same values.
+    local AGENT_HOME_DIR=$( get_home_directory_for_user "${BEST_USER_TO_RUN_AS}" ) || { error "terminal_error_failed_to_get_home_directory_for_choosen_user"; return 1; }
+    
+    local AGENT_DIR_NAME="ff_agent"
+    export AGENT_HOME="${AGENT_HOME_DIR}/${AGENT_DIR_NAME}"
+}
+export -f choose_ff_agent_home
+
+###############################################################################
+#
+# Function makes sure ${AGENT_HOME} folder exist. If not - tries to create it.
+#
+# Require environment variables set:
+#   - AGENT_HOME
+#   - BEST_USER_TO_RUN_AS
+#
+# Return:
+#  on success - return 0
+#  on error - return nonzero code
+#
+function ensure_agent_home_exists {
+
+  # Define required variables
+  local REQUIRED_VARIABLES=( 
+    AGENT_HOME
+    BEST_USER_TO_RUN_AS
+  )
+
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
+  done
+
+  # Make sure ${AGENT_HOME} folder exist
+  if [ ! -d "${AGENT_HOME}" ]; then
+      # ${AGENT_HOME} folder is missing: create new one.
+      mkdir -p "${AGENT_HOME}"
+      if [ ${?} -ne 0 ]; then
+        # Failed to create ${AGENT_HOME} - report error() and abort()
+        # error "Did not find AGENT_HOME directory at ${AGENT_HOME}. Tried to create it but failed. Aborting."
+        set_state "${FUNCNAME[0]}" "failed_to_create_agent_home"
+        return 1
+      fi
+  fi
+}
+export -f ensure_agent_home_exists
 
 ###############################################################################
 #
@@ -2120,6 +2303,117 @@ function ff_api_get {
     return 0
 }
 export -f ff_api_get
+
+###############################################################################
+#
+# Find out the best user to run as.
+# Return:
+#  on success - return a string (username to use).
+#  on error - log error() and abort() execution
+#
+# The logic "best user" selection:
+# We don't run as root, or root-like account.
+# We would like an account that can install packages to set the environment up correctly.
+# We check the following user accounts candidates: "ff_agent", "ubuntu" or current user.
+# Selected user should have rights to install packages. Ideally locally, but one step at a time.
+#
+function get_best_user_to_run_as {
+
+    POTENTIAL_USERS=( ff_agent ubuntu ${USER} )
+
+    if effectively_root
+    then
+        # Look for a better user.
+        for POTENTIAL_USER in ${POTENTIAL_USERS[@]}
+        do
+            if user_exists ${POTENTIAL_USER}
+            then
+                if can_sudo "${POTENTIAL_USER}"
+                then
+                    echo "${POTENTIAL_USER}"
+                    return 0
+                fi
+            fi
+        done
+
+        error "Current user ${USER} is effectively root and this script can not run as root."
+        error "Tried to find other users to run as (${POTENTIAL_USERS}) but was not successful."
+        abort
+
+    else
+        # We aren't root. But can we sudo? We need that to currently install certain packages.
+        if can_sudo "${USER}"
+        then
+            echo "${USER}"
+            return 0
+        else
+            error "User ${USER} can not sudo. Currently sudo is required to install packages. Please run from a non-root account with sudo privileges."
+            exit 1
+        fi
+    fi
+}
+export -f get_best_user_to_run_as
+
+###############################################################################
+# Function prints into standard output the expected version of nodejs.
+# We use it during installation and to check installed "set environment" project.
+function get_expected_nodejs_version {
+  echo 'v16.13.0'
+}
+export -f get_expected_nodejs_version
+
+###############################################################################
+#
+# Function checks if we have framework API defined by checking if all of the following is set:
+#    - FF_HOST
+#    - ( FF_API_USERNAME and FF_API_PASSWORDS ) OR ( FF_API_TOKEN )
+#
+# As a result: functions prints "true" or "false" into std output stream.
+# Usage example:
+#    if [ "$( is_framework_api_defined )" == "true" ]; then
+#       : # yes, the framework API is defined
+#    fi
+#
+function is_framework_api_defined {
+  # Print 'false' if FF_HOST not set
+  [ -z "${FF_HOST}" ] && { echo 'false'; return; }
+
+  # Print 'true' if both FF_API_USERNAME and FF_API_PASSWORDS are set
+  [ ! -z "${FF_API_USERNAME}" ] && [ ! -z "${FF_API_PASSWORDS}" ] && { echo 'true'; return; }
+
+  # Print 'true' if FF_API_TOKEN is set
+  [ ! -z "${FF_API_TOKEN}" ] && { echo 'true'; return; }
+
+  # Print 'false' in all other cases
+  echo 'false'
+  return
+}
+export -f is_framework_api_defined
+
+###############################################################################
+# Utility function is_set_environment_working() checks if all the aspects of "set_environment"
+# are in place and functioning as expected
+#
+function is_set_environment_working {
+  set_state "${FUNCNAME[0]}" "started"
+
+  # Check if all expected environments are in place
+  check_all_environment_variables_are_set || { set_state "${FUNCNAME[0]}" "failed_check_check_all_environment_variables_are_set"; return 1; }
+
+  # TODO: check if n / npm / nodejs are installed and path doesn't start with "/usr"
+  check_nodejs_installation || { set_state "${FUNCNAME[0]}" "failed_check_check_nodejs_installation"; return 1; }
+
+  # TODO: check docker is installer with >= minimal version
+
+  # TOOD: check if list of required basic packages is installed
+
+  # TODO: instead of "cherry-picking" what to check we should have 1:1 "doer/instaler" and corresponding "checker" functions defined, which we'll call here by list.
+
+  # Return success
+  set_state "${FUNCNAME[0]}" "successs"
+  return 0
+}
+export -f is_set_environment_working 
 
 ###############################################################################
 #
@@ -2255,345 +2549,4 @@ EOF
 }
 export -f publish_message
 
-###############################################################################
-# Utility function f
-# Search recursively from current location for files or directories starting with a prefix prefix, case insensitive
-# @param $1 string package name
-# @param $2 array  package list to append
-# @return  Success if value exists, Failure otherwise
-# Usage: f prefix
-# Example: f index  # Will show all files or directories starting with 'index'
-function f {
-    FILE_PREFIX="${1}"
-    if [ "${FILE_PREFIX}" != "" ]; then
-        find . -iname "${FILE_PREFIX}*"
-        return $?
-    else
-        echo "Find files with prefix, starting from current working directory down recursively." 1>&2
-        echo "Usage: f index" 1>&2
-        return 1
-    fi
-}
-
-###############################################################################
-# Utility function s
-# Search from current directory for files containing keyword (case insensitive)
-# Ignores node_modules directory
-# @param $1 pattern
-# @return  Success if keyword exists, Failure otherwise
-# Usage: s pattern
-function s {
-#!/bin/bash -
-    GREP_OPTIONS="--color=always"
-    PATTERN="${1}"
-    if [ "${PATTERN}" != "" ]; then
-        find . -name "*" -type f -not -path "*node_modules*" -exec grep -i --text --line-number -H "${PATTERN}" {} \;
-        return $?
-    else
-        echo "Search files in a subtree for a regex. Case insensitive." 1>&2
-        echo "Usage: s pattern" 1>&2
-        return 1
-    fi
-}
-
-###############################################################################
-# Utility function trim_slash():
-#   - Replaces all repeated slashes //[...] with a single slash /
-#   - Removes trailing slash unless it is also the leading slash (i.e., the root filepath /)
-#
-# Function is useful to remove trailing slashes from URL string for example "http://asdf.com///" -> "http://asdf.com"
-#
-# More details in this StackOverflow discussion: https://stackoverflow.com/a/69485442/7022062
-#
-# Some test cases:
-#   
-#   $ trim_slash "http://asdf.com/a/b/c/" "http://asdf.com///" "http://asdf.com/" "/" "///" "a/" "b/b/" "c/c////" 
-#
-# Expected output:
-#       http://asdf.com/a/b/c
-#       http://asdf.com
-#       http://asdf.com
-#       /
-#       /
-#       a
-#       b/b
-#       c/c
-#
-function trim_slash {
-  for s; do 
-    sed -E 's:(^/)?/*$:\1:' <<< "${s}"
-  done
-}
-
-###############################################################################
-# Utility function is_set_environment_working() checks if all the aspects of "set_environment"
-# are in place and functioning as expected
-#
-function is_set_environment_working {
-  set_state "${FUNCNAME[0]}" "started"
-
-  # Check if all expected environments are in place
-  check_all_environment_variables_are_set || { set_state "${FUNCNAME[0]}" "failed_check_check_all_environment_variables_are_set"; return 1; }
-
-  # TODO: check if n / npm / nodejs are installed and path doesn't start with "/usr"
-  check_nodejs_installation || { set_state "${FUNCNAME[0]}" "failed_check_check_nodejs_installation"; return 1; }
-
-  # TODO: check docker is installer with >= minimal version
-
-  # TOOD: check if list of required basic packages is installed
-
-  # TODO: instead of "cherry-picking" what to check we should have 1:1 "doer/instaler" and corresponding "checker" functions defined, which we'll call here by list.
-
-  # Return success
-  set_state "${FUNCNAME[0]}" "successs"
-  return 0
-}
-export -f is_set_environment_working
-
-###############################################################################
-# Utility function check_all_environment_variables_are_set() checks if all the expected environment variables are set
-# On success: reuturn 0
-# On failure: return nonzero code
-#
-function check_all_environment_variables_are_set {
-
-  # Define list of expected non-empty variables
-  local ALL_EXPECTED_ENVRIONMENT_VARIABLES=(
-    # "General" fields
-    FF_HOST
-
-    # "Dynamically learned" fields
-    BEST_USER_TO_RUN_AS
-    AGENT_HOME
-  )
-
-  # Check required environment variables are set
-  for VARIABLE_NAME in ${ALL_EXPECTED_ENVRIONMENT_VARIABLES[@]}; do 
-    ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }    # Note: the error details were already reported by ensure_variable_not_empty()
-  done
-}
-export -f check_all_environment_variables_are_set
-
-###############################################################################
-#
-# Function checks if we have framework API defined by checking if all of the following is set:
-#    - FF_HOST
-#    - ( FF_API_USERNAME and FF_API_PASSWORDS ) OR ( FF_API_TOKEN )
-#
-# As a result: functions prints "true" or "false" into std output stream.
-# Usage example:
-#    if [ "$( is_framework_api_defined )" == "true" ]; then
-#       : # yes, the framework API is defined
-#    fi
-#
-function is_framework_api_defined {
-  # Print 'false' if FF_HOST not set
-  [ -z "${FF_HOST}" ] && { echo 'false'; return; }
-
-  # Print 'true' if both FF_API_USERNAME and FF_API_PASSWORDS are set
-  [ ! -z "${FF_API_USERNAME}" ] && [ ! -z "${FF_API_PASSWORDS}" ] && { echo 'true'; return; }
-
-  # Print 'true' if FF_API_TOKEN is set
-  [ ! -z "${FF_API_TOKEN}" ] && { echo 'true'; return; }
-
-  # Print 'false' in all other cases
-  echo 'false'
-  return
-}
-export -f is_framework_api_defined
-
-###############################################################################
-# Utility function check_nodejs_installation() checks if nodejs is installed under right path (TODO: and right version)
-# On success: reuturn 0
-# On failure: return nonzero code
-#
-function check_nodejs_installation {
-
-  # Let's run all the checks and collect all the found errors into associative array (key = name of the check, value = error code)
-  declare -A CHECK_CODES
-  declare -A ERRORS
-
-  # Check nodejs is installed
-  CHECK_NAME='is_nodejs_installed'
-  WHICH_NODE="$( which node )"
-  [ "${WHICH_NODE}" != "" ] || {
-    ERROR_CODE="error_check_nodejs_installation_nodejs_not_installed"
-    set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
-    ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; 
-  }
-
-  # Check nodejs is not installed under /usr
-  CHECK_NAME='is_nodejs_installed_into_right_path'
-  [[ "${WHICH_NODE}" =~ ^/usr/ ]] && { 
-    ERROR_CODE="error_check_nodejs_installation_wrong_installation_dir"
-    set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
-    ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; 
-  }
-
-  # Check npm is installed
-  CHECK_NAME='is_npm_installed'
-  WHICH_NPM="$(which npm)" 
-  [ "${WHICH_NPM}" != "" ] || { 
-    ERROR_CODE="error_check_nmp_installation_nodejs_not_installed"
-    set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; 
-    ERRORS[${CHECK_NAME}]="${ERROR_CODE}";
-  }
-
-  # Check nodejs is not installed under /usr
-  CHECK_NAME='is_npm_installed_into_right_path'
-  [[ "${WHICH_NPM}" =~ ^/usr/ ]] && { 
-    ERROR_CODE="error_check_npm_installation_wrong_installation_dir"
-    set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
-    ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; 
-  }
-
-  # Get expected nodejs version
-  CHECK_NAME='get_expected_nodejs_version'
-  local EXPECTED_VERSION="$( get_expected_nodejs_version )"
-  [ -z "${EXPECTED_VERSION}" ] && { 
-    ERROR_CODE="failed_to_get_expected_nodejs_version"
-    set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
-    ERRORS[${CHECK_NAME}]="${ERROR_CODE}";
-  }
-
-  # Get actual nodejs version
-  CHECK_NAME='get_actual_nodejs_version'
-  local ACTUAL_VERSION="$( node --version )"
-  [ -z "${ACTUAL_VERSION}" ] && {
-    ERROR_CODE="failed_to_get_actual_nodejs_version"
-    set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; 
-    ERRORS[${CHECK_NAME}]="${ERROR_CODE}";
-  }
-
-  # Compare expected vs actual nodejs versions
-  CHECK_NAME='is_nodejs_right_versions'
-  if [ "${EXPECTED_VERSION}" != "${ACTUAL_VERSION}" ]; then
-    # Version mismatch
-    ERROR_CODE="error_mismatching_nodejs_versions"
-    set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; 
-    ERRORS[${CHECK_NAME}]="${ERROR_CODE}";
-  fi
-
-  # # Iterate all errors
-  # for KEY in "${!ERRORS[@]}"; do
-  #   echo "  \"${KEY}\": \"${ERRORS[${KEY}]}\","
-  # done
-  
-  # List of all the checks done with their statuses
-  if [ ${#ERRORS[@]} -eq 0 ]; then
-    # No errors
-    return 0
-  else
-    # We found some errors
-    return 1
-  fi
-
-}
-export -f check_nodejs_installation
-
-###############################################################################
-# Function prints into standard output the expected version of nodejs.
-# We use it during installation and to check installed "set environment" project.
-function get_expected_nodejs_version {
-  echo 'v16.13.0'
-}
-export -f get_expected_nodejs_version
-
-###############################################################################
-#
-# Function installs docker. It takes 1 argement "minimum version", if not provided,
-# then by default version 19 will be used.
-#
-# Supports Ubuntu 16.04, 18.04, 20.04
-#
-# Require environment variables set:
-#   - BEST_USER_TO_RUN_AS
-#
-function install_docker {
-
-    set_state "${FUNCNAME[0]}" 'started'
-
-    # Define required variables
-    local REQUIRED_VARIABLES=(
-      BEST_USER_TO_RUN_AS
-    )
-
-    # Check required environment variables are set
-    for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-      ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
-    done
-
-    # Take MINIMUM_VERSION argument, if empty, then set default value
-    MINIMUM_VERSION="${1}"
-    if [ -z "${MINIMUM_VERSION}" ]; then
-        MINIMUM_VERSION=19
-    fi
-
-    # Check if docker is installed and has version >= minimally required
-    ACTUAL_VERSION="$( get_installed_docker_version )"
-    if [ ! -z "${ACTUAL_VERSION}" ] && [ "${ACTUAL_VERSION}" -ge "${MINIMUM_VERSION}" ]; then
-        set_state "${FUNCNAME[0]}" "no_action_already_installed"
-        return 0
-    fi
-
-    # OK We install since we don't have the minimum version, or docker is not installed
-
-    # Get ID, RELEASE and DISTRO and verify the values are actually set
-    LSB_ID=$( get_lsb_id ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
-    [ "${LSB_ID}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
-
-    RELEASE=$( get_lsb_release ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }  # 18.04, 20.04, ...
-    [ "${RELEASE}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }
-
-    DISTRO=$( get_lsb_codename ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; }  # bionic, focal, ...
-    [ "${DISTRO}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; } 
-
-    ARCHITECTURE=$( get_hardware_architecture ) || { set_state "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
-
-    # Only Ubuntu for now
-    if [ "${LSB_ID}" != "Ubuntu" ]; then
-        set_state "${FUNCNAME[0]}" "error_docker_install_unsupported_operating_system"
-        return 1
-    fi
-
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-    [ "${?}" != "0" ] && { set_state "${FUNCNAME[0]}" "failed_to_add_gpg_key"; return 1; }
-
-    sudo add-apt-repository "deb [arch=${ARCHITECTURE}] https://download.docker.com/linux/ubuntu ${DISTRO} stable"
-    [ "${?}" != "0" ] && { set_state "${FUNCNAME[0]}" "failed_to_add_repository"; return 1; }
-
-    apt_update
-
-    apt_install docker-ce || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_ce"; return 1; }
-    apt_install docker-compose || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_compose"; return 1; }
-    # containerd is available as a daemon for Linux and Windows. It manages the complete container lifecycle of its host system, from image transfer and storage to container execution and supervision to low-level storage to network attachments and beyond.
-    apt_install containerd.io || { set_state "${FUNCNAME[0]}" "failed_to_install_containerd_io"; return 1; }
-
-    # Add ourselves as a user to be able to run docker
-    # XXX - todo, the docker group might not actually exist and should be checked.
-    # We might not have sudo, so we should request command to be run.
-    GROUP="docker"
-    # Check if user is in this group. If not, add them
-    if [ ! is_user_in_group "${BEST_USER_TO_RUN_AS}" "${GROUP}" ]; then
-      # Not in group
-      sudo usermod -aG "${GROUP}" "${BEST_USER_TO_RUN_AS}"
-      if [ "${?}" != "0" ]; then set_state "${FUNCNAME[0]}" "failed_to_modify_docker_user_group"; return 1; fi
-      # Now check that we actually are in the group. This will work in current shell because it reads the groups file directly
-      [ ! is_user_in_group "${BEST_USER_TO_RUN_AS}" "${GROUP}" ] || { set_state "${FUNCNAME[0]}" "failed_postcondition_user_in_group"; return 1; }
-    fi
-
-    # Postcondition checks
-    # Verify docker is properly set up
-    # Note we are running via sudo, and if we added user to the ${GROUP} then it won't be applied in this shell.
-    set_secret docker_release "$( sudo --user=${BEST_USER_TO_RUN_AS} docker --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_to_get_release"; return 1; }
-    set_secret docker_compose_release "$( sudo --user=${BEST_USER_TO_RUN_AS} docker-compose --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_compose_to_get_release"; return 1; }
-
-    # Check if installed docker version is less than minimally required
-    if [ "$( get_installed_docker_version )" -lt "${MINIMUM_VERSION}" ]; then
-    	set_state "${FUNCNAME[0]}" "failed_to_install_did_not_pass_version_check"
-	    return 1
-    fi
-
-    set_state "${FUNCNAME[0]}" 'success'
-}
-export -f install_docker
+### END SET ENVIRONMENT FUNCTIONS
