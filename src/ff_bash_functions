@@ -2403,6 +2403,11 @@ function is_set_environment_working {
   # TODO: check if n / npm / nodejs are installed and path doesn't start with "/usr"
   check_nodejs_installation || { set_state "${FUNCNAME[0]}" "failed_check_check_nodejs_installation"; return 1; }
 
+  # Check ff_agent/bin is in the path
+  local FF_AGENT_BIN="${AGENT_HOME}/bin"
+  printenv PATH | grep --quiet "${FF_AGENT_BIN}"
+  [ ${?} -ne 0 ] || { set_state "${FUNCNAME[0]}" "failed_check_ff_agent_bin_not_in_path"; return 1; }
+  
   # TODO: check docker is installer with >= minimal version
 
   # TOOD: check if list of required basic packages is installed

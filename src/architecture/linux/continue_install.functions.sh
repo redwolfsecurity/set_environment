@@ -486,7 +486,7 @@ function install_ff_agent_bashrc {
   local HOME_BASHRC_FILE="${HOME}/.bashrc"
 
   # --------------------------------------------------------------------
-  # Inject sourcing custom ff_agent/.profile into these files:
+  # Inject sourcing ff_agent/.profile into files:
   TARGET_FILES=( "${HOME_BASHRC_FILE}" "${HOME_PROFILE_FILE}" )
 
   # Iterate target files
@@ -550,7 +550,7 @@ EOT
   
 
   # --------------------------------------------------------------------
-  # Inject into the custom .profile call to "discover_environment"
+  # Inject call to "discover_environment" into the custom .profile
   TARGET_FILE="${FF_AGENT_PROFILE_FILE}"
   PATTERN="^discover_environment"
   INJECT_CONTENT=$(
@@ -567,7 +567,7 @@ EOT
   
 
   # --------------------------------------------------------------------
-  # Inject into the custom .profile: path to ${FF_AGENT_BIN} must be part of the PATH
+  # Inject ${FF_AGENT_BIN} into PATH in .profile and modify current PATH if needed. 
   
   # Define the path to ff_agent/bin folder, which we will inject into PATH
   local FF_AGENT_BIN="${AGENT_HOME}/bin"
@@ -585,7 +585,6 @@ EOT
 export PATH="${FF_AGENT_BIN}:${PATH}"
 EOT
   )
-  
   ERROR_CODE='error_injecting_ff_agent_bin_path_to_custom_profile'
 
   # Do injection and check result
@@ -800,8 +799,7 @@ function install_n {
 
   # Create tmp folder and change directory into it
   TMPDIR="$( mktemp -d )"
-  PREVIOUS_DIR="$( pwd )"
-  cd "${TMPDIR}" || { set_state "${FUNCNAME[0]}" 'error_chdir_to_tmp_directory'; return 1; }
+  pushd "${TMPDIR}" || { set_state "${FUNCNAME[0]}" 'error_pushd_to_tmp_directory'; return 1; }
 
   # Attempt 1: download 'n' from CONTENT_URL
   # Try CONTENT_URL first because it gives more control over what version of 'n' will be executed.
@@ -838,7 +836,7 @@ function install_n {
       if [ ${?} -ne 0 ]; then
         # The 2nd attempt failed too, giving up.
         # Error: clean up tmp folder, report an error and return error code 1
-        cd "${PREVIOUS_DIR}" ; rm -fr "${TMPDIR}"
+        popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
         set_state "${FUNCNAME[0]}" 'warning_failed_to_download_n_from_github'
         return 1
       fi      
@@ -863,7 +861,7 @@ ${EXPECTED_LINE}
 EOT
     ) >> "${TARGET_FILE}" || {
         # Error: clean up tmp folder, report an error and return error code 1
-        cd "${PREVIOUS_DIR}" ; rm -fr "${TMPDIR}"
+        popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
         set_state "${FUNCNAME[0]}" 'error_injecting_export_n_prefix_to_ff_agent_profile'; return 1;
     }
   fi
@@ -888,7 +886,7 @@ ${EXPECTED_LINE}
 EOT
     ) >> "${TARGET_FILE}" || {
         # Error: clean up tmp folder, report an error and return error code 1
-        cd "${PREVIOUS_DIR}" ; rm -fr "${TMPDIR}"
+        popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
         set_state "${FUNCNAME[0]}" 'error_injecting_export_node_path_to_ff_agent_profile'; return 1;
     }
   fi
@@ -902,7 +900,7 @@ EOT
   if [ ${?} -ne 0 ]; then
     export PATH="${N_PREFIX}/bin:${PATH}" || {
         # Error: clean up tmp folder, report an error and return error code 1
-        cd "${PREVIOUS_DIR}" ; rm -fr "${TMPDIR}"
+        popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
         set_state "${FUNCNAME[0]}" 'error_modifying_path'; return 1; 
     }
   fi
@@ -920,7 +918,7 @@ ${EXPECTED_LINE}
 EOT
     ) >> "${TARGET_FILE}" || {
         # Error: clean up tmp folder, report an error and return error code 1
-        cd "${PREVIOUS_DIR}" ; rm -fr "${TMPDIR}"
+        popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
         set_state "${FUNCNAME[0]}" 'error_injecting_n_prefix_bin_to_ff_agent_profile'; return 1;
     }
   fi
@@ -930,7 +928,7 @@ EOT
   # Install 'npm' using dowloaded into TMPDIR 'n' ('npm' will be installed into ff_agent/.n)
   bash n lts || { 
     # Error: clean up tmp folder, report an error and return error code 1
-    cd "${PREVIOUS_DIR}" ; rm -fr "${TMPDIR}"
+    popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
     set_state "${FUNCNAME[0]}" 'error_installing_npm'; return 1; 
   }
 
@@ -939,12 +937,12 @@ EOT
   # The proper installed 'n' will reisde under ff_agent/.n/ folder)
   npm install --global n || { 
     # Error: clean up tmp folder, report an error and return error code 1
-    cd "${PREVIOUS_DIR}" ; rm -fr "${TMPDIR}"
+    popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
     set_state "${FUNCNAME[0]}" 'error_installing_n'; return 1; 
   }
 
   # Clean up tmp folder
-  cd "${PREVIOUS_DIR}" ; rm -fr "${TMPDIR}"
+  popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
 
   # Chage state and return success
   set_state "${FUNCNAME[0]}" 'success'
