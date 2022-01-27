@@ -19,13 +19,13 @@ logger -t set_environment "debug: Installer started by $(whoami) on $(date --utc
 # Project github page: [TODO: add a link to the new github location of this project]
 
 # Change directory into script's directory. This ensure all relative paths working correctly.
-cd $( dirname ${BASH_SOURCE[0]} ) || { echo "Error: failed to change directory to $( dirname ${BASH_SOURCE[0]} )" >&2; exit 1; }
+cd "$( dirname ${BASH_SOURCE[0]} )" || { echo "Error: failed to change directory to $( dirname ${BASH_SOURCE[0]} )" >&2; exit 1; } # note: can not yet use error()
 
 # Source common functions
-source src/ff_bash_functions || { echo "Error: failed to source common functions." >&2; exit 1; }
+source src/ff_bash_functions || { echo "Error: failed to source common functions." >&2; exit 1; } # note: can not yet use error()
 
 # Initialize terminal
-terminal_initialize
+terminal_initialize || { error "failed_to_initialize_terminal"; exit 1; }
 
 # Set the SERVICE variable
 export SERVICE="set_environment"
@@ -33,5 +33,5 @@ export SERVICE="set_environment"
 # Continue by calling OS-specific installer
 source "src/architecture/$( discover_os )/continue_install.sh" "$@" || { error "continue_install.sh returned bad code: ${?}"; exit 1; }
 
-# Run a selfcheck
+# Last step: run a selfcheck
 is_set_environment_working || { set_state "${FUNCNAME[0]}" "terminal_error_selfcheck_failed"; abort; }

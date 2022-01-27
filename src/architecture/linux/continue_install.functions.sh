@@ -117,7 +117,7 @@ function install_docker {
 function install_set_environment_baseline {
     set_state "${FUNCNAME[0]}" 'started'
 
-    # Discover environment (choose user, make sure it's home folder exists, check CONTENT_URL is set etc.)
+    # Discover environment (choose user, make sure it's home folder exists, check FF_CONTENT_URL is set etc.)
     discover_environment || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_discover_environment"; abort; }
 
     # Analyzes currently selected user and might call "background_install()" to re-run the installer under a different user
@@ -632,7 +632,7 @@ function install_ff_agent {
     esac
     
     # Install ff_agent
-    npm install "${CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}.tgz" || { set_state "${FUNCNAME[0]}" 'terminal_error_failed_to_install_ff_agent'; abort; }
+    npm install "${FF_CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}.tgz" || { set_state "${FUNCNAME[0]}" 'terminal_error_failed_to_install_ff_agent'; abort; }
 
     set_state "${FUNCNAME[0]}" 'success'
     return 0
@@ -801,11 +801,11 @@ function install_n {
   TMPDIR="$( mktemp -d )"
   pushd "${TMPDIR}" || { set_state "${FUNCNAME[0]}" 'error_pushd_to_tmp_directory'; return 1; }
 
-  # Attempt 1: download 'n' from CONTENT_URL
-  # Try CONTENT_URL first because it gives more control over what version of 'n' will be executed.
+  # Attempt 1: download 'n' from FF_CONTENT_URL
+  # Try FF_CONTENT_URL first because it gives more control over what version of 'n' will be executed.
   # The magour update on the github might introduce some breaking change, let's leave it for 2nd attept only.
   SAVE_AS='n'
-  URL="${CONTENT_URL}/ff/ff_agent/hotpatch/hotpatch_files/${SAVE_AS}"
+  URL="${FF_CONTENT_URL}/ff/ff_agent/hotpatch/hotpatch_files/${SAVE_AS}"
   curl \
     -sL \
     --retry 5 \

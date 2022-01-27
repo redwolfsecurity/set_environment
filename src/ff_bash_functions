@@ -981,6 +981,13 @@ function successful_exit {
 }
 export -f successful_exit
 
+###############################################################################
+# Utility error logging function
+function warning {
+    log warning "${@}"
+}
+export -f warning
+
 ### END UTILITY FUNCITONS: LOGGING / PROCESS CONTROl
 
 
@@ -1620,23 +1627,41 @@ function set_secret {
     fi
 
     set  +x # Disble xtrace to avoid priting secrets
-    SECRET_DIRECTORY="${AGENT_HOME}/secrets"
-    mkdir -p "${SECRET_DIRECTORY}"
-    URI="${1}"
-    SECRET="${2}"
+    
+    # Create secrets directory
+    local SECRET_DIRECTORY="${AGENT_HOME}/secrets"
+    mkdir -p "${SECRET_DIRECTORY}" || { error "failed_to_create_secrets_directory"; return 1; }
+
+    # Get arguments
+    local URI_RAW="${1}"
+    local SECRET="${2}"
+    
+    # Enforce URI argument to be downcase letters, if it had uppercase letters, then lowercase it and produce a warning()
+    local URI="$( echo "${URI_RAW}" | tr '[:upper:]' '[:lower:]' )"
+    if [ "${URI_RAW}" != "${URI}" ]; then
+      # There was at least one uppercase letter in the URI
+      warning "${FUNCNAME[0]}: argument URI had uppercase letters: '${URI_RAW}'. Will use adjusted value instead: '${URI}'"
+    fi
+    
+    # Check SECRET is not empty
     if [ -z "${SECRET}" ]; then
         [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+        error "${FUNCNAME[0]}: error_bad_argument_secret"
         return 1
     fi
+
+    # Check URI is not empty
     if [ -z "${URI}" ]; then
         [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+        error "${FUNCNAME[0]}: error_bad_argument_uri"
         return 1
     fi
-    echo "${SECRET}" >"${SECRET_DIRECTORY}/${URI}"
+
+    # Store secret
+    echo "${SECRET}" >"${SECRET_DIRECTORY}/${URI_DOWNCASE}" || { error "${FUNCNAME[0]}: failed_to_write_secret"; return 1; }
     
     [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
     
-
     return 0
 }
 export -f set_secret
@@ -1658,9 +1683,16 @@ function set_state {
   set  +x # Disble xtrace to avoid priting secrets
 
   # Get 2 arguments: state and value
-  STATE="${1}"
-  VALUE="${2}"
+  local STATE_RAW="${1}"
+  local VALUE="${2}"
   
+  # Enforce URI to be downcase letters, if it had uppercase letters, then lowercase it and produce a warning()
+  local STATE="$( echo "${STATE_RAW}" | tr '[:upper:]' '[:lower:]' )"
+  if [ "${STATE}" != "${STATE_RAW}" ]; then
+    # There was at least one uppercase letter in the STATE_RAW
+    warning "${FUNCNAME[0]}: argument STATE had uppercase letters: '${STATE_RAW}'. Will use adjusted value instead: '${STATE}'"
+  fi
+
   # Make sure "${AGENT_HOME}" is not empty
   if [ -z "${AGENT_HOME}" ]; then
       error "Can not set state. AGENT_HOME variable not defined. State would have been set to ${STATE}=${VALUE}"
@@ -1668,15 +1700,15 @@ function set_state {
       return 1
   fi
 
-  STATE_DIR="${AGENT_HOME}/state"
+  local STATE_DIR="${AGENT_HOME}/state"
 
   # Make state directory (with -p safe to call even if directory exists)
   if mkdir -p "${STATE_DIR}"; then
     # Define state filename
-    STATE_FILE="${STATE_DIR}/${STATE}"
+    local STATE_FILE="${STATE_DIR}/${STATE}"
 
     # Write value into the file
-    echo "${VALUE}" >"${STATE_FILE}"
+    echo "${VALUE}" >"${STATE_FILE}" || { error "${FUNCNAME[0]}: failed_to_write_state"; return 1; }
 
     # Check if writing into the file return good exit code
     if [ ${?} -ne 0 ]; then
@@ -1704,14 +1736,14 @@ function set_state {
   fi
 
   # Get current epoch time
-  TIMESTAMP_EPOCH_MS="$( get_epoch_ms )"
+  local TIMESTAMP_EPOCH_MS="$( get_epoch_ms )"
 
   # If state value contains: success|running, then: "is_success": true
   # else
   #   if state value contains: error|fail|'', then "is_error": true
   # else
   #   don't include neither "is_success" nor "is_error".
-  IS_SUCCESS_OR_IS_ERROR=''
+  local IS_SUCCESS_OR_IS_ERROR=''
   if [[ "${VALUE}" =~ success|running ]]; then
     IS_SUCCESS_OR_IS_ERROR='"is_success": true,'
   else
@@ -1792,9 +1824,9 @@ export -f set_state
 # Utility function - Can I sudo?
 # @param1 user_to_check
 function can_sudo {
-    USER_TO_CHECK="${1}"
+    local USER_TO_CHECK="${1}"
 
-    USER_CAN_SUDO=1  # Assume they can't. 1 is an error code meaning we can't.
+    local USER_CAN_SUDO=1  # Assume they can't. 1 is an error code meaning we can't.
 
     # SUDOers can be defined in a few places - /etc/sudoers and /etc/sudoers.d/*
     # Note: /etc/sudoers is old and bad
@@ -1844,7 +1876,7 @@ export -f check_group_exists
 # Category: identity
 # Utility function - Create User, with a disabled password
 function create_user {
-  USERNAME="${1}"
+  local USERNAME="${1}"
 	if [ ! -z "${USERNAME}" ]; then
 		if can_sudo "${USERNAME}"; then
         	# TODO: Make this multiplatform. Check what happens if we do this in a docker.
@@ -1887,7 +1919,7 @@ export -f get_home_directory_for_user
 # Utility function - Get cmdline of parent process ID -- useful to know who is starting us
 # E.g. if [ $( get_ppid_cmd | grep --text -c node ) -gt "0" ] -> will let you check if your parent process is nodejs
 function get_ppid_cmd {
-    PPID_CMD=$( cat /proc/${PPID}/cmdline )
+    local PPID_CMD=$( cat /proc/${PPID}/cmdline )
     echo "${PPID_CMD}"
 }
 export -f get_ppid_cmd
@@ -1896,8 +1928,8 @@ export -f get_ppid_cmd
 # Utility function - check if user is in a group
 # Usage: is_user_in_group "user" "group"
 function is_user_in_group {
-  USERNAME="${1}"
-  GROUP="${2}"
+  local USERNAME="${1}"
+  local GROUP="${2}"
   [ -z "${USERNAME}" ] && return 1
   [ -z "${GROUP}" ] && return 1
   if getent group "${GROUP}" | grep -q "\b${USERNAME}\b"; then
@@ -1948,7 +1980,7 @@ export -f user_exists
 #
 #
 # Dependencies:
-#    - CONTENT_URL variable must be set either by "set_secrets" or in environment variable
+#    - FF_CONTENT_URL variable must be set either by "set_secrets" or in environment variable
 #    - uuidgen must be installed (used to generate AGENT_URI)
 #
 function discover_environment {
@@ -1971,27 +2003,27 @@ function discover_environment {
   ensure_agent_home_exists || { error "failed_to_ensure_agent_home_exists"; return 1; }
 
   ######################################################################
-  # CONTENT_URL: check if CONTENT_URL is set (non-empty), else error out.
+  # FF_CONTENT_URL: check if FF_CONTENT_URL is set (non-empty), else error out.
   # Note: only after "choose user" is complete can we reliably set_secret()
-  if [ -z "${CONTENT_URL}" ]; then
-    # The CONTENT_URL variable is not set or empty. Try to retrieve it from stored secrets.
-    CONTENT_URL=$( get_secret "content_url" )
+  if [ -z "${FF_CONTENT_URL}" ]; then
+    # The FF_CONTENT_URL variable is not set or empty. Try to retrieve it from stored secrets.
+    FF_CONTENT_URL=$( get_secret "ff_content_url" )
     
-    # Make sure CONTENT_URL is now not empty or error out.
-    ensure_variable_not_empty 'CONTENT_URL' || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
+    # Make sure FF_CONTENT_URL is now not empty or error out.
+    ensure_variable_not_empty 'FF_CONTENT_URL' || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
     
     # Export newly retrieved value
-    export CONTENT_URL
+    export FF_CONTENT_URL
   fi
 
-  # Remove trailing slash from CONTENT_URL, so it works correctly when we concatenate CONTENT_URL with our paths
-  CONTENT_URL="$( trim_slash "${CONTENT_URL}" )" || {
-    set_state "${FUNCNAME[0]}" "error_trim_slash_from_content_url"
+  # Remove trailing slash from FF_CONTENT_URL, so it works correctly when we concatenate FF_CONTENT_URL with our paths
+  FF_CONTENT_URL="$( trim_slash "${FF_CONTENT_URL}" )" || {
+    set_state "${FUNCNAME[0]}" "error_trim_slash_from_ff_content_url"
     return 1
   }
 
-  # Store/update CONTENT_URL value
-  set_secret content_url "${CONTENT_URL}"
+  # Store/update FF_CONTENT_URL value
+  set_secret ff_content_url "${FF_CONTENT_URL}"
 
   ######################################################################
   # Get AGENT_URI or generate a new one.
@@ -2001,7 +2033,7 @@ function discover_environment {
   if [ -z "${AGENT_URI}" ]; then
       # Before using "uuidgen" we need to make sure it is installed (is part of 'uuid-runtime' package)
       [ "$(which uuidgen)" != "" ] || { assert_clean_exit apt_update; assert_clean_exit apt_install uuid-runtime; }
-      AGENT_URI="/agent/agent_guid/$( uuidgen )"
+      local AGENT_URI="/agent/agent_guid/$( uuidgen )"
   fi
   
   # set_secret() only if not empty
@@ -2264,8 +2296,8 @@ function check_nodejs_installation {
   declare -A ERRORS
 
   # Check nodejs is installed
-  CHECK_NAME='is_nodejs_installed'
-  WHICH_NODE="$( which node )"
+  local CHECK_NAME='is_nodejs_installed'
+  local WHICH_NODE="$( which node )"
   [ "${WHICH_NODE}" != "" ] || {
     ERROR_CODE="error_check_nodejs_installation_nodejs_not_installed"
     set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
