@@ -1009,7 +1009,7 @@ function ensure_variable_defined {
   [[ -v "${NAME}" ]] && { return 0; }  # Check: variable by NAME is defined
 
   # Create meaningful error code, which include lowcase variable name
-  local ERROR_CODE=$( echo "error_expected_variable_not_set_${NAME}" | tr '[:upper:]' '[:lower:]' )
+  local ERROR_CODE="$( echo "error_expected_variable_not_set_${NAME}" | tr '[:upper:]' '[:lower:]' )"
 
   # Report an error and return nonzero code.
   error "${ERROR_CODE}"
@@ -2145,14 +2145,15 @@ function discover_optional_environment_variable {
   fi
 
   # Try to get value by "get_secret()"
-  local RESTORED_VALUE=$( get_secret "${NAME}" )
+  local NAME_LOWERCASE="$( echo "${NAME}" | tr '[:upper:]' '[:lower:]' )"
+  local RESTORED_VALUE=$( get_secret "${NAME_LOWERCASE}" )
   if [ ! -z "${RESTORED_VALUE}" ]; then
       # Got non-empty value, use it to export variable
       export "${NAME}"="${RESTORED_VALUE}"
       return 0
   fi
 
-  # Variable not yet defined, define it
+  # Variable not yet defined, define it using default value
   if [ ! -z "${DEFAULT_VALUE}" ]; then
       export "${NAME}"="${DEFAULT_VALUE}"
       return 0
