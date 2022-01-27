@@ -12,6 +12,10 @@
 # https://unix.stackexchange.com/questions/22796/can-i-export-functions-in-bash
 
 
+# Table of contents:
+#
+asdf
+
 ### BEGIN USAGE/HELP FUNCTION
 
 ###############################################################################
@@ -450,14 +454,23 @@ function inject_into_file {
     # Inject extra EOL if last line of the file missing EOL and file is not empty
     if ! does_file_have_eol_at_the_end "${TARGET_FILE}"; then
       echo "" >> "${TARGET_FILE}" || {
-        error "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'; return 1; 
+        error "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'
+        return 1
       }
     fi
 
     # Append INJECT_CONTENT to the end of the TARGET_FILE
     echo "${INJECT_CONTENT}" >> "${TARGET_FILE}" || {
-      error "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'; return 1; 
+      error "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'
+      return 1
     }
+
+    # Post condition: verify that the expected pattern can be found after injection.
+    if ! file_contains_pattern "${TARGET_FILE}" "${PATTERN}"; then
+      # Expected pattern is still missing. Report an error.
+      error "${FUNCNAME[0]}" 'failed_postcondition_check_expected_pattern_is_missing_after_injection'
+      return 1
+    fi
   fi
   
   return 0
