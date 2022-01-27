@@ -1595,8 +1595,15 @@ function get_state {
   set  +x # Disble xtrace to avoid priting secrets
 
   # Get 1 argument: state name
-  STATE="${1}"
+  STATE_RAW="${1}"
   
+  # Enforce STATE to be lowercase letters, if it had uppercase letters, then lowercase it and produce a warning()
+  local STATE="$( echo "${STATE_RAW}" | tr '[:upper:]' '[:lower:]' )"
+  if [ "${STATE}" != "${STATE_RAW}" ]; then
+    # There was at least one uppercase letter in the STATE argument
+    warning "${FUNCNAME[0]}: argument STATE had uppercase letters: '${STATE_RAW}'. Will use adjusted value instead: '${STATE}'"
+  fi
+
   # Make sure "${AGENT_HOME}" is not empty
   if [ -z "${AGENT_HOME}" ]; then
       error "Can not set state. AGENT_HOME variable not defined. State would have been set to ${STATE}=${VALUE}"
@@ -1693,10 +1700,10 @@ function set_state {
   local STATE_RAW="${1}"
   local VALUE="${2}"
   
-  # Enforce URI to be lowercase letters, if it had uppercase letters, then lowercase it and produce a warning()
+  # Enforce STATE to be lowercase letters, if it had uppercase letters, then lowercase it and produce a warning()
   local STATE="$( echo "${STATE_RAW}" | tr '[:upper:]' '[:lower:]' )"
   if [ "${STATE}" != "${STATE_RAW}" ]; then
-    # There was at least one uppercase letter in the STATE_RAW
+    # There was at least one uppercase letter in the STATE argument
     warning "${FUNCNAME[0]}: argument STATE had uppercase letters: '${STATE_RAW}'. Will use adjusted value instead: '${STATE}'"
   fi
 
