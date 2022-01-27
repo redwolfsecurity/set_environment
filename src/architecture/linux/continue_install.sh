@@ -5,9 +5,6 @@
 # Source OS-specific install functions
 . src/architecture/linux/continue_install.functions.sh || { error "Failed to source OS-specific install functions."; exit 1; }
 
-# Only proceed if started by the right/chosen user, else exit by "return". It is ok to "return" from main body when we sourcing installer.
-[ "$( check_if_need_background_install )" == "true" ] && { return; }
-
 # Install basic components. Note: on errror: function aborts (no need to error check)
 install_set_environment_baseline || { error "Failed to install_set_environment_baseline. Details: return code was: $?"; exit 1; }
 

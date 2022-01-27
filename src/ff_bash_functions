@@ -1789,6 +1789,35 @@ export -f set_state
 ### BEGIN UTILITY FUNCTIONS: USER / GROUPS
 
 ###############################################################################
+# Category: authorization
+# Utility function - Can I sudo?
+# @param1 user_to_check
+function can_sudo {
+    USER_TO_CHECK="${1}"
+
+    USER_CAN_SUDO=1  # Assume they can't. 1 is an error code meaning we can't.
+
+    # SUDOers can be defined in a few places - /etc/sudoers and /etc/sudoers.d/*
+    # Note: /etc/sudoers is old and bad
+    if sudo --non-interactive --list --other-user="${USER_TO_CHECK}" &>/dev/null true
+    then
+        USER_CAN_SUDO=0
+    else
+        if groups "${USER_TO_CHECK}" 2>/dev/null | grep --text "\<sudo\>" &> /dev/null; then
+            USER_CAN_SUDO=0 # I can sudo
+        else
+            USER_CAN_SUDO=1 # I can't sudo
+        fi
+    fi
+
+    # TODO: If user can sudo, have that user check if they are in old /etc/sudoers or new form
+    # and emit error otherwise.
+
+    return ${USER_CAN_SUDO}
+}
+export -f can_sudo
+
+###############################################################################
 # Utility function check_group_exists takes one argument (group name) and return 0 if such group exists.
 # Return:
 #  0 - group exists
