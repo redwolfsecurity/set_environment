@@ -1447,7 +1447,14 @@ function get_secret {
 
     set  +x # Disble xtrace to avoid priting secrets
 
-    KEY="${1}"
+    local KEY_RAW="${1}"
+
+    # Enforce KEY argument to be lowercase letters, if it had uppercase letters, then lowercase it and produce a warning()
+    local KEY="$( echo "${KEY_RAW}" | tr '[:upper:]' '[:lower:]' )"
+    if [ "${KEY_RAW}" != "${KEY}" ]; then
+      # There was at least one uppercase letter in the KEY argument
+      warning "${FUNCNAME[0]}: argument KEY had uppercase letters: '${KEY_RAW}'. Will use adjusted value instead: '${KEY}'"
+    fi
 
     # Check if AGENT_HOME is not empty
     if [ "${AGENT_HOME}" == "" ]; then
@@ -1636,7 +1643,7 @@ function set_secret {
     local URI_RAW="${1}"
     local SECRET="${2}"
     
-    # Enforce URI argument to be downcase letters, if it had uppercase letters, then lowercase it and produce a warning()
+    # Enforce URI argument to be lowercase letters, if it had uppercase letters, then lowercase it and produce a warning()
     local URI="$( echo "${URI_RAW}" | tr '[:upper:]' '[:lower:]' )"
     if [ "${URI_RAW}" != "${URI}" ]; then
       # There was at least one uppercase letter in the URI
@@ -1686,7 +1693,7 @@ function set_state {
   local STATE_RAW="${1}"
   local VALUE="${2}"
   
-  # Enforce URI to be downcase letters, if it had uppercase letters, then lowercase it and produce a warning()
+  # Enforce URI to be lowercase letters, if it had uppercase letters, then lowercase it and produce a warning()
   local STATE="$( echo "${STATE_RAW}" | tr '[:upper:]' '[:lower:]' )"
   if [ "${STATE}" != "${STATE_RAW}" ]; then
     # There was at least one uppercase letter in the STATE_RAW
