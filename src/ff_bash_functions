@@ -1596,7 +1596,7 @@ function get_state {
 
   # Get 1 argument: state name
   STATE_RAW="${1}"
-  
+
   # Enforce STATE to be lowercase letters, if it had uppercase letters, then lowercase it and produce a warning()
   local STATE="$( echo "${STATE_RAW}" | tr '[:upper:]' '[:lower:]' )"
   if [ "${STATE}" != "${STATE_RAW}" ]; then
@@ -1672,7 +1672,7 @@ function set_secret {
     fi
 
     # Store secret
-    echo "${SECRET}" >"${SECRET_DIRECTORY}/${URI_DOWNCASE}" || { error "${FUNCNAME[0]}: failed_to_write_secret"; return 1; }
+    echo "${SECRET}" >"${SECRET_DIRECTORY}/${URI}" || { error "${FUNCNAME[0]}: failed_to_write_secret"; return 1; }
     
     [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
     
