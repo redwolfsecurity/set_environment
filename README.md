@@ -38,11 +38,11 @@ cd set_environment
 ### Testing
 
 After installation is complete you should open a new terminal window, so that added initialization would be able to inject "set environment" components into your environment (see your initialization files: ~/.bashrc and ~/.profile).
-Now you can run test function "is_set_environment_working".
+Now you can run test function "is_set_environment_working". It will return 0 if it is working, 1 otherwose.
 
 ### Now That You're Done
 
-Once this project is installed, your system now has the tools required to build an Agent on. The ff_bash_functions file is in ff_agent/ff_agent/lib/bash/ff_bash_function and contains functions that are useful for other development projects, such as:
+The ff_bash_functions file is in ff_agent/ff_agent/lib/bash/ff_bash_function and contains functions that are useful. Type 'help' to list the functions.
 
 - assert_cd which ensures that a cd command is performed correctly
 - assert_clean_exit which makes sure a command exits cleanly and aborts the script if it does not
@@ -50,6 +50,6 @@ Once this project is installed, your system now has the tools required to build 
 
 ## License
 
-Copyright 2022 RedOki
+Copyright 2021-2022 RedOki
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
