@@ -227,7 +227,7 @@ function apt_install {
     for PACKAGE in ${PACKAGES}
     do
         # Note: we suppress stdout noise (only stderr will still be "visible", but TODO: think of better way to collect evidences insted of just 1 large pile)
-        sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} ${PACKAGE} > /dev/null
+        sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} ${PACKAGE} > /dev/null
         if [ ${?} -ne 0 ]; then
             error "Error installing package: ${PACKAGE}"
             return 1
@@ -262,7 +262,7 @@ function apt_reinstall {
 
     for PACKAGE in ${PACKAGES}
     do
-        sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} ${PACKAGE}
+        sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} ${PACKAGE}
         if [ ${?} -ne 0 ]; then
             error "Error reinstalling packages: ${PACKAGE}"
             return 1
@@ -280,7 +280,7 @@ function apt_remove {
 
     for PACKAGE in ${PACKAGES}
     do
-        sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} "${PACKAGE}"
+        sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} "${PACKAGE}"
         if [ ${?} -ne 0 ]; then
             error "Error removing packages: ${PACKAGE}"
             return 1
@@ -293,7 +293,7 @@ export -f apt_remove
 # Utility wrapper around apt_update for safer headless operation
 function apt_update {
     APT_COMMAND=update
-    sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND}
+    sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND}
     if [ ${?} -ne 0 ]; then
        error "updating packages"
        return 1
@@ -307,7 +307,7 @@ export -f apt_update
 function apt_upgrade {
     APT_COMMAND=upgrade
     # Note: we suppress stdout noise (only stderr will still be "visible", but TODO: think of better way to collect evidences insted of just 1 large pile)
-    sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} > /dev/null
+    sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} > /dev/null
     if [ ${?} -ne 0 ]; then
        error "Error upgrading packages"
        return 1

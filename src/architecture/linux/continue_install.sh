@@ -19,7 +19,7 @@ install_set_environment_baseline || { error "Failed to install_set_environment_b
 #   # node /some/path/to/node/instller/portion
 # fi
 
-# Preserve project source folder (only in case the project was downloaded/cloned into other than ff_agent/projects/set_environment/ folder)
+# As a preparation to preserve project source files (used during this installation), let's change directory to the project root directory.
 pushd "${PROJECT_ROOT_DIR}" || { error "Error: failed to change directory into the project root ${PROJECT_ROOT_DIR}" >&2; exit 1; }
 
 # Make sure ${AGENT_HOME} is set
@@ -40,6 +40,14 @@ if [ "${PWD}" != "${PRESERVED_PROJECT_DIR}" ]; then
         # Remove old project source folder
         rm -fr "${PRESERVED_PROJECT_DIR}" || { error "failed_to_remove_old_project_source_folder"; exit 1; }
     fi
+
+    # Make sure target projects folder exists before trying to copy (otherwise copy result will 
+    # be incorrect - all the content of the current root project will be copied into "projects/"
+    # folder without project-specific containing folder).
+    if [ ! -d "${PRESERVED_PROJECTS_DIR}" ]; then
+        mkdir "${PRESERVED_PROJECTS_DIR}" || { error "failed_to_create_projects_folder"; exit 1; }
+    fi
+
     # Copy newly installed source folder (to preserve it)
     cp -a "${PWD}" "${PRESERVED_PROJECTS_DIR}" || { error "failed_to_preseve_project_source_folder"; exit 1; }
 fi
