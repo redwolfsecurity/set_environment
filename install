@@ -35,3 +35,5 @@ source "src/architecture/$( discover_os )/continue_install.sh" "$@" || { error "
 
 # Last step: run a selfcheck
 is_set_environment_working || { set_state "${FUNCNAME[0]}" "terminal_error_selfcheck_failed"; abort; }
+
+set_state "${SERVICE}" success
