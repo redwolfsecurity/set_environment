@@ -925,7 +925,9 @@ export -f truncate_file
 # Utility abort / exit function - called when terminal conditions
 function abort {
     error "abort called - aborting ${@}"
-    set_state ${SERVICE} abort
+    if [ ! -z "${SERVICE}" ]; then
+        set_state ${SERVICE} abort
+    fi
     exit 1
 }
 export -f abort
