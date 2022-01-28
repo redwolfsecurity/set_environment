@@ -752,7 +752,7 @@ function install_node_ubuntu {
 #   # sudo apt remove -y nodejs
 #   DPGK_NODEJS_CHECK="$(dpkg --get-selections | grep nodejs | grep '[[:space:]]install$')"
 #   if [ ! -z "${DPGK_NODEJS_CHECK}" ]; then
-#     sudo DEBIAN_FRONTEND=noninteractive apt-get -oDpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true remove nodejs
+#     sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true remove nodejs
 #   fi
 
 #   # Chage state and return success
