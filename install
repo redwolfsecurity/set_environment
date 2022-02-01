@@ -42,3 +42,4 @@ function install_set_environment {
 }
 
 install_set_environment
+set_state "${SERVICE}" success

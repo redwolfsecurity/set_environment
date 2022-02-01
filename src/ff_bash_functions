@@ -1010,7 +1010,9 @@ export -f truncate_file
 # Utility abort / exit function - called when terminal conditions
 function abort {
     error "abort called - aborting ${@}"
-    set_state ${SERVICE}_last_run_state abort
+    if [ ! -z "${SERVICE}" ]; then
+        set_state ${SERVICE} abort
+    fi
     exit 1
 }
 export -f abort
@@ -2101,9 +2103,20 @@ function discover_environment {
   choose_ff_agent_home || { error "failed_to_choose_ff_agent_home"; return 1; }
   ensure_ff_agent_home_exists || { error "failed_to_ensure_ff_agent_home_exists"; return 1; }
 
+  # XXX TODO - as above, this function should be very clear and readable and have steps that are individual things we call.
+  # make a get_best_content_url function, and similarly, get_best_XYZ for others so they are simple and clean to read here. Don't implement that logic here.
+  # Below we also are violating the DRY principle
+  # FF_CONTENT_URL=$( get_best_ff_content_url )
+  # ... then uyou do your if check here, and export if happy
+  # 
+
+
   ######################################################################
   # FF_CONTENT_URL: check if FF_CONTENT_URL is set (non-empty), else error out.
   # Note: only after "choose user" is complete can we reliably set_secret()
+  # XXX TODO: make a function to get_best_ff_content_url and put the logic there.
+  # we should call FF_CONTENT_URL=$( get_best_ff_content_url ) and then check if that is happy or not and export it.
+
   if [ -z "${FF_CONTENT_URL}" ]; then
     # The FF_CONTENT_URL variable is not set or empty. Try to retrieve it from stored secrets.
     FF_CONTENT_URL=$( get_secret "ff_content_url" )
@@ -2125,7 +2138,10 @@ function discover_environment {
   set_secret ff_content_url "${FF_CONTENT_URL}"
 
   ######################################################################
-  # Get FF_AGENT_URI or generate a new one.
+  # Get AGENT_URI or generate a new one.
+  # XXX TODO - Review Fri. Jan 28 - remvoe AGENT_URI as a variable we set -- of course check if we use it anywhere. We might, but where we use it we can do 'get_secret' instead.
+  # Don't run apt_update here, it could run a LOT and is the wrong place. The purpose of this function is to discover environment, not install packages.
+  # The concept of making uuid's should be a function ff_uuid, and that function can try and install its dependencies. But it should not use which, it should use command_exists (that function we wrote).
   discover_optional_environment_variable "FF_AGENT_URI" || { return 1; }
   
   # Check if variable already set. If not set - generate it
@@ -2135,6 +2151,7 @@ function discover_environment {
       export FF_AGENT_URI="/agent/agent_guid/$( uuidgen )"
   fi
   
+  # XXX TODO - I think this can go, if we have a function to get_best_agent_uri vs. inlining all of this code here.
   # set_secret() only if not empty
   [ ! -z "${FF_AGENT_URI}" ] && { set_secret ff_agent_uri "${FF_AGENT_URI}"; }
 
