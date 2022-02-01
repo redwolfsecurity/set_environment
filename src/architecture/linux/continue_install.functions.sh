@@ -582,7 +582,7 @@ EOT
   PATTERN="^export PATH=\"${FF_AGENT_BIN}"
   INJECT_CONTENT=$(
       cat <<EOT   
-export PATH="${FF_AGENT_BIN}:${PATH}"
+export PATH="${FF_AGENT_BIN}:\${PATH}"
 EOT
   )
   ERROR_CODE='error_injecting_ff_agent_bin_path_to_custom_profile'
