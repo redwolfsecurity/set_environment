@@ -14,7 +14,7 @@ set -x
 # Supports Ubuntu 16.04, 18.04, 20.04
 #
 # Require environment variables set:
-#   - BEST_USER_TO_RUN_AS
+#   - FF_AGENT_USERNAME
 #
 function install_docker {
 
@@ -22,7 +22,7 @@ function install_docker {
 
     # Define required variables
     local REQUIRED_VARIABLES=(
-      BEST_USER_TO_RUN_AS
+      FF_AGENT_USERNAME
     )
 
     # Check required environment variables are set
@@ -86,19 +86,19 @@ function install_docker {
 
     # We might not have sudo, so we should request command to be run.
     # Check if user is in this group. If not, add them
-    if [ ! is_user_in_group "${BEST_USER_TO_RUN_AS}" "${GROUP}" ]; then
+    if [ ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}" ]; then
       # Not in group
-      sudo usermod -aG "${GROUP}" "${BEST_USER_TO_RUN_AS}"
+      sudo usermod -aG "${GROUP}" "${FF_AGENT_USERNAME}"
       if [ "${?}" != "0" ]; then set_state "${FUNCNAME[0]}" "failed_to_modify_docker_user_group"; return 1; fi
       # Now check that we actually are in the group. This will work in current shell because it reads the groups file directly
-      [ ! is_user_in_group "${BEST_USER_TO_RUN_AS}" "${GROUP}" ] || { set_state "${FUNCNAME[0]}" "failed_postcondition_user_in_group"; return 1; }
+      [ ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}" ] || { set_state "${FUNCNAME[0]}" "failed_postcondition_user_in_group"; return 1; }
     fi
 
     # Postcondition checks
     # Verify docker is properly set up
     # Note we are running via sudo, and if we added user to the ${GROUP} then it won't be applied in this shell.
-    set_secret docker_release "$( sudo --user=${BEST_USER_TO_RUN_AS} docker --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_to_get_release"; return 1; }
-    set_secret docker_compose_release "$( sudo --user=${BEST_USER_TO_RUN_AS} docker-compose --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_compose_to_get_release"; return 1; }
+    set_secret docker_release "$( sudo --user=${FF_AGENT_USERNAME} docker --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_to_get_release"; return 1; }
+    set_secret docker_compose_release "$( sudo --user=${FF_AGENT_USERNAME} docker-compose --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_compose_to_get_release"; return 1; }
 
     # Check if installed docker version is less than minimally required
     if [ "$( get_installed_docker_version )" -lt "${MINIMUM_VERSION}" ]; then
@@ -121,9 +121,9 @@ function install_set_environment_baseline {
     discover_environment || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_discover_environment"; abort; }
 
     # Analyzes currently selected user and might call "background_install()" to re-run the installer under a different user
-    # Note: it have a dependency: variable BEST_USER_TO_RUN_AS - must be set (by calling choose_ff_agent_home)
+    # Note: it have a dependency: variable FF_AGENT_USERNAME - must be set (by calling choose_ff_agent_home)
     if [ "$( check_if_need_background_install )" == "true" ]; then
-      background_install "${BEST_USER_TO_RUN_AS}"
+      background_install "${FF_AGENT_USERNAME}"
       return 0
       # Note: we can not "exit 0" here since installer might be sourced by "root"
     fi
@@ -415,21 +415,21 @@ function apt_install_basic_packages {
 # On success: return 0
 # On error f-n sets state and return nonzero value.
 # Depend on:
-#   AGENT_HOME variable
+#   FF_AGENT_HOME variable
 #   current directory "./" should be root of "set_environment" project.
 #
 function install_ff_bash_functions {
     set_state "${FUNCNAME[0]}" 'started'
 
-    # Check ${AGENT_HOME} is set
-    if [ -z "${AGENT_HOME}" ]; then
-        # Error: required environment variable AGENT_HOME is not set.
-        set_state "${FUNCNAME[0]}" 'error_required_variable_not_set_agent_home'
+    # Check ${FF_AGENT_HOME} is set
+    if [ -z "${FF_AGENT_HOME}" ]; then
+        # Error: required environment variable FF_AGENT_HOME is not set.
+        set_state "${FUNCNAME[0]}" 'error_required_variable_not_set_ff_agent_home'
         return 1
     fi
 
     # Check if target folder exists
-    TARGET_DIR="${AGENT_HOME}/lib/bash"
+    TARGET_DIR="${FF_AGENT_HOME}/lib/bash"
     if [ ! -d "${TARGET_DIR}" ]; then
         # Desitnation folder doesn't exist, try to create
         mkdir -p "${TARGET_DIR}"
@@ -453,16 +453,16 @@ function install_ff_bash_functions {
 # and ~/.profile files of the selected user.
 #
 # Require environment variables set:
-#   - BEST_USER_TO_RUN_AS
-#   - AGENT_HOME
+#   - FF_AGENT_USERNAME
+#   - FF_AGENT_HOME
 #
 function install_ff_agent_bashrc {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Define required variables
   local REQUIRED_VARIABLES=( 
-    BEST_USER_TO_RUN_AS
-    AGENT_HOME
+    FF_AGENT_USERNAME
+    FF_AGENT_HOME
   )
 
   # Check required environment variables are set
@@ -470,17 +470,17 @@ function install_ff_agent_bashrc {
     ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
   done
   
-  # Make sure ${AGENT_HOME} folder exists
-  if [ ! -d "${AGENT_HOME}" ]; then
-    # ${AGENT_HOME} folder is missing. Don't try to create it (it is responsibility of ensure_agent_home_exists()).
+  # Make sure ${FF_AGENT_HOME} folder exists
+  if [ ! -d "${FF_AGENT_HOME}" ]; then
+    # ${FF_AGENT_HOME} folder is missing. Don't try to create it (it is responsibility of ensure_ff_agent_home_exists()).
     # Report an error and abort.
-    error "AGENT_HOME='${AGENT_HOME}' directory Does not exist. Aborting."
+    error "FF_AGENT_HOME='${FF_AGENT_HOME}' directory Does not exist. Aborting."
     abort
   fi
 
   # Define location of two profile files
   local HOME_PROFILE_FILE="${HOME}/.profile"
-  FF_AGENT_PROFILE_FILE="${AGENT_HOME}/.profile"    # example: /home/ubuntu/ff_agent/.profile  (Note: FF_AGENT_PROFILE_FILE is not local, but shell environment used in other install functions)
+  FF_AGENT_PROFILE_FILE="${FF_AGENT_HOME}/.profile"    # example: /home/ubuntu/ff_agent/.profile  (Note: FF_AGENT_PROFILE_FILE is not local, but shell environment used in other install functions)
 
   # Define location of .bashrc file
   local HOME_BASHRC_FILE="${HOME}/.bashrc"
@@ -520,7 +520,7 @@ EOT
   # Inject sourcing ff_bash_functions
 
   # Define path to the installed ff_bash_functions
-  local FF_BASH_FUNCTIONS_PATH="${AGENT_HOME}/lib/bash/ff_bash_functions"
+  local FF_BASH_FUNCTIONS_PATH="${FF_AGENT_HOME}/lib/bash/ff_bash_functions"
 
   # Inject into the custom .profile to source ff_bash_functions (if missing)
   # Search expected line
@@ -570,7 +570,7 @@ EOT
   # Inject ${FF_AGENT_BIN} into PATH in .profile and modify current PATH if needed. 
   
   # Define the path to ff_agent/bin folder, which we will inject into PATH
-  local FF_AGENT_BIN="${AGENT_HOME}/bin"
+  local FF_AGENT_BIN="${FF_AGENT_HOME}/bin"
 
   # Update PATH variable (if it not yet contains expected string)
   printenv PATH | grep --quiet "${FF_AGENT_BIN}"
@@ -604,14 +604,14 @@ EOT
 function install_ff_agent {
     set_state "${FUNCNAME[0]}" 'started'
 
-    # Check ${AGENT_HOME} is set
-    if [ -z "${AGENT_HOME}" ]; then
-      # Error: required environment variable AGENT_HOME is not set.
-      set_state "${FUNCNAME[0]}" 'error_required_variable_not_set_agent_home'
+    # Check ${FF_AGENT_HOME} is set
+    if [ -z "${FF_AGENT_HOME}" ]; then
+      # Error: required environment variable FF_AGENT_HOME is not set.
+      set_state "${FUNCNAME[0]}" 'error_required_variable_not_set_ff_FF_AGENT_HOME'
       return 1
     fi
 
-    cd "${AGENT_HOME}" || { set_state "${FUNCNAME[0]}" 'terminal_error_changedir_agent_home'; abort; }
+    cd "${AGENT_HOME}" || { set_state "${FUNCNAME[0]}" 'terminal_error_changedir_ff_agent_home'; abort; }
     npm init -y        || { set_state "${FUNCNAME[0]}" 'terminal_error_initializing_npm_project'; abort; }
     
     # Define the version of ff_agent npm package to install from CDN
@@ -671,7 +671,7 @@ function install_node_ubuntu {
         n)
             # # We need to stop pm2 before replacing location of nodejs, otherwise any pm2 command would faild
             # stop_pm2
-            #uninstall_n_outside_agent_home  || { set_state "${FUNCNAME[0]}" 'terminal_error_uninstall_n_outside_agent_home'; abort; }
+            #uninstall_n_outside_ff_agent_home  || { set_state "${FUNCNAME[0]}" 'terminal_error_uninstall_n_outside_ff_agent_home'; abort; }
             install_n || { set_state "${FUNCNAME[0]}" 'terminal_error_install_n'; abort; }
             n install "${VERSION}" || { set_state "${FUNCNAME[0]}" 'terminal_error_switching_node_version'; abort; }
         ;;
@@ -690,11 +690,11 @@ function install_node_ubuntu {
 # # official 'n' github bug tracker: "How to uninstall n? #169"
 # # https://github.com/tj/n/issues/169
 # #
-# function uninstall_n_outside_agent_home {
+# function uninstall_n_outside_ff_agent_home {
 #   set_state "${FUNCNAME[0]}" "uninstalling"
 
 #   # Call 'uninstall' on 'n' itself. n uninstall has been added in v4.1.0.
-#   if [ "$(which n | grep -v "${AGENT_HOME}")" != "" ]; then
+#   if [ "$(which n | grep -v "${FF_AGENT_HOME}")" != "" ]; then
 #     echo "y" | sudo n uninstall
 #   fi
 
@@ -769,7 +769,7 @@ function install_node_ubuntu {
 #
 # Require environment variables set:
 #   - FF_AGENT_PROFILE_FILE
-#   - AGENT_HOME
+#   - FF_AGENT_HOME
 #
 # Official n github page:
 #   https://github.com/tj/n
@@ -781,7 +781,7 @@ function install_n {
   # Define required variables
   local REQUIRED_VARIABLES=(
     FF_AGENT_PROFILE_FILE
-    AGENT_HOME
+    FF_AGENT_HOME
   )
 
   # Check required environment variables are set
@@ -845,13 +845,13 @@ function install_n {
   # Export 2 env variables we need for "n" to operate properly:  and NODE_PATH
 
   # ------------------ Export N_PREFIX and inject that export into FF_AGENT_PROFILE_FILE (begin) ----------------
-  export N_PREFIX="${AGENT_HOME}/.n"  # example: /home/ubuntu/ff_agent/.n
+  export N_PREFIX="${FF_AGENT_HOME}/.n"  # example: /home/ubuntu/ff_agent/.n
 
   # Add '# Export N_PREFIX' into the custom .profile file if in was not injected earlier.
   # TODO: add into ff_bash_funcitons a function to add/edit/remove our custom profile file.
   TARGET_FILE="${FF_AGENT_PROFILE_FILE}"
-  PATTERN="^export N_PREFIX=\"${AGENT_HOME}/.n\""
-  EXPECTED_LINE="export N_PREFIX=\"${AGENT_HOME}/.n\""
+  PATTERN="^export N_PREFIX=\"${FF_AGENT_HOME}/.n\""
+  EXPECTED_LINE="export N_PREFIX=\"${FF_AGENT_HOME}/.n\""
   if ! file_contains_pattern "${TARGET_FILE}" "${PATTERN}"; then
     # Expected line is missing, Inject text
     (
@@ -870,13 +870,13 @@ EOT
 
   # ------------------ Export NODE_PATH and inject that export into FF_AGENT_PROFILE_FILE (begin) ----------------
   # We set NODE_PATH, so npm can load modules. Details: https://stackoverflow.com/questions/12594541/npm-global-install-cannot-find-module
-  export NODE_PATH="${AGENT_HOME}/.n/lib/node_modules"
+  export NODE_PATH="${FF_AGENT_HOME}/.n/lib/node_modules"
 
   # Add '# Export NODE_PATH' into the custom .profile file if in was not injected earlier.
   # TODO: add into ff_bash_funcitons a function to add/edit/remove our custom profile file.
   TARGET_FILE="${FF_AGENT_PROFILE_FILE}"
-  PATTERN="^export NODE_PATH=\"${AGENT_HOME}/.n/lib/node_modules\""
-  EXPECTED_LINE="export NODE_PATH=\"${AGENT_HOME}/.n/lib/node_modules\""
+  PATTERN="^export NODE_PATH=\"${FF_AGENT_HOME}/.n/lib/node_modules\""
+  EXPECTED_LINE="export NODE_PATH=\"${FF_AGENT_HOME}/.n/lib/node_modules\""
   if ! file_contains_pattern "${TARGET_FILE}" "${PATTERN}"; then
     # Expected line is missing, Inject text
     (
@@ -991,30 +991,30 @@ function add_to_install_if_missing {
 # We may need, for various reasons, to launch a background install.
 #
 # Return value:
-#    - function prints "true" to standard output only if we need to background_install as "${BEST_USER_TO_RUN_AS}"
+#    - function prints "true" to standard output only if we need to background_install as "${FF_AGENT_USERNAME}"
 #    - function returns/prints nothing if no need to background install
 #    - on error function aborts (no need to errorcheck by the caller)
 #
 #
 # Dependency:
-#   BEST_USER_TO_RUN_AS - must be set
+#   FF_AGENT_USERNAME - must be set
 #
 function check_if_need_background_install {
 
     # Check required environment variables are set
-    [ "${BEST_USER_TO_RUN_AS}" != "" ] || { set_state "${FUNCNAME[0]}" 'terminal_error_getting_best_user_to_run_as'; abort; }
+    [ "${FF_AGENT_USERNAME}" != "" ] || { set_state "${FUNCNAME[0]}" 'terminal_error_getting_ff_agent_username'; abort; }
 
     # It might already exist, but not be writable due to chmod changes
-    if [ -f "${AGENT_HOME}" ] && [ ! -w "${AGENT_HOME}" ]; then
+    if [ -f "${FF_AGENT_HOME}" ] && [ ! -w "${FF_AGENT_HOME}" ]; then
         # TODO: The ${USER} environment is NOT set when running as 'root' in docker. Improve this.
-        error "AGENT_HOME at ${AGENT_HOME} is not writable by user $( whoami ). Aborting."
+        error "FF_AGENT_HOME at ${FF_AGENT_HOME} is not writable by user $( whoami ). Aborting."
         abort
     fi
 
     DO_BACKGROUND_INSTALL=false
 
     # Suppose I'm not the best user, but I can sudo to become the best! e.g. If I am root - I'm not the best user.
-    if [ "${USER}" != "${BEST_USER_TO_RUN_AS}" ]; then
+    if [ "${USER}" != "${FF_AGENT_USERNAME}" ]; then
         if can_sudo "${USER}"; then
             DO_BACKGROUND_INSTALL=true
         fi
@@ -1027,7 +1027,7 @@ function check_if_need_background_install {
 
     if [ "${DO_BACKGROUND_INSTALL}" == "true" ]; then
       echo "true"
-      ## background_install "${BEST_USER_TO_RUN_AS}"
+      ## background_install "${FF_AGENT_USERNAME}"
       ## We can not exit, since "set_environment" installer is sourced: ". ./install.sh"
       ##exit 0
     fi
@@ -1066,7 +1066,7 @@ function background_install {
     cp -a ../set_environment "${TEMP_DIR}" || { error "background_install failed to copy project to temporary folder '${TEMP_DIR}'"; abort; }
 
     # Chenge ownership of the temporary folder to the target user
-    chown -R "${BEST_USER_TO_RUN_AS}:$(id -gn ${BEST_USER_TO_RUN_AS})" "${TEMP_DIR}"
+    chown -R "${FF_AGENT_USERNAME}:$(id -gn ${FF_AGENT_USERNAME})" "${TEMP_DIR}"
 
     # Pass control to the newly created set_environment copy (run by the target user) and exit
     sudo --set-home --user="${USER_TO_RUN_AS}" bash -c "${TEMP_DIR}/set_environment/install.sh"
@@ -1087,7 +1087,7 @@ function set_script_logging {
 
   # Let's find a good directory for logs. This assumes zero knowledge.
   # The _best_ place for these logs would be in ${HOME}/ff_agent/logs -- if we can write to it we'll create it
-  POTENTIAL_LOG_DIRECTORIES=( "${AGENT_HOME}/logs" /var/log/ff_agent /tmp/ff_agent/logs /tmp/ff_agent.$$/logs )
+  POTENTIAL_LOG_DIRECTORIES=( "${FF_AGENT_HOME}/logs" /var/log/ff_agent /tmp/ff_agent/logs /tmp/ff_agent.$$/logs )
 
   LOG_DIRECTORY=""
 

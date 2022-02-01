@@ -32,6 +32,7 @@
 ## BEGIN UTILITY FUNCTIONS: STRINGS 
 #    - in_array 
 #    - index_of 
+#    - parse_github_repository_url
 #    - trim_slash 
 ## END UTILITY FUNCTIONS: STRINGS 
 ## BEGIN UTILITY FUNCTIONS: FILE
@@ -107,9 +108,9 @@
 #    - check_all_environment_variables_are_set 
 #    - check_nodejs_installation 
 #    - choose_ff_agent_home 
-#    - ensure_agent_home_exists 
+#    - ensure_ff_agent_home_exists 
 #    - ff_api_get 
-#    - get_best_user_to_run_as 
+#    - get_ff_agent_username 
 #    - get_expected_nodejs_version 
 #    - is_framework_api_defined 
 #    - is_set_environment_working 
@@ -202,9 +203,9 @@ export -f help
 ###############################################################################
 # Utility help function: table of content
 function help_toc {
-  # Check AGENT_HOME is set
-  TARGET_DIR="${AGENT_HOME}/lib/bash"
-  [ -z "${TARGET_DIR}" ] && { error "error_environment_agent_home_not_set"; error ; return 1; }
+  # Check FF_AGENT_HOME is set
+  TARGET_DIR="${FF_AGENT_HOME}/lib/bash"
+  [ -z "${TARGET_DIR}" ] && { error "error_environment_ff_agent_home_not_set"; error ; return 1; }
 
   # Define path to ff_bash_functions file
   TARGET_FILE="${TARGET_DIR}/ff_bash_functions"
@@ -355,6 +356,90 @@ function index_of {
     return -1;
 }
 export -f index_of
+
+###############################################################################
+#
+# Function parses github repository url and allows to extract one of the following parts of it:
+#    - protocol
+#    - host
+#    - owner
+#    - project name
+#
+# Function prints into standard output one of the parsed url components and return code 0 on success
+# or code 1 on error (e.g. failed to parse given url or missing arguments).
+#
+# Usage examples:
+#   URL="git://github.com/some-user/my-repo.git"
+#   OWNER=$( parse_github_repository_url "${URL}" "OWNER" )
+#   if [ $? -eq 0 ]; then
+#      echo "The ownder of the url '${URL}' is '${OWNER}'."
+#   else
+#      echo "Error: failed to parse url: '${URL}'." >&2
+#   fi
+#
+#  Expected output:
+#    The ownder of the url 'git://github.com/some-user/my-repo.git' is 'some-user'.
+#
+# Other example:
+# URLS=(
+#  "git://github.com/some-user/my-repo.git"
+#  "https://github.com/some-user/my-repo.git"
+#  "git@github.com:some-user/my-repo.git"
+#  "git://github.com/some-user/my-repo"
+#  "https://github.com/some-user/my-repo"
+#  "git@github.com:some-user/my-repo"
+# )
+#
+# for URL in "${URLS[@]}"; do
+#     echo "${URL}"
+#     parse_github_repository_url "${URL}" "OWNER"
+# done
+#
+function parse_github_repository_url {
+  local URL="$1"
+  local KEY="$2"
+
+  # Check inputs aren't empty
+  [ ! -z "${URL}" ] || { return 1; }
+  [ ! -z "${KEY}" ] || { return 1; }
+
+  # Define regexp to parse github repository url
+  re="^(https|git)(:\/\/|@)([^\/:]+)[\/:]([^\/:]+)\/(.+)(.git)*$"
+
+  # Parse github repository url
+  if [[ ${URL} =~ $re ]]; then
+    PROTOCOL=${BASH_REMATCH[1]}
+    # SEPARATOR=${BASH_REMATCH[2]}
+    HOST=${BASH_REMATCH[3]}
+    OWNER=${BASH_REMATCH[4]}
+    PROJECT_NAME=${BASH_REMATCH[5]%.git}
+    case "${KEY}" in
+      PROTOCOL)
+        echo "${PROTOCOL}"
+        return 0
+        ;;
+      HOST)
+        echo "${HOST}"
+        return 0
+        ;;
+      OWNER)
+        echo "${OWNER}"
+        return 0
+        ;;
+      PROJECT_NAME)
+        echo "${PROJECT_NAME}"
+        return 0
+        ;;
+      *)
+        # Error: unknown key
+        return 1
+    esac
+  else
+    # Failed to find a match.
+    return 1
+  fi
+}
+export -f parse_github_repository_url
 
 ###############################################################################
 # Utility function trim_slash():
@@ -1144,7 +1229,7 @@ export -f terminal_reset
 # stop_pm2 would stop all found pm2 instances and remove it from automatic startup.
 #
 # Dependency: environment variables must be set:
-#    - BEST_USER_TO_RUN_AS
+#    - FF_AGENT_USERNAME
 #
 function stop_pm2 {
     set_state "${FUNCNAME[0]}" 'stopping'
@@ -1167,11 +1252,11 @@ function stop_pm2 {
     # pm2 ps
     # which pm2
     # sudo ps aux | grep pm2
-    # sudo systemctl status pm2-${BEST_USER_TO_RUN_AS}
+    # sudo systemctl status pm2-${FF_AGENT_USERNAME}
     # echo "--------------- debug_snapshot end -----------------"
 
-    # Check required environment variables are set: BEST_USER_TO_RUN_AS
-    for VARIABLE_NAME in BEST_USER_TO_RUN_AS; do
+    # Check required environment variables are set: FF_AGENT_USERNAME
+    for VARIABLE_NAME in FF_AGENT_USERNAME; do
       ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
     done
 
@@ -1189,19 +1274,19 @@ function stop_pm2 {
 
     # Kill all processes mentioning pm2 owned by me. This is a tad aggressive, but
     # pm2 has some stupid process names
-    ps auxw | grep ^${BEST_USER_TO_RUN_AS} | grep -i pm2 | grep -v grep | grep -v hotpatch
-    PROCS=$( ps auxw | grep ^${BEST_USER_TO_RUN_AS} | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
+    ps auxw | grep ^${FF_AGENT_USERNAME} | grep -i pm2 | grep -v grep | grep -v hotpatch
+    PROCS=$( ps auxw | grep ^${FF_AGENT_USERNAME} | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
     if [ "${PROCS}" != "" ]; then
       kill ${PROCS}
     fi
-    PROCS=$( ps auxw | grep ^${BEST_USER_TO_RUN_AS} | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
+    PROCS=$( ps auxw | grep ^${FF_AGENT_USERNAME} | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
     [ "${PROCS}" != "" ] && { set_state "${FUNCNAME[0]}" "assertion_failure_should_be_no_pm2_processes_owned_by_user"; return 1; }
     set_state "${FUNCNAME[0]}" "assertion_success_no_pm2_processes_owned_by_user"
 
     # Disable any root style services
     for ACTION in stop disable
     do
-      sudo systemctl "${ACTION}" pm2-${BEST_USER_TO_RUN_AS}
+      sudo systemctl "${ACTION}" pm2-${FF_AGENT_USERNAME}
     done
 
     # Tell root to remove the startup entry for itself.
@@ -1437,7 +1522,7 @@ export -f generate_strong_password
 
 ###############################################################################
 # Utility function, getting secret value by given secret key name.
-# Note: get_secret() require the "$AGENT_HOME"to be set.
+# Note: get_secret() require the FF_AGENT_HOME to be set.
 function get_secret {
 
     # Preserve current xtrace state
@@ -1456,8 +1541,8 @@ function get_secret {
       warning "${FUNCNAME[0]}: argument KEY had uppercase letters: '${KEY_RAW}'. Will use adjusted value instead: '${KEY}'"
     fi
 
-    # Check if AGENT_HOME is not empty
-    if [ "${AGENT_HOME}" == "" ]; then
+    # Check if FF_AGENT_HOME is not empty
+    if [ "${FF_AGENT_HOME}" == "" ]; then
       [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
       return 1
     fi
@@ -1473,13 +1558,13 @@ function get_secret {
     # Note: -z - true if the length of string is zero
     #       -n - true if the length of string is nonzero
     if [ -z "${GET_SECRET_WIPE_NULLS_RUN_ONCE_FLAG}" ]; then
-        grep -l null "${AGENT_HOME}/secrets/*" 2>/dev/null | xargs rm 2>/dev/null
+        grep -l null "${FF_AGENT_HOME}/secrets/*" 2>/dev/null | xargs rm 2>/dev/null
         GET_SECRET_WIPE_NULLS_RUN_ONCE_FLAG="any non empty string can be 'a flag'"
     fi
 
     # Case: requested key already exists in ff_agent "secrets/" folder
-    if [ -e "${AGENT_HOME}/secrets/${KEY}" ]; then
-        cat "${AGENT_HOME}/secrets/${KEY}"
+    if [ -e "${FF_AGENT_HOME}/secrets/${KEY}" ]; then
+        cat "${FF_AGENT_HOME}/secrets/${KEY}"
         [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
         return
     fi
@@ -1548,15 +1633,15 @@ function get_secret {
         fi
     fi
 
-    # Case: We're looking for KEY=="AGENT_URI" and we are on a traffic_generator.
-    # In this case AGENT_URI was already generated and stored to /etc/ff/configuration/agent_uri
+    # Case: We're looking for KEY=="FF_AGENT_URI" and we are on a traffic_generator.
+    # In this case FF_AGENT_URI was already generated and stored to /etc/ff/configuration/agent_uri
     # Let's retreive it from there and re-store it by set_secret()
-    if [ "${KEY}" == "agent_uri" ] && [ -f /etc/ff/configuration/agent_uri ]; then
-      AGENT_URI="$( cat /etc/ff/configuration/agent_uri )"
+    if [ "${KEY}" == "ff_agent_uri" ] && [ -f /etc/ff/configuration/agent_uri ]; then
+      FF_AGENT_URI="$( cat /etc/ff/configuration/agent_uri )"
       # Store "agent" to proper unified place for secrets, so we don't have to look for it in random places again next time.
-      if [ ! -z "${AGENT_URI}" ]; then
-        set_secret agent_uri "${AGENT_URI}"
-        echo "${AGENT_URI}"
+      if [ ! -z "${FF_AGENT_URI}" ]; then
+        set_secret ff_agent_uri "${FF_AGENT_URI}"
+        echo "${FF_AGENT_URI}"
         return
       fi
     fi
@@ -1604,15 +1689,15 @@ function get_state {
     warning "${FUNCNAME[0]}: argument STATE had uppercase letters: '${STATE_RAW}'. Will use adjusted value instead: '${STATE}'"
   fi
 
-  # Make sure "${AGENT_HOME}" is not empty
-  if [ -z "${AGENT_HOME}" ]; then
-      error "Can not set state. AGENT_HOME variable not defined. State would have been set to ${STATE}=${VALUE}"
+  # Make sure "${FF_AGENT_HOME}" is not empty
+  if [ -z "${FF_AGENT_HOME}" ]; then
+      error "Can not set state. FF_AGENT_HOME variable not defined. State would have been set to ${STATE}=${VALUE}"
       [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
       return 1
   fi
 
   # Construct path to the state file
-  STATE_DIR="${AGENT_HOME}/state"
+  STATE_DIR="${FF_AGENT_HOME}/state"
   STATE_FILE="${STATE_DIR}/${STATE}"
 
   # Check if state file exists
@@ -1643,7 +1728,7 @@ function set_secret {
     set  +x # Disble xtrace to avoid priting secrets
     
     # Create secrets directory
-    local SECRET_DIRECTORY="${AGENT_HOME}/secrets"
+    local SECRET_DIRECTORY="${FF_AGENT_HOME}/secrets"
     mkdir -p "${SECRET_DIRECTORY}" || { error "failed_to_create_secrets_directory"; return 1; }
 
     # Get arguments
@@ -1683,7 +1768,7 @@ export -f set_secret
 ###############################################################################
 # Utility function
 #
-# The set_state() function require "${AGENT_HOME}" to be set to non-empty string.
+# The set_state() function require "${FF_AGENT_HOME}" to be set to non-empty string.
 #
 # Note: each call to "set_state()" will also generate a JSON wich will be published
 # by calling "publish_message()".
@@ -1707,14 +1792,14 @@ function set_state {
     warning "${FUNCNAME[0]}: argument STATE had uppercase letters: '${STATE_RAW}'. Will use adjusted value instead: '${STATE}'"
   fi
 
-  # Make sure "${AGENT_HOME}" is not empty
-  if [ -z "${AGENT_HOME}" ]; then
-      error "Can not set state. AGENT_HOME variable not defined. State would have been set to ${STATE}=${VALUE}"
+  # Make sure "${FF_AGENT_HOME}" is not empty
+  if [ -z "${FF_AGENT_HOME}" ]; then
+      error "Can not set state. FF_AGENT_HOME variable not defined. State would have been set to ${STATE}=${VALUE}"
       [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
       return 1
   fi
 
-  local STATE_DIR="${AGENT_HOME}/state"
+  local STATE_DIR="${FF_AGENT_HOME}/state"
 
   # Make state directory (with -p safe to call even if directory exists)
   if mkdir -p "${STATE_DIR}"; then
@@ -1791,7 +1876,7 @@ function set_state {
   ${PREVIOUS_STATE_JSON}
   ${IS_SUCCESS_OR_IS_ERROR}
   "timestamp_epoch_ms": ${TIMESTAMP_EPOCH_MS},
-  "agent_uri": "${AGENT_URI}",
+  "ff_agent_uri": "${FF_AGENT_URI}",
 
   "is_event": true,
   "event_type": "set_environment",
@@ -1803,8 +1888,8 @@ function set_state {
   "organization": "${ORGANIZATION}",
   "created_by": {
     "mime_type": "identity/statement",
-    "user_id": $( id -u ${BEST_USER_TO_RUN_AS} ),
-    "username": "${BEST_USER_TO_RUN_AS}"
+    "user_id": $( id -u ${FF_AGENT_USERNAME} ),
+    "username": "${FF_AGENT_USERNAME}"
   },
   "security_object_policy": {
     "mime_type": "security/object_policy",
@@ -1982,7 +2067,7 @@ export -f user_exists
 #     - is_portal,
 #     - is_local,
 #     - is_traffic_generator
-#     - agent_uri
+#     - ff_agent_uri
 #     - ff_host
 #     - namespace
 #     - organization
@@ -1995,7 +2080,7 @@ export -f user_exists
 #
 # Dependencies:
 #    - FF_CONTENT_URL variable must be set either by "set_secrets" or in environment variable
-#    - uuidgen must be installed (used to generate AGENT_URI)
+#    - uuidgen must be installed (used to generate FF_AGENT_URI)
 #
 function discover_environment {
 
@@ -2008,13 +2093,13 @@ function discover_environment {
   ######################################################################
   # Choose user, agent home and make sure agent home folder exists
   #
-  # Choose proper user to run as create "ff_agent" folder (known as ${AGENT_HOME}).
+  # Choose proper user to run as create "ff_agent" folder (known as ${FF_AGENT_HOME}).
   # The proper user is not root but user with sudo that can install packages.
   # We need to choose_ff_agent_home before we can set/get secrets.
-  # This sets some of environment variables: BEST_USER_TO_RUN_AS, AGENT_HOME.
-  # Also creates AGENT_HOME directory.
+  # This sets some of environment variables: FF_AGENT_USERNAME, FF_AGENT_HOME.
+  # Also creates FF_AGENT_HOME directory.
   choose_ff_agent_home || { error "failed_to_choose_ff_agent_home"; return 1; }
-  ensure_agent_home_exists || { error "failed_to_ensure_agent_home_exists"; return 1; }
+  ensure_ff_agent_home_exists || { error "failed_to_ensure_ff_agent_home_exists"; return 1; }
 
   ######################################################################
   # FF_CONTENT_URL: check if FF_CONTENT_URL is set (non-empty), else error out.
@@ -2040,18 +2125,18 @@ function discover_environment {
   set_secret ff_content_url "${FF_CONTENT_URL}"
 
   ######################################################################
-  # Get AGENT_URI or generate a new one.
-  discover_optional_environment_variable "AGENT_URI" || { return 1; }
+  # Get FF_AGENT_URI or generate a new one.
+  discover_optional_environment_variable "FF_AGENT_URI" || { return 1; }
   
   # Check if variable already set. If not set - generate it
-  if [ -z "${AGENT_URI}" ]; then
+  if [ -z "${FF_AGENT_URI}" ]; then
       # Before using "uuidgen" we need to make sure it is installed (is part of 'uuid-runtime' package)
       [ "$(which uuidgen)" != "" ] || { assert_clean_exit apt_update; assert_clean_exit apt_install uuid-runtime; }
-      local AGENT_URI="/agent/agent_guid/$( uuidgen )"
+      export FF_AGENT_URI="/agent/agent_guid/$( uuidgen )"
   fi
   
   # set_secret() only if not empty
-  [ ! -z "${AGENT_URI}" ] && { set_secret agent_uri "${AGENT_URI}"; }
+  [ ! -z "${FF_AGENT_URI}" ] && { set_secret ff_agent_uri "${FF_AGENT_URI}"; }
 
   ######################################################################
   # FF_HOST: FF_HOST will be set to legacy control hostname if this is a control.
@@ -2284,12 +2369,13 @@ function check_all_environment_variables_are_set {
 
   # Define list of expected non-empty variables
   local ALL_EXPECTED_ENVRIONMENT_VARIABLES=(
-    # "General" fields
+    FF_AGENT_USERNAME
+    FF_AGENT_HOME
+    FF_AGENT_URI
     FF_HOST
-
-    # "Dynamically learned" fields
-    BEST_USER_TO_RUN_AS
-    AGENT_HOME
+    FF_CONTENT_URL
+    N_PREFIX
+    TERM
   )
 
   # Check required environment variables are set
@@ -2392,8 +2478,8 @@ export -f check_nodejs_installation
 # Function choose_ff_agent_home:
 #
 # Sets the following environment variables:
-#   BEST_USER_TO_RUN_AS - example: ubuntu
-#   AGENT_HOME          - example: /home/ubuntu/ff_agent
+#   FF_AGENT_USERNAME - example: ubuntu
+#   FF_AGENT_HOME          - example: /home/ubuntu/ff_agent
 #
 # Return:
 #  on success - export environment variables and return 0
@@ -2413,36 +2499,36 @@ function choose_ff_agent_home {
     
     # These exports are our "return values"
     # Note: we should not: "export SOMEVAR=$( some_function_call ) || { error "error details"; abort; } " because export would hide actual exit call of the "some_function_call" and thus we'll miss an error!
-    BEST_USER_TO_RUN_AS=$( get_best_user_to_run_as ) || { error "terminal_error_failed_to_choose_user"; return 1; }
-    export BEST_USER_TO_RUN_AS
+    FF_AGENT_USERNAME=$( get_ff_agent_username ) || { error "terminal_error_failed_to_choose_user"; return 1; }
+    export FF_AGENT_USERNAME
     
-    # Even if this function run by some other/not-chosen" user, the AGENT_HOME_DIR would point to the "right/choosen" home. Example: /home/ubuntu
-    # Only when we run as ritgh/choosen user the AGENT_HOME_DIR and HOME have the same values.
-    local AGENT_HOME_DIR=$( get_home_directory_for_user "${BEST_USER_TO_RUN_AS}" ) || { error "terminal_error_failed_to_get_home_directory_for_choosen_user"; return 1; }
+    # Even if this function run by some other/not-chosen" user, the FF_AGENT_HOME_DIR would point to the "right/choosen" home. Example: /home/ubuntu
+    # Only when we run as ritgh/choosen user the FF_AGENT_HOME_DIR and HOME have the same values.
+    local FF_AGENT_HOME_DIR=$( get_home_directory_for_user "${FF_AGENT_USERNAME}" ) || { error "terminal_error_failed_to_get_home_directory_for_choosen_user"; return 1; }
     
     local AGENT_DIR_NAME="ff_agent"
-    export AGENT_HOME="${AGENT_HOME_DIR}/${AGENT_DIR_NAME}"
+    export FF_AGENT_HOME="${FF_AGENT_HOME_DIR}/${AGENT_DIR_NAME}"
 }
 export -f choose_ff_agent_home
 
 ###############################################################################
 #
-# Function makes sure ${AGENT_HOME} folder exist. If not - tries to create it.
+# Function makes sure ${FF_AGENT_HOME} folder exist. If not - tries to create it.
 #
 # Require environment variables set:
-#   - AGENT_HOME
-#   - BEST_USER_TO_RUN_AS
+#   - FF_AGENT_HOME
+#   - FF_AGENT_USERNAME
 #
 # Return:
 #  on success - return 0
 #  on error - return nonzero code
 #
-function ensure_agent_home_exists {
+function ensure_ff_agent_home_exists {
 
   # Define required variables
   local REQUIRED_VARIABLES=( 
-    AGENT_HOME
-    BEST_USER_TO_RUN_AS
+    FF_AGENT_HOME
+    FF_AGENT_USERNAME
   )
 
   # Check required environment variables are set
@@ -2450,19 +2536,19 @@ function ensure_agent_home_exists {
     ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
   done
 
-  # Make sure ${AGENT_HOME} folder exist
-  if [ ! -d "${AGENT_HOME}" ]; then
-      # ${AGENT_HOME} folder is missing: create new one.
-      mkdir -p "${AGENT_HOME}"
+  # Make sure ${FF_AGENT_HOME} folder exist
+  if [ ! -d "${FF_AGENT_HOME}" ]; then
+      # ${FF_AGENT_HOME} folder is missing: create new one.
+      mkdir -p "${FF_AGENT_HOME}"
       if [ ${?} -ne 0 ]; then
-        # Failed to create ${AGENT_HOME} - report error() and abort()
-        # error "Did not find AGENT_HOME directory at ${AGENT_HOME}. Tried to create it but failed. Aborting."
-        set_state "${FUNCNAME[0]}" "failed_to_create_agent_home"
+        # Failed to create ${FF_AGENT_HOME} - report error() and abort()
+        # error "Did not find FF_AGENT_HOME directory at ${FF_AGENT_HOME}. Tried to create it but failed. Aborting."
+        set_state "${FUNCNAME[0]}" "failed_to_create_ff_agent_home"
         return 1
       fi
   fi
 }
-export -f ensure_agent_home_exists
+export -f ensure_ff_agent_home_exists
 
 ###############################################################################
 #
@@ -2522,7 +2608,7 @@ export -f ff_api_get
 # We check the following user accounts candidates: "ff_agent", "ubuntu" or current user.
 # Selected user should have rights to install packages. Ideally locally, but one step at a time.
 #
-function get_best_user_to_run_as {
+function get_ff_agent_username {
 
     POTENTIAL_USERS=( ff_agent ubuntu ${USER} )
 
@@ -2557,7 +2643,7 @@ function get_best_user_to_run_as {
         fi
     fi
 }
-export -f get_best_user_to_run_as
+export -f get_ff_agent_username
 
 ###############################################################################
 # Function prints into standard output the expected version of nodejs.
@@ -2609,7 +2695,7 @@ function is_set_environment_working {
   check_nodejs_installation || { set_state "${FUNCNAME[0]}" "failed_check_check_nodejs_installation"; return 1; }
 
   # Check ff_agent/bin is in the path
-  local FF_AGENT_BIN="${AGENT_HOME}/bin"
+  local FF_AGENT_BIN="${FF_AGENT_HOME}/bin"
   printenv PATH | grep --quiet "${FF_AGENT_BIN}"
   [ ${?} -ne 0 ] && { set_state "${FUNCNAME[0]}" "failed_check_ff_agent_bin_not_in_path"; return 1; }
   
@@ -2620,7 +2706,7 @@ function is_set_environment_working {
   # TODO: instead of "cherry-picking" what to check we should have 1:1 "doer/instaler" and corresponding "checker" functions defined, which we'll call here by list.
 
   # Return success
-  set_state "${FUNCNAME[0]}" "successs"
+  set_state "${FUNCNAME[0]}" "success"
   return 0
 }
 export -f is_set_environment_working 
