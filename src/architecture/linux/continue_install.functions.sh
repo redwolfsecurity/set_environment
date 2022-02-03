@@ -1074,6 +1074,61 @@ function background_install {
 
 ###############################################################################
 #
+# Function preserve_sources require the only argument: root folder of the project from which installer was started.
+# It will analyze if installer was started from expected place (ff_agent/git/[companyname]/set_environment/ folder) and if not
+# it will preserve source code into appropriate folder for future reuse (updates etc.).
+#
+function preserve_sources {
+    PROJECT_ROOT_DIR="$1"
+    if [ ! -d "${PROJECT_ROOT_DIR}" ]; then
+      error "Error: failed to preserve_sources"
+      return 1
+    fi
+
+    # As a preparation to preserve project source files (used during this installation), let's change directory to the project root directory.
+    pushd "${PROJECT_ROOT_DIR}" || { error "Error: failed to change directory into the project root ${PROJECT_ROOT_DIR}" >&2; exit 1; }
+
+    # Make sure ${FF_AGENT_HOME} is set
+    [ -z "${FF_AGENT_HOME}" ] && { error "Error: FF_AGENT_HOME is not set." >&2; exit 1; }
+
+    # Extract project owner from github repository URL
+    local URL=$( git remote show origin | grep 'Fetch URL:' | awk -F'Fetch URL: ' '{print $2}' )
+    [ -z "${URL}" ] && { error "Error: failed to extract project repository URL." >&2; exit 1; }
+    local OWNER=$( parse_github_repository_url "${URL}" "OWNER" )
+    [ -z "${OWNER}" ] && { error "Error: failed to extract project owner from URL='${URL}'." >&2; exit 1; }
+
+    # All projects sources got preserved in this folder
+    local PRESERVED_PROJECTS_DIR="${FF_AGENT_HOME}/git"
+
+    # Current project-specific name and preserved location
+    local PROJECT_NAME='set_environment'
+    local PRESERVED_PROJECT_DIR="${PRESERVED_PROJECTS_DIR}/${OWNER}/${PROJECT_NAME}"
+
+    # Check if installer running from unexpected folder
+    if [ "${PWD}" != "${PRESERVED_PROJECT_DIR}" ]; then
+        # Current installer run from unexpected place (like some temporary folder) - need to preserve installed project source folder.
+        # Check if previously preserved folder exists, then remove it.
+        if [ -d "${PRESERVED_PROJECT_DIR}" ]; then
+            # Remove old project source folder
+            rm -fr "${PRESERVED_PROJECT_DIR}" || { error "failed_to_remove_old_project_source_folder"; exit 1; }
+        fi
+
+        # Make sure target project "owner" folder exists before trying to copy (otherwise copy result will 
+        # be incorrect - all the content of the current root project will be copied into "projects/"
+        # folder without project-specific "owner" containing folder).
+        if [ ! -d "${PRESERVED_PROJECTS_DIR}/${OWNER}" ]; then
+            mkdir -p "${PRESERVED_PROJECTS_DIR}/${OWNER}" || { error "failed_to_create_projects_owner_folder"; exit 1; }
+        fi
+
+        # Copy newly installed source folder (to preserve it)
+        cp -a "${PWD}" "${PRESERVED_PROJECTS_DIR}/${OWNER}" || { error "failed_to_preseve_project_source_folder"; exit 1; }
+    fi
+    # Restore
+    popd || { error "failed_to_popd_after_preserving_source_folder"; exit 1; }
+  }
+
+###############################################################################
+#
 function setup_logging {
 	set_script_logging 
 }
