@@ -1249,34 +1249,13 @@ export -f terminal_reset
 function stop_pm2 {
     set_state "${FUNCNAME[0]}" 'stopping'
 
-    # # There was a problem inside stop_pm2() due to npm re-installed in a new location
-    # # We used this "snapshot" which happened to be useful.
-    # # TODO: let's add even more useful findings here and move it into the ff_bash_funcions as "debug_snapshot()"
-    # echo "--------------- debug_snapshot begin -----------------"
-    # date
-    # pwd
-    # whoami
-    # which n
-    # which npm
-    # which node
-    # n --version
-    # npm --version
-    # node --version
-    # echo ${PATH}
-    # echo ${N_PREFIX}  # expected result: /home/ubuntu/ff_agent/.n
-    # pm2 ps
-    # which pm2
-    # sudo ps aux | grep pm2
-    # sudo systemctl status pm2-${FF_AGENT_USERNAME}
-    # echo "--------------- debug_snapshot end -----------------"
-
     # Check required environment variables are set: FF_AGENT_USERNAME
     for VARIABLE_NAME in FF_AGENT_USERNAME; do
       ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
     done
 
     # pm2 may not be  installed, so we have nothing to stop
-    PM2=$( which pm2 )
+    PM2=$( command_exists pm2 )
     if [ -z "${PM2}" ]; then
       set_state "${FUNCNAME[0]}" 'pm2_executable_not_found_error'
       return 1
@@ -2160,7 +2139,7 @@ function discover_environment {
   # Check if variable already set. If not set - generate it
   if [ -z "${FF_AGENT_URI}" ]; then
       # Before using "uuidgen" we need to make sure it is installed (is part of 'uuid-runtime' package)
-      [ "$(which uuidgen)" != "" ] || { assert_clean_exit apt_update; assert_clean_exit apt_install uuid-runtime; }
+      [ "$(command_exists uuidgen)" != "" ] || { assert_clean_exit apt_update; assert_clean_exit apt_install uuid-runtime; }
       export FF_AGENT_URI="/agent/agent_guid/$( uuidgen )"
   fi
   
@@ -2428,7 +2407,7 @@ function check_nodejs_installation {
 
   # Check nodejs is installed
   local CHECK_NAME='is_nodejs_installed'
-  local WHICH_NODE="$( which node )"
+  local WHICH_NODE="$( command_exists node )"
   [ "${WHICH_NODE}" != "" ] || {
     ERROR_CODE="error_check_nodejs_installation_nodejs_not_installed"
     set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
@@ -2445,7 +2424,7 @@ function check_nodejs_installation {
 
   # Check npm is installed
   CHECK_NAME='is_npm_installed'
-  WHICH_NPM="$(which npm)" 
+  WHICH_NPM="$(command_exists npm)" 
   [ "${WHICH_NPM}" != "" ] || { 
     ERROR_CODE="error_check_nmp_installation_nodejs_not_installed"
     set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; 
@@ -2806,7 +2785,7 @@ function publish_message {
       return 1
     fi
 
-    CURL_INSTALLED_PATH="$( which curl )"
+    CURL_INSTALLED_PATH="$( command_exists curl )"
     if [ "${CURL_INSTALLED_PATH}" == "" ]; then
       log "WARNING: curl is not yet isntalled. Skppping publishing JSON: ${INPUT_JSON}"
       return 0

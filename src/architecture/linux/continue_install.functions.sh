@@ -694,7 +694,7 @@ function install_node_ubuntu {
 #   set_state "${FUNCNAME[0]}" "uninstalling"
 
 #   # Call 'uninstall' on 'n' itself. n uninstall has been added in v4.1.0.
-#   if [ "$(which n | grep -v "${FF_AGENT_HOME}")" != "" ]; then
+#   if [ "$(command_exists n | grep -v "${FF_AGENT_HOME}")" != "" ]; then
 #     echo "y" | sudo n uninstall
 #   fi
 
@@ -710,10 +710,10 @@ function install_node_ubuntu {
 #   #    /usr/local/share/systemtap/tapset/node.stp
 
 #   # Uninstall 'n' if it was installed under "/usr" using "npm install --global n"
-#   WHICH_NPM="$(which npm)"
-#   if [ "${WHICH_NPM}" != "" ]; then
+#   PATH_TO_NPM="$(command_exists npm)"
+#   if [ "${PATH_TO_NPM}" != "" ]; then
 #     # Only uninstall if npm installed under /user
-#     if [[ "${WHICH_NPM}" =~ ^/usr/ ]]; then
+#     if [[ "${PATH_TO_NPM}" =~ ^/usr/ ]]; then
 #       npm r -g n
 #     fi
 #   fi
