@@ -42,7 +42,7 @@ Now you can run test function "is_set_environment_working". It will return 0 if 
 
 ### Now That You're Done
 
-The ff_bash_functions file is in ff_agent/ff_agent/lib/bash/ff_bash_function and contains functions that are useful. Type 'help' to list the functions.
+The ff_bash_functions file is in "${FF_AGENT_HOME}/git/redwolfsecurity/set_environment/src/ff_bash_functions" and contains functions that are useful. Type 'help' to list the functions.
 
 - assert_cd which ensures that a cd command is performed correctly
 - assert_clean_exit which makes sure a command exits cleanly and aborts the script if it does not

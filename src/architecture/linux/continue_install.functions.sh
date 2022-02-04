@@ -224,8 +224,7 @@ function assert_basic_components {
   # Before installing locally (into local ff_agent/) packages, like "n / npm / nodejs" we need to put in place ff_agent .bashrc and .profile
   # TODO: DO WE REALLY DEPEND ON THIS BEFORE INSTALLING n/npm/nodejs??
   assert_clean_exit install_ff_agent_bashrc
-  assert_clean_exit install_ff_bash_functions   # Install ff_bash_functions -> ff_agent/lib/bash/, or abort.
-
+  
   # Install docker (not using "apt")
   #assert_clean_exit install_docker
 
@@ -481,44 +480,6 @@ function apt_install_basic_packages {
 
 ###############################################################################
 #
-# Install ff_bash_functions -> ff_agent/lib/bash/
-# On success: return 0
-# On error f-n sets state and return nonzero value.
-# Depend on:
-#   FF_AGENT_HOME variable
-#   current directory "./" should be root of "set_environment" project.
-#
-function install_ff_bash_functions {
-  set_state "${FUNCNAME[0]}" 'started'
-
-  # Check ${FF_AGENT_HOME} is set
-  if [ -z "${FF_AGENT_HOME}" ]; then
-      # Error: required environment variable FF_AGENT_HOME is not set.
-      set_state "${FUNCNAME[0]}" 'error_required_variable_not_set_ff_agent_home'
-      return 1
-  fi
-
-  # Check if target folder exists
-  TARGET_DIR="${FF_AGENT_HOME}/lib/bash"
-  if [ ! -d "${TARGET_DIR}" ]; then
-      # Desitnation folder doesn't exist, try to create
-      mkdir -p "${TARGET_DIR}"
-      if [ ${?} -ne 0 ]; then
-          # Error: failed to create folder
-          set_state "${FUNCNAME[0]}" 'error_failed_create_folder'
-          return 1
-      fi
-  fi
-
-  # Copy files to the target folder
-  assert_clean_exit cp ./src/ff_bash_functions "${TARGET_DIR}"
-
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
-}
-
-###############################################################################
-#
 # Сreate a new ff_agent/.profile file and source it from the ~/.bashrc
 # and ~/.profile files of the selected user.
 #
@@ -590,8 +551,8 @@ EOT
   # Inject sourcing ff_bash_functions
 
   # Define path to the installed ff_bash_functions
-  local FF_BASH_FUNCTIONS_PATH="${FF_AGENT_HOME}/lib/bash/ff_bash_functions"
-
+  local FF_BASH_FUNCTIONS_PATH="${FF_AGENT_HOME}/git/redwolfsecurity/set_environment/src/ff_bash_functions"
+  
   # Inject into the custom .profile to source ff_bash_functions (if missing)
   # Search expected line
   TARGET_FILE="${FF_AGENT_PROFILE_FILE}"

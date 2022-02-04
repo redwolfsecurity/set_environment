@@ -225,7 +225,7 @@ function help_toc {
   [ -z "${TARGET_DIR}" ] && { error "error_environment_ff_agent_home_not_set"; error ; return 1; }
 
   # Define path to ff_bash_functions file
-  TARGET_FILE="${TARGET_DIR}/ff_bash_functions"
+  TARGET_FILE="${FF_AGENT_HOME}/git/redwolfsecurity/set_environment/src/ff_bash_functions"
   [ ! -f "${TARGET_FILE}" ] && { error "error_ff_bash_functions_file_missing"; return 1; }
 
   # Parse ff_bash_functions and generate table of contents.s
