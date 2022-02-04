@@ -635,16 +635,6 @@ EOT
 function install_ff_agent {
   set_state "${FUNCNAME[0]}" 'started'
 
-  # Check ${FF_AGENT_HOME} is set
-  if [ -z "${FF_AGENT_HOME}" ]; then
-    # Error: required environment variable FF_AGENT_HOME is not set.
-    set_state "${FUNCNAME[0]}" 'error_required_variable_not_set_ff_FF_AGENT_HOME'
-    return 1
-  fi
-
-  cd "${AGENT_HOME}" || { set_state "${FUNCNAME[0]}" 'terminal_error_changedir_ff_agent_home'; abort; }
-  npm init -y        || { set_state "${FUNCNAME[0]}" 'terminal_error_initializing_npm_project'; abort; }
-  
   # Define the version of ff_agent npm package to install from CDN
   VERSION='latest'
 

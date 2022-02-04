@@ -616,6 +616,9 @@ export -f file_contains_pattern
 #    [package_name_1]:  [/path_1/to/the/file/after/package/installed]
 #    [package_name_2]:  [/path_2/to/the/file/after/package/installed]
 #
+# Dependency:
+#   apt-file - The "apt-file" package must be installed. We will run "sudo apt-file update" on each function call.
+#
 # Usage example:
 #    find_file_owner_in_all_packages realpath
 #
@@ -686,8 +689,9 @@ export -f find_file_owner_in_all_packages
 #    [package_name_2]:  [/path_2/to/the/file/after/package/installed]
 #
 # The "find_file_owner_package" tries to find the package which owns the file.
-# (?) It seems it can only find owning package if mentioned file/package installed
-# (unlike "apt-file search realpath", which searches through all "potential universe")
+# It can only find owning package if mentioned file/package installed
+# (unlike function find_file_owner_in_all_packages() based on "apt-file
+# search realpath", which searches through all "potential universe", but require "apt-file to be installed and updated")
 #
 # Usage example:
 #    find_file_owner_in_installed_packages realpath
@@ -746,7 +750,6 @@ export -f glob_matches
 #   echo "creating example target file" > "${TARGET_FILE}"
 #   PATTERN="source \"${FF_AGENT_PROFILE_FILE}\""
 #
-#   # This will probably loose EOL for multi-line content(?)
 #   INJECT_CONTENT=$(
 #       cat <<EOT
 # # Sourcing custom ff_agent/.bashrc file (injected by set_environment -> ff_bash_functions -> ${FUNCNAME[0]} on $(date --utc))
