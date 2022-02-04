@@ -14,10 +14,16 @@ function continue_install {
     # directory, so we can preserve soruces as one of the last steps after installation.
     local PROJECT_ROOT_DIR="${PWD}"
 
-    # Install basic components. Note: on errror: function aborts (no need to error check)
+    # Install basic components.
     install_set_environment_baseline || { error "Failed to install_set_environment_baseline. Details: return code was: $?"; exit 1; }
 
+    # Project installer preserves the project source code: instead of erasing the source folder,
+    # the code must be preserved under ff_agent/git/[project-owner]/set_environment/ folder.
     preserve_sources "${PROJECT_ROOT_DIR}" || { error "Failed to preserve_sources. Details: return code was: $?"; exit 1; }
+
+    # Preserved "set environment" sources provide the installer linked by set_environment_install script, which must be in the PATH.
+    ensure_ff_agent_bin_exists || { error "Failed to ensure_ff_agent_bin_exists. Details: return code was: $?"; exit 1; }
+    ensure_set_environment_install_exists || { error "Failed to ensure_set_environment_install_exists. Details: return code was: $?"; exit 1; }
 }
 
 continue_install
