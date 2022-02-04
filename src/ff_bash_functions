@@ -41,6 +41,8 @@
 #    - does_file_have_eol_at_the_end 
 #    - f 
 #    - file_contains_pattern 
+#    - find_file_owner_in_all_packages
+#    - find_file_owner_in_installed_packages
 #    - glob_matches 
 #    - inject_into_file 
 #    - remove_all_lines_by_regexp 
@@ -183,6 +185,21 @@ export -f ask_for_yn
 ###############################################################################
 # Check if a command exists. A command could be a function, something in path, a direct path to a command
 # This will return in stdout the path to the command, and will return 0 if the command exists, otherwise 1
+# This is better option than "which" command since it also understands:
+#    - aliases
+#    - bash functions
+#
+# Usage examples:
+#   Simple if-then check
+#      if command_exists tput ; then echo "yes, command exists"; fi
+#
+#   Use with other commands "chained" by &&
+#      command_exists tty && tty -s && return 0 || return 1
+#
+#   Check if return not empty string
+#     PM2=$( command_exists pm2 )
+#     if [ -z "${PM2}" ]; then  echo "yes, command exists"; fi
+#
 function command_exists {
   command -v "${1}"
   return $?
@@ -592,6 +609,108 @@ function file_contains_pattern {
     grep --quiet --text "${PATTERN}" "${FILE}"
 }
 export -f file_contains_pattern
+
+###############################################################################
+# Category: file
+# Utility function - finds out which package owns a file and print result into standard output in form:
+#    [package_name_1]:  [/path_1/to/the/file/after/package/installed]
+#    [package_name_2]:  [/path_2/to/the/file/after/package/installed]
+#
+# Usage example:
+#    find_file_owner_in_all_packages realpath
+#
+# Example output (can produce more than one line):
+#    bash-builtins: /usr/lib/bash/realpath     
+#    bash-builtins: /usr/share/doc/bash/examples/loadables/realpath.c
+#    code: /usr/share/code/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/LICENSE
+#    code: /usr/share/code/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/README.md
+#    code: /usr/share/code/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/index.js
+#    code: /usr/share/code/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/old.js
+#    code: /usr/share/code/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/package.json
+#    code-exploration: /usr/share/code-exploration/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/LICENSE
+#    code-exploration: /usr/share/code-exploration/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/README.md
+#    code-exploration: /usr/share/code-exploration/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/index.js
+#    code-exploration: /usr/share/code-exploration/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/old.js
+#    code-exploration: /usr/share/code-exploration/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/package.json
+#    code-insiders: /usr/share/code-insiders/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/LICENSE
+#    code-insiders: /usr/share/code-insiders/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/README.md
+#    code-insiders: /usr/share/code-insiders/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/index.js
+#    code-insiders: /usr/share/code-insiders/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/old.js
+#    code-insiders: /usr/share/code-insiders/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/package.json
+#    coreutils: /usr/bin/realpath
+#    coreutils: /usr/share/man/man1/realpath.1.gz
+#    epic4-help: /usr/share/epic4/help/6_Functions/realpath
+#    fish-common: /usr/share/doc/fish/_sources/cmds/realpath.rst.txt
+#    fish-common: /usr/share/doc/fish/cmds/realpath.html
+#    fish-common: /usr/share/fish/completions/realpath.fish
+#    fish-common: /usr/share/fish/functions/realpath.fish
+#    gnulib: /usr/share/gnulib/doc/posix-functions/realpath.texi
+#    libexplain-dev: /usr/include/libexplain/realpath.h
+#    libexplain-dev: /usr/share/man/man3/explain_realpath.3.gz
+#    libexplain-dev: /usr/share/man/man3/explain_realpath_or_die.3.gz
+#    librnd-dev: /usr/include/librnd/core/compat_lrealpath.h
+#    libssh2-1-dev: /usr/share/man/man3/libssh2_sftp_realpath.3.gz
+#    manpages-de: /usr/share/man/de/man1/realpath.1.gz
+#    manpages-de-dev: /usr/share/man/de/man3/realpath.3.gz
+#    manpages-dev: /usr/share/man/man3/realpath.3.gz
+#    manpages-fr-dev: /usr/share/man/fr/man3/realpath.3.gz
+#
+function find_file_owner_in_all_packages {
+    # Take filename argument
+    FILE="${1}"
+
+    # Make sure arguemnt is not empty
+    if [ -z "${FILE}" ]; then
+        error "Function find_file_owner_in_all_packages() require one argument: filename."
+        return 1
+    fi
+
+    # Check if "apt-file" is installed
+    if ! command_exists apt-file; then
+      error "apt-file is not installed. Please install it first (e.g. sudo install apt-file) and try again."
+      return 1
+    fi
+
+    # Update packages universe database
+    sudo apt-file update
+
+    # Try to search given file
+    apt-file search "${FILE}"
+}
+export -f find_file_owner_in_all_packages
+
+###############################################################################
+# Category: file
+# Utility function - finds out which package owns a file and print result into standard output in form:
+#    [package_name_1]:  [/path_1/to/the/file/after/package/installed]
+#    [package_name_2]:  [/path_2/to/the/file/after/package/installed]
+#
+# The "find_file_owner_package" tries to find the package which owns the file.
+# (?) It seems it can only find owning package if mentioned file/package installed
+# (unlike "apt-file search realpath", which searches through all "potential universe")
+#
+# Usage example:
+#    find_file_owner_in_installed_packages realpath
+#
+# Example output (can produce more than one line):
+#    coreutils: /usr/bin/realpath
+#    coreutils: /usr/share/man/man1/realpath.1.gz
+#    manpages-dev: /usr/share/man/man3/realpath.3.gz
+# 
+function find_file_owner_in_installed_packages {
+    # Take filename argument
+    FILE="${1}"
+
+    # Make sure arguemnt is not empty
+    if [ -z "${FILE}" ]; then
+        error "Function find_file_owner_in_installed_packages() require one argument: filename."
+        return 1
+    fi
+
+    # Try to find the file in the installed packages
+    dpkg -S "${FILE}"
+}
+export -f find_file_owner_in_installed_packages
 
 ###############################################################################
 # Category: file

@@ -702,7 +702,7 @@ function install_ff_agent {
   esac
   
   # Install ff_agent
-  npm install "${FF_CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}.tgz" || { set_state "${FUNCNAME[0]}" 'terminal_error_failed_to_install_ff_agent'; abort; }
+  npm install --global "${FF_CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}.tgz" || { set_state "${FUNCNAME[0]}" 'terminal_error_failed_to_install_ff_agent'; abort; }
 
   set_state "${FUNCNAME[0]}" 'success'
   return 0
