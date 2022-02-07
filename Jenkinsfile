@@ -64,7 +64,7 @@ pipeline {
         sh 'tar -C ${TEMPORARY_DIR} --exclude-vcs -czf ${TARBALL_FILENAME} set_environment'
 
         // Upload tarball to S3 so it is available via URL: https://cdn.redwolfsecurity.com/ff/ff_agent/set_environment.tgz
-        sh 'node cdn_upload.js ${TARBALL_FILEPATH} ${PRODUCTION_CONTENT_S3_BUCKET_NAME} ${PRODUCTION_CONTENT_S3_FF_AGENT_PATH} ${PRODUCTION_CONTENT_CDN_DISTRIBUTION_ID}
+        sh 'node cdn_upload.js ${TARBALL_FILEPATH} ${PRODUCTION_CONTENT_S3_BUCKET_NAME} ${PRODUCTION_CONTENT_S3_FF_AGENT_PATH} ${PRODUCTION_CONTENT_CDN_DISTRIBUTION_ID}'
       }
     }
   }
