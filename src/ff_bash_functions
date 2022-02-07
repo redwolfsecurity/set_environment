@@ -68,7 +68,7 @@
 #    - terminal_reset 
 ## END UTILITY FUNCITONS: TERMINAL / SHELL
 ## BEGIN UTILITY FUNCTIONS: PROCESS
-#    - stop_pm2 
+#    - is_process_running_as_me
 ## END UTILITY FUNCTIONS: PROCESS
 ## BEGIN UTILITY FUNCTIONS: CONTAINERS
 #    - container_name_exists 
@@ -201,8 +201,37 @@ export -f ask_for_yn
 #     if [ -z "${PM2}" ]; then  echo "yes, command exists"; fi
 #
 function command_exists {
-  command -v "${1}"
-  return $?
+  local COMMAND=${1}
+
+  # Force bash to un-hash any previously memorized commands. This will require bash to look it up again.
+  # This is for cases where it has 'memoried' a command that has actually been deleted.
+  hash -d ${COMMAND} >/dev/null 2>/dev/null
+  hash -d $(command -v "${COMMAND}" ) >/dev/null 2>/dev/null
+
+  local COMMAND_RESOLVED=$(command -v "${COMMAND}" )
+  local STATUS=$?
+
+  # Command will return non-zero if command not found
+  if [ "${STATUS}" != "0" ]; then
+    return 1
+  fi
+
+  if [ "${COMMAND_RESOLVED}" == "" ]; then
+    return 1
+  fi
+
+  # Case: Is this an alias?
+  if [[ "${COMMAND_RESOLVED}" =~ ^alias ]]; then
+     # If it starts with alias ...= ( e.g. grep is often aliased to something else with options )
+     # Then we assume it exists and we let you run the alias
+     echo "${COMMAND}"
+  else
+    # Otherwise we return what we resolved, which might be a bash function, or the path to a command
+    echo "${COMMAND_RESOLVED}"
+  fi
+  
+  return 0
+
 }
 export -f command_exists
 
@@ -1319,15 +1348,19 @@ function terminal_initialize {
   FONT_STYLE_RED=""
   FONT_STYLE_NORMAL=""
   
-  terminal_is_tty || return
+  if terminal_is_tty ; then
 
-  if command_exists tput ; then
-      # If this is a TTY, These set of "t_*" variables allows us to decorate the output with some style (colour, boldness)
-      FONT_STYLE_BOLD="$(tput bold)"
-      FONT_STYLE_GREEN="$(tput setaf 2)"
-      FONT_STYLE_RED="$(tput setaf 1)"
-      FONT_STYLE_NORMAL="$(tput sgr0)"
+    if command_exists tput ; then
+        # If this is a TTY, These set of "t_*" variables allows us to decorate the output with some style (colour, boldness)
+        FONT_STYLE_BOLD="$(tput bold)"
+        FONT_STYLE_GREEN="$(tput setaf 2)"
+        FONT_STYLE_RED="$(tput setaf 1)"
+        FONT_STYLE_NORMAL="$(tput sgr0)"
+    fi
   fi
+
+  return 0
+
 }
 export -f terminal_initialize
 
@@ -1362,6 +1395,26 @@ export -f terminal_reset
 
 ###############################################################################
 # Category: process
+# checks if a process is running as current user or effectively as current user.
+# Note we are checking for the pattern at the beginning of the command by default
+function is_process_running_as_me () {
+    set_state "${FUNCNAME[0]}" 'started'
+    local COMMAND_PATTERN="${1}"
+    [ ! -z "${COMMAND_PATTERN}" ] || { set_state "${FUNCNAME[0]}" 'error_require_pattern_to_search_for'; return 1; }
+
+    # We are not passed, but require USER to be set.
+    ensure_variable_not_empty "USER" || { set_state "${FUNCNAME[0]}" 'error_user_environment_variable_not_found'; return 1; }
+
+    # We require PS and GREP commands
+    local PS=$(command_exists ps) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_ps_command'; return 1; }
+    local GREP=$( command_exists grep ) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_grep_command'; return 1; }
+
+    # Note: we prefix pattern with ^ -- we are looking for command string
+    $PS -u "${USER}" -U "${USER}" o command | $GREP --silent -e "^${COMMAND_PATTERN}"
+    STATUS=$?
+}
+export -f is_process_running_as_me
+
 # stop_pm2 solves the problem of pm2 running by multiple user (designated "choosen user" and "root").
 # stop_pm2 would stop all found pm2 instances and remove it from automatic startup.
 #
@@ -1383,55 +1436,10 @@ function stop_pm2 {
       return 1
     fi
 
-    timeout 5 ${PM2} unstartup
-    timeout 5 ${PM2} kill
-    timeout 5 sudo ${PM2} unstartup
-    timeout 5 sudo ${PM2} kill
+    set_state "${FUNCNAME[0]}" 'success'
 
-    # Kill all processes mentioning pm2 owned by me. This is a tad aggressive, but
-    # pm2 has some stupid process names
-    ps auxw | grep ^${FF_AGENT_USERNAME} | grep -i pm2 | grep -v grep | grep -v hotpatch
-    PROCS=$( ps auxw | grep ^${FF_AGENT_USERNAME} | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
-    if [ "${PROCS}" != "" ]; then
-      kill ${PROCS}
-    fi
-    PROCS=$( ps auxw | grep ^${FF_AGENT_USERNAME} | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
-    [ "${PROCS}" != "" ] && { set_state "${FUNCNAME[0]}" "assertion_failure_should_be_no_pm2_processes_owned_by_user"; return 1; }
-    set_state "${FUNCNAME[0]}" "assertion_success_no_pm2_processes_owned_by_user"
+    return ${STATUS}
 
-    # Disable any root style services
-    for ACTION in stop disable
-    do
-      sudo systemctl "${ACTION}" pm2-${FF_AGENT_USERNAME}
-    done
-
-    # Tell root to remove the startup entry for itself.
-    # Otherwise, on a reboot, it might come back
-    timeout 5 sudo pm2 unstartup
-    pm2 kill
-
-    # Kill any root processes lingering
-    ps auxw | grep root | grep -i pm2 | grep -v grep | grep -v hotpatch
-    PROCS=$( ps auxw | grep root | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
-    if [ "${PROCS}" != "" ]; then
-      kill ${PROCS}
-    fi
-    PROCS=$( ps auxw | grep root | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
-    [ "${PROCS}" != "" ] && { set_state "${FUNCNAME[0]}" "assertion_failure_should_be_no_pm2_processes_owned_by_root"; return 1; }
-    set_state "${FUNCNAME[0]}" 'assertion_success_no_pm2_processes_owned_by_root'
-
-    # Post condition, there is no pm2 process running for any user
-    ps auxw | grep -i pm2 | grep -v grep
-    PROCS=$( ps auxw | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
-    if [ "${PROCS}" != "" ]; then
-      set_state "${FUNCNAME[0]}" 'could_not_stop_all_pm2_processes_error'
-      return 1
-    fi
-    PROCS=$( ps auxw | grep -i pm2 | grep -v grep | grep -v hotpatch | awk '{ print $2 }' )
-    [ "${PROCS}" != "" ] && { set_state "${FUNCNAME[0]}" "assertion_failure_should_be_no_pm2_processes_running"; return 1; }
-
-    set_state "${FUNCNAME[0]}" 'success_stopped'
-    return 0
 }
 export -f stop_pm2
 
