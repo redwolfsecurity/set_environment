@@ -49,10 +49,11 @@ function build_tarball {
     echo "debug: listing TEMPORARY_DIR: $( ls -l ${TEMPORARY_DIR} | grep 'environ')"
     echo "debug: TARBALL_FILEPATH: ${TARBALL_FILEPATH}"
     echo "debug: ls -l ${TARBALL_FILEPATH}: $( ls -l ${TARBALL_FILEPATH} )"
+    echo "debug: ls -l ./ : $( ls -l ./ )"
 
     # Upload tarball to S3 so it is available via URL: https:#cdn.redwolfsecurity.com/ff/ff_agent/set_environment.tgz
     node cdn_upload.js \
-        "${TARBALL_FILEPATH}" \
+        "${TARBALL_FILENAME}" \
         "${PRODUCTION_CONTENT_S3_BUCKET_NAME}" \
         "${PRODUCTION_CONTENT_S3_FF_AGENT_PATH}" \
         "${PRODUCTION_CONTENT_CDN_DISTRIBUTION_ID}" \
