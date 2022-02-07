@@ -5,6 +5,14 @@ set -x
 
 function build_tarball {
 
+    # Define location of temporary folder and tarball filename
+    local TARBALL_FILENAME="set_environment-dev.tgz"
+    
+    #TEMPORARY_DIR="$( mktemp -d )"
+    local TEMPORARY_DIR="/tmp"
+
+    local TARBALL_FILEPATH="${TEMPORARY_DIR}/${TARBALL_FILENAME}"
+
     # We need to "npm install" because of aws-sdk dependency (used by cdn_upload.js)
     npm i || { set_state "${FUNCNAME[0]}" 'failed_to_npm_install'; abort; }
 
@@ -35,8 +43,12 @@ function build_tarball {
     #      set_environment - last argument is the folder to archive. It does not include full path (like: ${TEMPORARY_DIR}/set_environment)
     #                        because we already specified -C argument.
     #
-
     tar -C "${TEMPORARY_DIR}" --exclude-vcs -czf "${TARBALL_FILENAME}" "set_environment" || { set_state "${FUNCNAME[0]}" 'failed_to_create_tarball'; abort; }
+
+    # Debug output: why cnd_upload script can't find the tarball
+    echo "debug: listing TEMPORARY_DIR: $( ls -l ${TEMPORARY_DIR} | grep 'environ')"
+    echo "debug: TARBALL_FILEPATH: ${TARBALL_FILEPATH}"
+    echo "debug: ls -l ${TARBALL_FILEPATH}: $( ls -l ${TARBALL_FILEPATH} )"
 
     # Upload tarball to S3 so it is available via URL: https:#cdn.redwolfsecurity.com/ff/ff_agent/set_environment.tgz
     node cdn_upload.js \

@@ -27,9 +27,6 @@ pipeline {
         // For AWS ECR to work we need to provide AWS key/secret via these 2 environment variables
         AWS_ACCESS_KEY_ID = credentials('production_aws_access_key_id_jenkins_build')
         AWS_SECRET_ACCESS_KEY = credentials('production_aws_secret_access_key_jenkins_build')
-        TARBALL_FILENAME = "set_environment-dev.tgz"
-        TEMPORARY_DIR = "/tmp"
-        TARBALL_FILEPATH = "${TEMPORARY_DIR}/${TARBALL_FILENAME}"
       }
       steps {
         sh './build_tarball'
