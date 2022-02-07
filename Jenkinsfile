@@ -3,7 +3,7 @@ pipeline {
   agent {
       docker {
           image 'dockerregistry.production.redwolfsecurity.com/redoki_base_ubuntu:latest' 
-          args '--user=ubuntu'  // This enforces docker started by Jenknis to use proper "ubuntu" user with all the expected groups (i.e. "docker")
+          args '--user=ff_agent'  // This enforces docker started by Jenknis to use proper "ubuntu" user with all the expected groups (i.e. "docker")
       }
   }
 
