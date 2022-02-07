@@ -32,6 +32,11 @@ pipeline {
         TARBALL_FILEPATH = "${TEMPORARY_DIR}/${TARBALL_FILENAME}"
       }
       steps {
+
+        sh 'set'
+        sh 'source ${HOME}/ff_agent/.bashrc; echo "-----------------------------------------"'
+        sh 'set'
+
         // We need to "npm install" because of aws-sdk dependency (used by cdn_upload.js)
         sh 'npm i'
 
