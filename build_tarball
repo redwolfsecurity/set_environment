@@ -50,6 +50,11 @@ function build_tarball {
     echo "debug: TARBALL_FILEPATH: ${TARBALL_FILEPATH}"
     echo "debug: ls -l ${TARBALL_FILEPATH}: $( ls -l ${TARBALL_FILEPATH} )"
     echo "debug: ls -l ./ : $( ls -l ./ )"
+    echo "debug: AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}"
+    echo "debug: AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}"
+    echo "debug: PRODUCTION_CONTENT_S3_BUCKET_NAME: ${PRODUCTION_CONTENT_S3_BUCKET_NAME}"
+    echo "debug: PRODUCTION_CONTENT_S3_FF_AGENT_PATH: ${PRODUCTION_CONTENT_S3_FF_AGENT_PATH}"
+    echo "debug: PRODUCTION_CONTENT_CDN_DISTRIBUTION_ID: ${PRODUCTION_CONTENT_CDN_DISTRIBUTION_ID}"
 
     # Upload tarball to S3 so it is available via URL: https:#cdn.redwolfsecurity.com/ff/ff_agent/set_environment.tgz
     node cdn_upload.js \
