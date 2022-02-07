@@ -162,6 +162,9 @@ function assert_basic_components {
     # Install nodejs suite and all its fixings (not using "apt")
     assert_clean_exit install_nodejs_suite
 
+    # Install pm2
+    assert_clean_exit pm2_ensure
+
     # Note: assert_clean_exit aborts on error
     assert_clean_exit install_ff_agent
 
@@ -632,7 +635,7 @@ function install_ff_agent {
     esac
     
     # Install ff_agent
-    npm install "${FF_CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}.tgz" || { set_state "${FUNCNAME[0]}" 'terminal_error_failed_to_install_ff_agent'; abort; }
+    npm install "${FF_CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}.tgz" --global || { set_state "${FUNCNAME[0]}" 'terminal_error_failed_to_install_ff_agent'; abort; }
 
     set_state "${FUNCNAME[0]}" 'success'
     return 0
@@ -680,85 +683,6 @@ function install_node_ubuntu {
     set_state "${FUNCNAME[0]}" 'success'
     return 0
 }
-
-# Commented out - we only add local n/npm/node installation without removing anything existing.
-# ###############################################################################
-# #
-# # This function uninstalls any 'n' and/or 'npm' installled outside ff_agent home directory.
-# #
-# # Most of the ways to uninstall 'n' implemented here were picked from 
-# # official 'n' github bug tracker: "How to uninstall n? #169"
-# # https://github.com/tj/n/issues/169
-# #
-# function uninstall_n_outside_agent_home {
-#   set_state "${FUNCNAME[0]}" "uninstalling"
-
-#   # Call 'uninstall' on 'n' itself. n uninstall has been added in v4.1.0.
-#   if [ "$(which n | grep -v "${AGENT_HOME}")" != "" ]; then
-#     echo "y" | sudo n uninstall
-#   fi
-
-#   # Example output:
-#   #    Uninstalling node and npm
-#   #    /usr/local/bin/node
-#   #    /usr/local/bin/npm
-#   #    /usr/local/bin/npx
-#   #    /usr/local/include/node
-#   #    /usr/local/lib/node_modules/npm
-#   #    /usr/local/share/doc/node
-#   #    /usr/local/share/man/man1/node.1
-#   #    /usr/local/share/systemtap/tapset/node.stp
-
-#   # Uninstall 'n' if it was installed under "/usr" using "npm install --global n"
-#   WHICH_NPM="$(which npm)"
-#   if [ "${WHICH_NPM}" != "" ]; then
-#     # Only uninstall if npm installed under /user
-#     if [[ "${WHICH_NPM}" =~ ^/usr/ ]]; then
-#       npm r -g n
-#     fi
-#   fi
-
-#   # Remove n node_modules
-#   if [ -d /usr/local/lib/node_modules/n ]; then
-#     sudo rm -fr /usr/local/lib/node_modules/n
-#   fi
-
-#   # Remove n cache
-#   if [ -d /usr/local/n ]; then
-#     sudo rm -rf /usr/local/n
-#   fi
-
-#   # Remove n (if file exists)
-#   if [ -f /usr/local/bin/n ]; then
-#     sudo rm -fr /usr/local/bin/n
-#   fi
-
-#   # Remove n (if symlink exists)
-#   if [ -L /usr/local/bin/n ]; then
-#     sudo rm -fr /usr/local/bin/n
-#   fi
-
-#   # Remove n (if file exists) from other possible location
-#   if [ -f /usr/bin/n ]; then
-#     sudo rm -fr /usr/bin/n
-#   fi
-
-#   # Remove "global" npm libraries folder
-#   if [ -d /usr/lib/node_modules ]; then
-#     sudo rm -fr /usr/lib/node_modules
-#   fi
-
-#   # Also on agent nodejs was installed via apt:
-#   # sudo apt remove -y nodejs
-#   DPGK_NODEJS_CHECK="$(dpkg --get-selections | grep nodejs | grep '[[:space:]]install$')"
-#   if [ ! -z "${DPGK_NODEJS_CHECK}" ]; then
-#     sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true remove nodejs
-#   fi
-
-#   # Chage state and return success
-#   set_state "${FUNCNAME[0]}" 'success'
-#   return 0
-# }
 
 ###############################################################################
 #
@@ -948,6 +872,201 @@ EOT
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
+
+
+###############################################################################
+# Category: process
+# is_pm2_running_as_me
+# Will return 0 if it is, 1 if it is not
+function is_pm2_running_as_me () {
+    set_state "${FUNCNAME[0]}" 'started'
+    # Process will look like PM2 v4.5.5: God Daemon (/home/user/.pm2)
+    local PATTERN="PM2 .*: God Daemon"
+
+    # Check if process is running as local user.
+    is_process_running_as_me "${PATTERN}"
+    STATUS=$?
+
+    set_state "${FUNCNAME[0]}" 'success'
+
+    return ${STATUS}
+}
+export -f is_pm2_running_as_me
+
+###############################################################################
+# Category: process
+# pm2_install
+# Will install pm2 if there is no command 'pm2'
+# Will not start it
+function pm2_install () {
+    set_state "${FUNCNAME[0]}" 'started'
+
+    local NPM_PACKAGE="pm2"
+    local VERSION="latest"
+
+    # We will try to stop it. But that won't stop us from uninstalling it.
+    is_pm2_running_as_me && stop_pm2
+
+    local PM2=$(command_exists "${NPM_PACKAGE}" )
+    [ "${PM2}" != "" ] && { set_state "${FUNCNAME[0]}" 'success_no_action_already_installed'; return 0; }
+
+    local NPM=$(command_exists npm)
+    [ "${NPM}" = "" ] && { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
+
+    # Actually install it -- globally
+    ${NPM} install --global "${NPM_PACKAGE}@${VERSION}"  || { set_state "${FUNCNAME[0]}" 'error_installing_pm2_npm'; return 1; }
+
+    # Verify command actually exists in path after we have installed it
+    local PM2=$(command_exists "${NPM_PACKAGE}" )
+    [ "${PM2}" == "" ] && { set_state "${FUNCNAME[0]}" 'error_installing_pm2_command_not_found'; return 0; }
+
+    set_state "${FUNCNAME[0]}" 'success'
+}
+export -f pm2_install
+
+###############################################################################
+# Category: process
+# pm2_configure
+# Configures pm2 the way we want it configured
+function pm2_configure () {
+    set_state "${FUNCNAME[0]}" 'started'
+    # Now it is installed, and command is in path. So we shall configure it
+    # Configure it to automatically save state
+    timeout 30 pm2 set pm2:autodump true            || { set_state "${FUNCNAME[0]}" "pm2_configure_autodump_error"; return 1; }
+
+    # Configure it to rotate logs
+    timeout 45 pm2 install pm2-logrotate            || { set_state "${FUNCNAME[0]}" "pm2_install_logrotate_error"; return 1; }
+    timeout 30 pm2 set pm2-logrotate:max_size 20M   || { set_state "${FUNCNAME[0]}" "pm2_configure_logrotate_error"; return 1; }
+    timeout 30 pm2 set pm2-logrotate:retain 7       || { set_state "${FUNCNAME[0]}" "pm2_configure_logrotate_error"; return 1; }
+    timeout 30 pm2 set pm2-logrotate:compress true  || { set_state "${FUNCNAME[0]}" "pm2_configure_logrotate_error"; return 1; }
+
+    # configure it to rotate logs every hour
+    timeout 30 pm2 set pm2-logrotate:rotateInterval '0 0 * * * *'  || { set_state "${FUNCNAME[0]}" "pm2_configure_logrotate_error"; return 1; }
+    timeout 30 pm2 update || { set_state "${FUNCNAME[0]}" "pm2_update_error"; return 1; }
+
+    set_state "${FUNCNAME[0]}" 'success'
+}
+
+###############################################################################
+# Category: process
+# pm2_uninstall
+# Removes PM2
+function pm2_uninstall () {
+    set_state "${FUNCNAME[0]}" 'started'
+
+    local PACKAGE="pm2"
+
+    # If it is not installed, we are done.
+    is_pm2_installed || { set_state "${FUNCNAME[0]}" 'success_no_action_not_installed'; return 1; }
+
+    # It's installed, so we will try to remove it
+    local NPM=$(command_exists npm)
+    [ "${NPM}" = "" ] && { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
+    ${NPM} remove --global "${PACKAGE}" || { set_state "${FUNCNAME[0]}" 'error_uninstalling_package'; return 1; }
+
+    # Verify it is removed. If this returns 1, it is not found. If it returns 0, we still have it.
+    is_pm2_installed || { set_state "${FUNCNAME[0]}" 'success'; return 0; }
+
+    set_state "${FUNCNAME[0]}" 'error_validating_uninstallation'
+}
+export -f pm2_uninstall
+
+
+###############################################################################
+# Category: process
+# is_pm2_installed
+# Checks if pm2 is installed
+# Returns 0 if it is, 1 if it isn't
+function is_pm2_installed () {
+    set_state "${FUNCNAME[0]}" 'started'
+    local STATUS=0
+    local PACKAGE="pm2"
+    local NPM=$(command_exists npm) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
+
+    # If it not installed, set STATUS=1
+    ${NPM} list "${PACKAGE}" --global >/dev/null || STATUS=1
+
+    set_state "${FUNCNAME[0]}" 'success'
+    return ${STATUS}
+}
+export is_pm2_installed
+
+###############################################################################
+# Category: process
+# pm2_start
+function pm2_start () {
+    set_state "${FUNCNAME[0]}" 'started'
+
+    # Check if it is running. If it is, we're happy.
+    is_pm2_running_as_me && { set_state "${FUNCNAME[0]}" 'success_no_action_pm2_not_running'; return 1; }
+
+    local PM2=$( command_exists pm2 )
+    [ -z "${PM2}" ] && { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_pm2_command'; return 0; }
+    $PM2 start
+
+    # Check if it is running. If it is, we're happy.
+    # Note: pm2 can start and still return non-zero (i.e. it started but there was no ecosystem.config.js
+    # So it is not sufficient to test for return code, but if it is running as me, then it is at least started
+    is_pm2_running_as_me && { set_state "${FUNCNAME[0]}" 'success'; return 1; }
+
+    set_state "${FUNCNAME[0]}" 'error_failed_to_start_pm2'
+}
+export -f pm2_start
+
+###############################################################################
+# Category: process
+# pm2_stop stops the running pm2 daemon running as the current user.
+# does not stop any root level or other user pm2 daemons.
+#
+function pm2_stop () {
+    set_state "${FUNCNAME[0]}" 'started'
+
+    # Check if it is running. If it isn't, we finish.
+    is_pm2_running_as_me || { set_state "${FUNCNAME[0]}" 'success_no_action_pm2_not_running'; return 1; }
+
+    # Check if we have the pm2 command. We need it to be able to stop pm2
+    local PM2=$( command_exists pm2 ) || { set_state "${FUNCNAME[0]}" 'error_pm2_command_not_found'; return 1; }
+
+    # Try and kill pm2
+    # Todo: do this with timeout - sometimes pm2 hangs. We ask it to kill itself, but sometimes the cat comes back :)
+    $PM2 kill || { set_state "${FUNCNAME[0]}" 'error_pm2_kill_failed'; return 1; }
+
+    # Verify that it is actually stopped. If it is still running after we killed it, it is a problem.
+    is_pm2_running_as_me || { set_state "${FUNCNAME[0]}" 'error_unable_to_validate_pm2_daemon_gone_postcondition_pm2_still_running'; return 1; }
+
+    # We have stopped it, and it is not running.
+    set_state "${FUNCNAME[0]}" 'success'
+}
+export -f pm2_stop
+
+###############################################################################
+# Category: process
+# pm2_ensure
+# This ensures that pm2 is running, and working as we wish. aborts otherwise.
+# If it is not installed, we install it.
+function pm2_ensure () {
+    set_state "${FUNCNAME[0]}" 'started'
+
+    # We are good if pm2 is running as me
+    # This is the fastest check we can do, so we do it first
+    is_pm2_running_as_me && { set_state "${FUNCNAME[0]}" 'success_no_action_already_running'; return 0; }
+
+    # It is not running, so it might not be installed.
+    # Is pm2 installed? If not, install it
+    is_pm2_installed || pm2_install || { set_state "${FUNCNAME[0]}" 'error_failed_to_install'; abort; }
+
+    # Now it has to at least be installed, and not running, so we try to start it.
+    pm2_start
+
+    is_pm2_running_as_me || { set_state "${FUNCNAME[0]}" 'error_not_running_as_user'; return 1; }
+
+    # Now it is running, so let's configure it
+    pm2_configure || { set_state "${FUNCNAME[0]}" 'error_configuring'; return 1; }
+
+    # If all above works, we have it running
+    set_state "${FUNCNAME[0]}" 'success'
+}
+export -f pm2_ensure
 
 ###############################################################################
 #
