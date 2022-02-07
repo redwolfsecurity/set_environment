@@ -1395,7 +1395,6 @@ export -f terminal_reset
 
 ###############################################################################
 # Category: process
-<<<<<<< HEAD
 # checks if a process is running as current user or effectively as current user.
 # Note we are checking for the pattern at the beginning of the command by default
 function is_process_running_as_me () {
