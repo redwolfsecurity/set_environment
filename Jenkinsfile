@@ -32,7 +32,7 @@ pipeline {
         TARBALL_FILEPATH = "${TEMPORARY_DIR}/${TARBALL_FILENAME}"
       }
       steps {
-        sh 'build_tarball'
+        sh './build_tarball'
       }
     }
   }
