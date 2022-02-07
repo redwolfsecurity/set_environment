@@ -8,105 +8,175 @@ set -x
 
 ###############################################################################
 #
+# Function makes sure "${FF_AGENT_HOME}/bin" folder is created.
+#
+function ensure_ff_agent_bin_exists {
+
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Define required variables
+  local REQUIRED_VARIABLES=(
+    FF_AGENT_HOME
+  )
+
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
+  done
+
+  # Define target directory
+  TARGET_DIR="${FF_AGENT_HOME}/bin"
+
+  # Check if target directory exists
+  [ -d "${TARGET_DIR}" ] || {
+    # Does not exist. Create new.
+    mkdir "${TARGET_DIR}" || { set_state "${FUNCNAME[0]}" 'failed_to_create_directory'; return 1; }
+  }
+
+  set_state "${FUNCNAME[0]}" 'success'
+}
+
+###############################################################################
+#
+# Function makes sure symlink exists (or create new one if missing).
+#    ${FF_AGENT_HOME}/bin/set_environment_install -> ${FF_AGENT_HOME}/git/redwolfsecurity/set_environment/install
+#
+function ensure_set_environment_install_exists {
+
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Define required variables
+  local REQUIRED_VARIABLES=(
+    FF_AGENT_HOME
+  )
+
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
+  done
+
+  # Define symlink
+  SYMLINK="${FF_AGENT_HOME}/bin/set_environment_install"
+
+  # Define target file (which new symlink must point to)
+  TARGET_FILE="${FF_AGENT_HOME}/git/redwolfsecurity/set_environment/install"
+  
+  # Check symlink exists. Note: -L returns true if the "file" exists and is a symbolic link (the linked file may or may not exist).
+  [ -L "${SYMLINK}" ] || { 
+      # SYMLINK is missing. Try to create new symlink.
+      ln -s "${TARGET_FILE}" "${SYMLINK}" || { set_state "${FUNCNAME[0]}" 'failed_to_create_symlink'; return 1; }
+  }
+
+  # Check the target file is presend (symlink is not broken)
+  [ -f "${TARGET_FILE}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_missing'; return 1; }
+
+  # Check the target file is executable. Note: extra "-f" check added here since "-x" can say "yes, executable", but target points to directory.
+  [[ -f "${TARGET_FILE}" && -x "${TARGET_FILE}" ]] || { set_state "${FUNCNAME[0]}" 'error_target_file_not_executable'; return 1; }
+
+  set_state "${FUNCNAME[0]}" 'success'
+}
+
+###############################################################################
+#
 # Function installs docker. It takes 1 argement "minimum version", if not provided,
 # then by default version 19 will be used.
 #
 # Supports Ubuntu 16.04, 18.04, 20.04
 #
 # Require environment variables set:
-#   - BEST_USER_TO_RUN_AS
+#   - FF_AGENT_USERNAME
 #
 function install_docker {
 
-    set_state "${FUNCNAME[0]}" 'started'
+  set_state "${FUNCNAME[0]}" 'started'
 
-    # Define required variables
-    local REQUIRED_VARIABLES=(
-      BEST_USER_TO_RUN_AS
-    )
+  # Define required variables
+  local REQUIRED_VARIABLES=(
+    FF_AGENT_USERNAME
+  )
 
-    # Check required environment variables are set
-    for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-      ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
-    done
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
+  done
 
-    # Take MINIMUM_VERSION argument, if empty, then set default value
-    MINIMUM_VERSION="${1}"
-    if [ -z "${MINIMUM_VERSION}" ]; then
-        MINIMUM_VERSION=19
-    fi
+  # Take MINIMUM_VERSION argument, if empty, then set default value
+  MINIMUM_VERSION="${1}"
+  if [ -z "${MINIMUM_VERSION}" ]; then
+      MINIMUM_VERSION=19
+  fi
 
-    # Check if docker is installed and has version >= minimally required
-    ACTUAL_VERSION="$( get_installed_docker_version )"
-    if [ ! -z "${ACTUAL_VERSION}" ] && [ "${ACTUAL_VERSION}" -ge "${MINIMUM_VERSION}" ]; then
-        set_state "${FUNCNAME[0]}" "no_action_already_installed"
-        return 0
-    fi
+  # Check if docker is installed and has version >= minimally required
+  ACTUAL_VERSION="$( get_installed_docker_version )"
+  if [ ! -z "${ACTUAL_VERSION}" ] && [ "${ACTUAL_VERSION}" -ge "${MINIMUM_VERSION}" ]; then
+      set_state "${FUNCNAME[0]}" "no_action_already_installed"
+      return 0
+  fi
 
-    # OK We install since we don't have the minimum version, or docker is not installed
+  # OK We install since we don't have the minimum version, or docker is not installed
 
-    # Get ID, RELEASE and DISTRO and verify the values are actually set
-    LSB_ID=$( get_lsb_id ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
-    [ "${LSB_ID}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
+  # Get ID, RELEASE and DISTRO and verify the values are actually set
+  LSB_ID=$( get_lsb_id ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
+  [ "${LSB_ID}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
 
-    RELEASE=$( get_lsb_release ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }  # 18.04, 20.04, ...
-    [ "${RELEASE}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }
+  RELEASE=$( get_lsb_release ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }  # 18.04, 20.04, ...
+  [ "${RELEASE}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }
 
-    DISTRO=$( get_lsb_codename ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; }  # bionic, focal, ...
-    [ "${DISTRO}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; } 
+  DISTRO=$( get_lsb_codename ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; }  # bionic, focal, ...
+  [ "${DISTRO}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; } 
 
-    ARCHITECTURE=$( get_hardware_architecture ) || { set_state "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
+  ARCHITECTURE=$( get_hardware_architecture ) || { set_state "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
 
-    # Only Ubuntu for now
-    if [ "${LSB_ID}" != "Ubuntu" ]; then
-        set_state "${FUNCNAME[0]}" "error_docker_install_unsupported_operating_system"
-        return 1
-    fi
-
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-    [ "${?}" != "0" ] && { set_state "${FUNCNAME[0]}" "failed_to_add_gpg_key"; return 1; }
-
-    sudo add-apt-repository "deb [arch=${ARCHITECTURE}] https://download.docker.com/linux/ubuntu ${DISTRO} stable"
-    [ "${?}" != "0" ] && { set_state "${FUNCNAME[0]}" "failed_to_add_repository"; return 1; }
-
-    apt_update
-
-    apt_install docker-ce || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_ce"; return 1; }
-    apt_install docker-compose || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_compose"; return 1; }
-    # containerd is available as a daemon for Linux and Windows. It manages the complete container lifecycle of its host system, from image transfer and storage to container execution and supervision to low-level storage to network attachments and beyond.
-    apt_install containerd.io || { set_state "${FUNCNAME[0]}" "failed_to_install_containerd_io"; return 1; }
-
-    # Add ourselves as a user to be able to run docker
-    GROUP="docker"
-    # Check the 'docker' group exists.
-    if ! check_group_exists "${GROUP}"; then
-      set_state "${FUNCNAME[0]}" "error_group_docker_does_not_exist"
+  # Only Ubuntu for now
+  if [ "${LSB_ID}" != "Ubuntu" ]; then
+      set_state "${FUNCNAME[0]}" "error_docker_install_unsupported_operating_system"
       return 1
-    fi
+  fi
 
-    # We might not have sudo, so we should request command to be run.
-    # Check if user is in this group. If not, add them
-    if [ ! is_user_in_group "${BEST_USER_TO_RUN_AS}" "${GROUP}" ]; then
-      # Not in group
-      sudo usermod -aG "${GROUP}" "${BEST_USER_TO_RUN_AS}"
-      if [ "${?}" != "0" ]; then set_state "${FUNCNAME[0]}" "failed_to_modify_docker_user_group"; return 1; fi
-      # Now check that we actually are in the group. This will work in current shell because it reads the groups file directly
-      [ ! is_user_in_group "${BEST_USER_TO_RUN_AS}" "${GROUP}" ] || { set_state "${FUNCNAME[0]}" "failed_postcondition_user_in_group"; return 1; }
-    fi
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+  [ "${?}" != "0" ] && { set_state "${FUNCNAME[0]}" "failed_to_add_gpg_key"; return 1; }
 
-    # Postcondition checks
-    # Verify docker is properly set up
-    # Note we are running via sudo, and if we added user to the ${GROUP} then it won't be applied in this shell.
-    set_secret docker_release "$( sudo --user=${BEST_USER_TO_RUN_AS} docker --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_to_get_release"; return 1; }
-    set_secret docker_compose_release "$( sudo --user=${BEST_USER_TO_RUN_AS} docker-compose --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_compose_to_get_release"; return 1; }
+  sudo add-apt-repository "deb [arch=${ARCHITECTURE}] https://download.docker.com/linux/ubuntu ${DISTRO} stable"
+  [ "${?}" != "0" ] && { set_state "${FUNCNAME[0]}" "failed_to_add_repository"; return 1; }
 
-    # Check if installed docker version is less than minimally required
-    if [ "$( get_installed_docker_version )" -lt "${MINIMUM_VERSION}" ]; then
-    	set_state "${FUNCNAME[0]}" "failed_to_install_did_not_pass_version_check"
-	    return 1
-    fi
+  apt_update
 
-    set_state "${FUNCNAME[0]}" 'success'
+  apt_install docker-ce || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_ce"; return 1; }
+  apt_install docker-compose || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_compose"; return 1; }
+  # containerd is available as a daemon for Linux and Windows. It manages the complete container lifecycle of its host system, from image transfer and storage to container execution and supervision to low-level storage to network attachments and beyond.
+  apt_install containerd.io || { set_state "${FUNCNAME[0]}" "failed_to_install_containerd_io"; return 1; }
+
+  # Add ourselves as a user to be able to run docker
+  GROUP="docker"
+  # Check the 'docker' group exists.
+  if ! check_group_exists "${GROUP}"; then
+    set_state "${FUNCNAME[0]}" "error_group_docker_does_not_exist"
+    return 1
+  fi
+
+  # We might not have sudo, so we should request command to be run.
+  # Check if user is in this group. If not, add them
+  if [ ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}" ]; then
+    # Not in group
+    sudo usermod -aG "${GROUP}" "${FF_AGENT_USERNAME}"
+    if [ "${?}" != "0" ]; then set_state "${FUNCNAME[0]}" "failed_to_modify_docker_user_group"; return 1; fi
+    # Now check that we actually are in the group. This will work in current shell because it reads the groups file directly
+    [ ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}" ] || { set_state "${FUNCNAME[0]}" "failed_postcondition_user_in_group"; return 1; }
+  fi
+
+  # Postcondition checks
+  # Verify docker is properly set up
+  # Note we are running via sudo, and if we added user to the ${GROUP} then it won't be applied in this shell.
+  set_secret docker_release "$( sudo --user=${FF_AGENT_USERNAME} docker --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_to_get_release"; return 1; }
+  set_secret docker_compose_release "$( sudo --user=${FF_AGENT_USERNAME} docker-compose --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_compose_to_get_release"; return 1; }
+
+  # Check if installed docker version is less than minimally required
+  if [ "$( get_installed_docker_version )" -lt "${MINIMUM_VERSION}" ]; then
+    set_state "${FUNCNAME[0]}" "failed_to_install_did_not_pass_version_check"
+    return 1
+  fi
+
+  set_state "${FUNCNAME[0]}" 'success'
 }
 
 ###############################################################################
@@ -115,26 +185,26 @@ function install_docker {
 # On errror: function aborts (so no need to errorcheck on caller side)
 #
 function install_set_environment_baseline {
-    set_state "${FUNCNAME[0]}" 'started'
+  set_state "${FUNCNAME[0]}" 'started'
 
-    # Discover environment (choose user, make sure it's home folder exists, check FF_CONTENT_URL is set etc.)
-    discover_environment || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_discover_environment"; abort; }
+  # Discover environment (choose user, make sure it's home folder exists, check FF_CONTENT_URL is set etc.)
+  discover_environment || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_discover_environment"; abort; }
 
-    # Analyzes currently selected user and might call "background_install()" to re-run the installer under a different user
-    # Note: it have a dependency: variable BEST_USER_TO_RUN_AS - must be set (by calling choose_ff_agent_home)
-    if [ "$( check_if_need_background_install )" == "true" ]; then
-      background_install "${BEST_USER_TO_RUN_AS}"
-      return 0
-      # Note: we can not "exit 0" here since installer might be sourced by "root"
-    fi
+  # Analyzes currently selected user and might call "background_install()" to re-run the installer under a different user
+  # Note: it have a dependency: variable FF_AGENT_USERNAME - must be set (by calling choose_ff_agent_home)
+  if [ "$( check_if_need_background_install )" == "true" ]; then
+    background_install "${FF_AGENT_USERNAME}"
+    return 0
+    # Note: we can not "exit 0" here since installer might be sourced by "root"
+  fi
 
-    # Put logs in best location
-    setup_logging || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_setup_logging"; abort; }
+  # Put logs in best location
+  setup_logging || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_setup_logging"; abort; }
 
-    # Install set of basic packages, bash functions, .bashrc and .profile files
-    assert_clean_exit assert_basic_components || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_assert_basic_components"; abort; }
+  # Install set of basic packages, bash functions, .bashrc and .profile files
+  assert_clean_exit assert_basic_components || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_assert_basic_components"; abort; }
 
-    set_state "${FUNCNAME[0]}" 'success'
+  set_state "${FUNCNAME[0]}" 'success'
 }
 
 ###############################################################################
@@ -143,32 +213,34 @@ function install_set_environment_baseline {
 # different means (example: docker, n, npm, nodejs)), bash functions, .bashrc and .profile files.
 #
 function assert_basic_components {
-    set_state "${FUNCNAME[0]}" 'started'
+  set_state "${FUNCNAME[0]}" 'started'
 
-    # Install basic packages before installing anything else. This will install "curl", thus "set_state" will be able to POST JSON.
-    assert_clean_exit apt_install_basic_packages
-    
-    # Install NTP and make sure timesyncd is disabled (not working in parallel)
-    # assert_clean_exit replace_timesyncd_with_ntpd
+  # Install basic packages before installing anything else. This will install "curl", thus "set_state" will be able to POST JSON.
+  assert_clean_exit apt_install_basic_packages
+  
+  # Install NTP and make sure timesyncd is disabled (not working in parallel)
+  # assert_clean_exit replace_timesyncd_with_ntpd
 
-    # Before installing locally (into local ff_agent/) packages, like "n / npm / nodejs" we need to put in place ff_agent .bashrc and .profile
-    # TODO: DO WE REALLY DEPEND ON THIS BEFORE INSTALLING n/npm/nodejs??
-    assert_clean_exit install_ff_agent_bashrc
-    assert_clean_exit install_ff_bash_functions   # Install ff_bash_functions -> ff_agent/lib/bash/, or abort.
+  # Before installing locally (into local ff_agent/) packages, like "n / npm / nodejs" we need to put in place ff_agent .bashrc and .profile
+  # TODO: DO WE REALLY DEPEND ON THIS BEFORE INSTALLING n/npm/nodejs??
+  assert_clean_exit install_ff_agent_bashrc
+  
+  # Install docker (not using "apt")
+  #assert_clean_exit install_docker
 
-    # Install docker (not using "apt")
-    #assert_clean_exit install_docker
+  # Install nodejs suite and all its fixings (not using "apt")
+  assert_clean_exit install_nodejs_suite
 
-    # Install nodejs suite and all its fixings (not using "apt")
-    assert_clean_exit install_nodejs_suite
+  # Note: assert_clean_exit aborts on error
+  assert_clean_exit install_ff_agent
 
-    # Install pm2
-    assert_clean_exit pm2_ensure
+  # Install pm2
+  assert_clean_exit pm2_ensure
 
-    # Note: assert_clean_exit aborts on error
-    assert_clean_exit install_ff_agent
+  # Note: assert_clean_exit aborts on error
+  assert_clean_exit install_ff_agent
 
-    set_state "${FUNCNAME[0]}" 'success'
+  set_state "${FUNCNAME[0]}" 'success'
 }
 
 ###############################################################################
@@ -186,17 +258,17 @@ function assert_core_credentials {
 # Create .npmrc credentials
 #
 function create_npmrc_credentials {
-    set_state "${FUNCNAME[0]}" 'started'
+  set_state "${FUNCNAME[0]}" 'started'
 
-    # Check required environment variables are set
-    [ "${HOME}" == "" ] && { set_state "${FUNCNAME[0]}" 'error_getting_home_dir'; return 1; }
-    [ "${USER}" == "" ] && { set_state "${FUNCNAME[0]}" 'error_user_environment_variable_unset'; return 1; }
+  # Check required environment variables are set
+  [ "${HOME}" == "" ] && { set_state "${FUNCNAME[0]}" 'error_getting_home_dir'; return 1; }
+  [ "${USER}" == "" ] && { set_state "${FUNCNAME[0]}" 'error_user_environment_variable_unset'; return 1; }
 
-    # TODO: Get these credentials from secret manager
-    # TODO: .npmrc can substitue environment variables -- that's at least a touch more secure if we run npm from our FF framework
+  # TODO: Get these credentials from secret manager
+  # TODO: .npmrc can substitue environment variables -- that's at least a touch more secure if we run npm from our FF framework
 
-    set_state "${FUNCNAME[0]}" 'success'
-    return 0
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
 }
 
 ###############################################################################
@@ -204,27 +276,27 @@ function create_npmrc_credentials {
 # Assert .npmrc credentials
 #
 function assert_npmrc_credentials {
-    set_state "${FUNCNAME[0]}" 'started'
+  set_state "${FUNCNAME[0]}" 'started'
 
-    # TODO: Make a more rigorous check -- can we actually use these .npmrc credentials? They might be wrong or out of date!
+  # TODO: Make a more rigorous check -- can we actually use these .npmrc credentials? They might be wrong or out of date!
 
-    NPMRC_FILE="${HOME}/.npmrc"
-    if [ ! -e "${NPMRC_FILE}" ]; then
-        set_state "${FUNCNAME[0]}" 'fatal_error_asserting_npmrc_credentials'; return 1;
-        error "assert_npmrc_credentials can't find ${NPMRC_FILE} which is required."
-        abort
-    fi
+  NPMRC_FILE="${HOME}/.npmrc"
+  if [ ! -e "${NPMRC_FILE}" ]; then
+      set_state "${FUNCNAME[0]}" 'fatal_error_asserting_npmrc_credentials'; return 1;
+      error "assert_npmrc_credentials can't find ${NPMRC_FILE} which is required."
+      abort
+  fi
 
-    if file_contains_pattern "${NPMRC_FILE}" "development.acme.com"
-    then
-        :
-    else
-        set_state "${FUNCNAME[0]}" 'fatal_error_asserting_npmrc_credentials'
-        error "assert_npmrc_credentials can't find credentials in ${NPMRC_FILE}"
-        abort
-    fi
+  if file_contains_pattern "${NPMRC_FILE}" "development.acme.com"
+  then
+      :
+  else
+      set_state "${FUNCNAME[0]}" 'fatal_error_asserting_npmrc_credentials'
+      error "assert_npmrc_credentials can't find credentials in ${NPMRC_FILE}"
+      abort
+  fi
 
-    set_state "${FUNCNAME[0]}" 'success'
+  set_state "${FUNCNAME[0]}" 'success'
 }
 
 ###############################################################################
@@ -234,42 +306,42 @@ function assert_npmrc_credentials {
 #
 function apt_install_basic_packages {
 
-    set_state "${FUNCNAME[0]}" 'started'
+  set_state "${FUNCNAME[0]}" 'started'
 
-    # Update apt index and installed components, before installing additional packages.
-    assert_clean_exit apt_update
-    assert_clean_exit apt_upgrade
+  # Update apt index and installed components, before installing additional packages.
+  assert_clean_exit apt_update
+  assert_clean_exit apt_upgrade
 
-    # Define list of all required packages (by category, comment why we need the package for non-obvious ones)
-    local REQUIRED_PACKAGES=(
-        apt-utils # apt-utils required to avoid error: debconf: delaying package configuration, since apt-utils is not installed
-        apt-transport-https # APT transport for downloading via the HTTP Secure protocol (HTTPS)
-        software-properties-common # Part of "apt": manage the repositories that you install software from 3rd party repos (i.e. add their repo + gpg key)
+  # Define list of all required packages (by category, comment why we need the package for non-obvious ones)
+  local REQUIRED_PACKAGES=(
+      apt-utils # apt-utils required to avoid error: debconf: delaying package configuration, since apt-utils is not installed
+      apt-transport-https # APT transport for downloading via the HTTP Secure protocol (HTTPS)
+      software-properties-common # Part of "apt": manage the repositories that you install software from 3rd party repos (i.e. add their repo + gpg key)
 
-        # Curl must exist for this script and many others
-        curl
+      # Curl must exist for this script and many others
+      curl
 
-        # The ff_bash_functions require jq
-        jq
+      # The ff_bash_functions require jq
+      jq
 
-        # This script requires grep
-        grep
+      # This script requires grep
+      grep
 
-        # Docker requires these
-        gnupg2
-        lsb-release
+      # Docker requires these
+      gnupg2
+      lsb-release
 
-        # System: CA certificates
-        ca-certificates # Common CA certificates - Docker requires
-    )
+      # System: CA certificates
+      ca-certificates # Common CA certificates - Docker requires
+  )
 
-    # Temporarily disabled because Dmitry broke it all
-    # add_to_install_if_missing ${REQUIRED_PACKAGES[@]}
+  # Temporarily disabled because Dmitry broke it all
+  # add_to_install_if_missing ${REQUIRED_PACKAGES[@]}
 
-    apt_install ${REQUIRED_PACKAGES[@]} || { set_state "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
+  apt_install ${REQUIRED_PACKAGES[@]} || { set_state "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
 
-    set_state "${FUNCNAME[0]}" 'success'
-    return 0
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
 }
 
 # ##########################################################################################
@@ -414,58 +486,20 @@ function apt_install_basic_packages {
 
 ###############################################################################
 #
-# Install ff_bash_functions -> ff_agent/lib/bash/
-# On success: return 0
-# On error f-n sets state and return nonzero value.
-# Depend on:
-#   AGENT_HOME variable
-#   current directory "./" should be root of "set_environment" project.
-#
-function install_ff_bash_functions {
-    set_state "${FUNCNAME[0]}" 'started'
-
-    # Check ${AGENT_HOME} is set
-    if [ -z "${AGENT_HOME}" ]; then
-        # Error: required environment variable AGENT_HOME is not set.
-        set_state "${FUNCNAME[0]}" 'error_required_variable_not_set_agent_home'
-        return 1
-    fi
-
-    # Check if target folder exists
-    TARGET_DIR="${AGENT_HOME}/lib/bash"
-    if [ ! -d "${TARGET_DIR}" ]; then
-        # Desitnation folder doesn't exist, try to create
-        mkdir -p "${TARGET_DIR}"
-        if [ ${?} -ne 0 ]; then
-            # Error: failed to create folder
-            set_state "${FUNCNAME[0]}" 'error_failed_create_folder'
-            return 1
-        fi
-    fi
-
-    # Copy files to the target folder
-    assert_clean_exit cp ./src/ff_bash_functions "${TARGET_DIR}"
-
-    set_state "${FUNCNAME[0]}" 'success'
-    return 0
-}
-
-###############################################################################
-#
 # Сreate a new ff_agent/.profile file and source it from the ~/.bashrc
 # and ~/.profile files of the selected user.
 #
 # Require environment variables set:
-#   - BEST_USER_TO_RUN_AS
-#   - AGENT_HOME
+#   - FF_AGENT_USERNAME
+#   - FF_AGENT_HOME
 #
 function install_ff_agent_bashrc {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Define required variables
   local REQUIRED_VARIABLES=( 
-    BEST_USER_TO_RUN_AS
-    AGENT_HOME
+    FF_AGENT_USERNAME
+    FF_AGENT_HOME
   )
 
   # Check required environment variables are set
@@ -473,17 +507,17 @@ function install_ff_agent_bashrc {
     ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
   done
   
-  # Make sure ${AGENT_HOME} folder exists
-  if [ ! -d "${AGENT_HOME}" ]; then
-    # ${AGENT_HOME} folder is missing. Don't try to create it (it is responsibility of ensure_agent_home_exists()).
+  # Make sure ${FF_AGENT_HOME} folder exists
+  if [ ! -d "${FF_AGENT_HOME}" ]; then
+    # ${FF_AGENT_HOME} folder is missing. Don't try to create it (it is responsibility of ensure_ff_agent_home_exists()).
     # Report an error and abort.
-    error "AGENT_HOME='${AGENT_HOME}' directory Does not exist. Aborting."
+    error "FF_AGENT_HOME='${FF_AGENT_HOME}' directory Does not exist. Aborting."
     abort
   fi
 
   # Define location of two profile files
   local HOME_PROFILE_FILE="${HOME}/.profile"
-  FF_AGENT_PROFILE_FILE="${AGENT_HOME}/.profile"    # example: /home/ubuntu/ff_agent/.profile  (Note: FF_AGENT_PROFILE_FILE is not local, but shell environment used in other install functions)
+  FF_AGENT_PROFILE_FILE="${FF_AGENT_HOME}/.profile"    # example: /home/ubuntu/ff_agent/.profile  (Note: FF_AGENT_PROFILE_FILE is not local, but shell environment used in other install functions)
 
   # Define location of .bashrc file
   local HOME_BASHRC_FILE="${HOME}/.bashrc"
@@ -523,8 +557,8 @@ EOT
   # Inject sourcing ff_bash_functions
 
   # Define path to the installed ff_bash_functions
-  local FF_BASH_FUNCTIONS_PATH="${AGENT_HOME}/lib/bash/ff_bash_functions"
-
+  local FF_BASH_FUNCTIONS_PATH="${FF_AGENT_HOME}/git/redwolfsecurity/set_environment/src/ff_bash_functions"
+  
   # Inject into the custom .profile to source ff_bash_functions (if missing)
   # Search expected line
   TARGET_FILE="${FF_AGENT_PROFILE_FILE}"
@@ -573,7 +607,7 @@ EOT
   # Inject ${FF_AGENT_BIN} into PATH in .profile and modify current PATH if needed. 
   
   # Define the path to ff_agent/bin folder, which we will inject into PATH
-  local FF_AGENT_BIN="${AGENT_HOME}/bin"
+  local FF_AGENT_BIN="${FF_AGENT_HOME}/bin"
 
   # Update PATH variable (if it not yet contains expected string)
   printenv PATH | grep --quiet "${FF_AGENT_BIN}"
@@ -585,7 +619,7 @@ EOT
   PATTERN="^export PATH=\"${FF_AGENT_BIN}"
   INJECT_CONTENT=$(
       cat <<EOT   
-export PATH="${FF_AGENT_BIN}:${PATH}"
+export PATH="${FF_AGENT_BIN}:\${PATH}"
 EOT
   )
   ERROR_CODE='error_injecting_ff_agent_bin_path_to_custom_profile'
@@ -605,83 +639,73 @@ EOT
 # Install @ff/ff_agent -> ff_agent/bin
 #
 function install_ff_agent {
-    set_state "${FUNCNAME[0]}" 'started'
+  set_state "${FUNCNAME[0]}" 'started'
 
-    # Check ${AGENT_HOME} is set
-    if [ -z "${AGENT_HOME}" ]; then
-      # Error: required environment variable AGENT_HOME is not set.
-      set_state "${FUNCNAME[0]}" 'error_required_variable_not_set_agent_home'
-      return 1
-    fi
+  # Define the version of ff_agent npm package to install from CDN
+  VERSION='latest'
 
-    cd "${AGENT_HOME}" || { set_state "${FUNCNAME[0]}" 'terminal_error_changedir_agent_home'; abort; }
-    npm init -y        || { set_state "${FUNCNAME[0]}" 'terminal_error_initializing_npm_project'; abort; }
-    
-    # Define the version of ff_agent npm package to install from CDN
-    VERSION='latest'
+  # If we are on arm64, we likely need to install some extra packages
+  # This is done as a case, just in case we have other such architectural changes for other architectures.
+  case $( get_hardware_architecture ) in
+    arm64)
+      PACKAGES_TO_INSTALL=(
+        libcurl4-openssl-dev
+        build-essential
+      )
+      apt_install ${PACKAGES_TO_INSTALL[@]} || { set_state "${FUNCNAME[0]}" 'terminal_error_unable_to_install_ff_agent_dependencies'; abort; }
+    ;;
+    *)
+    ;;
+  esac
+  
+  # Install ff_agent
+  npm install --global "${FF_CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}.tgz" || { set_state "${FUNCNAME[0]}" 'terminal_error_failed_to_install_ff_agent'; abort; }
 
-    # If we are on arm64, we likely need to install some extra packages
-    # This is done as a case, just in case we have other such architectural changes for other architectures.
-    case $( get_hardware_architecture ) in
-      arm64)
-        PACKAGES_TO_INSTALL=(
-          libcurl4-openssl-dev
-          build-essential
-        )
-        apt_install ${PACKAGES_TO_INSTALL[@]} || { set_state "${FUNCNAME[0]}" 'terminal_error_unable_to_install_ff_agent_dependencies'; abort; }
-      ;;
-      *)
-      ;;
-    esac
-    
-    # Install ff_agent
-    npm install "${FF_CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}.tgz" --global || { set_state "${FUNCNAME[0]}" 'terminal_error_failed_to_install_ff_agent'; abort; }
-
-    set_state "${FUNCNAME[0]}" 'success'
-    return 0
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
 }
 
 ###############################################################################
 #
 # Install nodejs latest environment
 function install_nodejs_suite {
-    set_state "${FUNCNAME[0]}" 'started'
+  set_state "${FUNCNAME[0]}" 'started'
 
-    install_node_ubuntu                     || { set_state "${FUNCNAME[0]}" 'terminal_error_install_node'; abort; }
+  install_node_ubuntu                     || { set_state "${FUNCNAME[0]}" 'terminal_error_install_node'; abort; }
 
-    set_state "${FUNCNAME[0]}" 'success'
-    return 0
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
 }
 
 ###############################################################################
 #
 function install_node_ubuntu {
-    set_state "${FUNCNAME[0]}" 'started'
+  set_state "${FUNCNAME[0]}" 'started'
 
-    local APPROACH='n'
-    
-    # Get expected nodejs version
-    local VERSION="$( get_expected_nodejs_version )"
-    [ -z "${VERSION}" ] && { set_state "${FUNCNAME[0]}" 'failed_to_get_expected_nodejs_version'; abort; }
+  local APPROACH='n'
+  
+  # Get expected nodejs version
+  local VERSION="$( get_expected_nodejs_version )"
+  [ -z "${VERSION}" ] && { set_state "${FUNCNAME[0]}" 'failed_to_get_expected_nodejs_version'; abort; }
 
-    case ${APPROACH} in
-        nvm)
-            install_nvm_ubuntu
-            export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
-            [ -s "${NVM_DIR}/nvm.sh" ] && \. "${NVM_DIR}/nvm.sh"
-            nvm install lts/*
-        ;;
-        n)
-            # # We need to stop pm2 before replacing location of nodejs, otherwise any pm2 command would faild
-            # stop_pm2
-            #uninstall_n_outside_agent_home  || { set_state "${FUNCNAME[0]}" 'terminal_error_uninstall_n_outside_agent_home'; abort; }
-            install_n || { set_state "${FUNCNAME[0]}" 'terminal_error_install_n'; abort; }
-            n install "${VERSION}" || { set_state "${FUNCNAME[0]}" 'terminal_error_switching_node_version'; abort; }
-        ;;
-    esac
+  case ${APPROACH} in
+      nvm)
+          install_nvm_ubuntu
+          export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
+          [ -s "${NVM_DIR}/nvm.sh" ] && \. "${NVM_DIR}/nvm.sh"
+          nvm install lts/*
+      ;;
+      n)
+          # # We need to stop pm2 before replacing location of nodejs, otherwise any pm2 command would faild
+          # stop_pm2
+          #uninstall_n_outside_ff_agent_home  || { set_state "${FUNCNAME[0]}" 'terminal_error_uninstall_n_outside_ff_agent_home'; abort; }
+          install_n || { set_state "${FUNCNAME[0]}" 'terminal_error_install_n'; abort; }
+          n install "${VERSION}" || { set_state "${FUNCNAME[0]}" 'terminal_error_switching_node_version'; abort; }
+      ;;
+  esac
 
-    set_state "${FUNCNAME[0]}" 'success'
-    return 0
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
 }
 
 ###############################################################################
@@ -693,7 +717,7 @@ function install_node_ubuntu {
 #
 # Require environment variables set:
 #   - FF_AGENT_PROFILE_FILE
-#   - AGENT_HOME
+#   - FF_AGENT_HOME
 #
 # Official n github page:
 #   https://github.com/tj/n
@@ -705,7 +729,7 @@ function install_n {
   # Define required variables
   local REQUIRED_VARIABLES=(
     FF_AGENT_PROFILE_FILE
-    AGENT_HOME
+    FF_AGENT_HOME
   )
 
   # Check required environment variables are set
@@ -769,13 +793,13 @@ function install_n {
   # Export 2 env variables we need for "n" to operate properly:  and NODE_PATH
 
   # ------------------ Export N_PREFIX and inject that export into FF_AGENT_PROFILE_FILE (begin) ----------------
-  export N_PREFIX="${AGENT_HOME}/.n"  # example: /home/ubuntu/ff_agent/.n
+  export N_PREFIX="${FF_AGENT_HOME}/.n"  # example: /home/ubuntu/ff_agent/.n
 
   # Add '# Export N_PREFIX' into the custom .profile file if in was not injected earlier.
   # TODO: add into ff_bash_funcitons a function to add/edit/remove our custom profile file.
   TARGET_FILE="${FF_AGENT_PROFILE_FILE}"
-  PATTERN="^export N_PREFIX=\"${AGENT_HOME}/.n\""
-  EXPECTED_LINE="export N_PREFIX=\"${AGENT_HOME}/.n\""
+  PATTERN="^export N_PREFIX=\"${FF_AGENT_HOME}/.n\""
+  EXPECTED_LINE="export N_PREFIX=\"${FF_AGENT_HOME}/.n\""
   if ! file_contains_pattern "${TARGET_FILE}" "${PATTERN}"; then
     # Expected line is missing, Inject text
     (
@@ -794,13 +818,13 @@ EOT
 
   # ------------------ Export NODE_PATH and inject that export into FF_AGENT_PROFILE_FILE (begin) ----------------
   # We set NODE_PATH, so npm can load modules. Details: https://stackoverflow.com/questions/12594541/npm-global-install-cannot-find-module
-  export NODE_PATH="${AGENT_HOME}/.n/lib/node_modules"
+  export NODE_PATH="${FF_AGENT_HOME}/.n/lib/node_modules"
 
   # Add '# Export NODE_PATH' into the custom .profile file if in was not injected earlier.
   # TODO: add into ff_bash_funcitons a function to add/edit/remove our custom profile file.
   TARGET_FILE="${FF_AGENT_PROFILE_FILE}"
-  PATTERN="^export NODE_PATH=\"${AGENT_HOME}/.n/lib/node_modules\""
-  EXPECTED_LINE="export NODE_PATH=\"${AGENT_HOME}/.n/lib/node_modules\""
+  PATTERN="^export NODE_PATH=\"${FF_AGENT_HOME}/.n/lib/node_modules\""
+  EXPECTED_LINE="export NODE_PATH=\"${FF_AGENT_HOME}/.n/lib/node_modules\""
   if ! file_contains_pattern "${TARGET_FILE}" "${PATTERN}"; then
     # Expected line is missing, Inject text
     (
@@ -1110,49 +1134,49 @@ function add_to_install_if_missing {
 # We may need, for various reasons, to launch a background install.
 #
 # Return value:
-#    - function prints "true" to standard output only if we need to background_install as "${BEST_USER_TO_RUN_AS}"
+#    - function prints "true" to standard output only if we need to background_install as "${FF_AGENT_USERNAME}"
 #    - function returns/prints nothing if no need to background install
 #    - on error function aborts (no need to errorcheck by the caller)
 #
 #
 # Dependency:
-#   BEST_USER_TO_RUN_AS - must be set
+#   FF_AGENT_USERNAME - must be set
 #
 function check_if_need_background_install {
 
-    # Check required environment variables are set
-    [ "${BEST_USER_TO_RUN_AS}" != "" ] || { set_state "${FUNCNAME[0]}" 'terminal_error_getting_best_user_to_run_as'; abort; }
+  # Check required environment variables are set
+  [ "${FF_AGENT_USERNAME}" != "" ] || { set_state "${FUNCNAME[0]}" 'terminal_error_getting_ff_agent_username'; abort; }
 
-    # It might already exist, but not be writable due to chmod changes
-    if [ -f "${AGENT_HOME}" ] && [ ! -w "${AGENT_HOME}" ]; then
-        # TODO: The ${USER} environment is NOT set when running as 'root' in docker. Improve this.
-        error "AGENT_HOME at ${AGENT_HOME} is not writable by user $( whoami ). Aborting."
-        abort
-    fi
+  # It might already exist, but not be writable due to chmod changes
+  if [ -f "${FF_AGENT_HOME}" ] && [ ! -w "${FF_AGENT_HOME}" ]; then
+      # TODO: The ${USER} environment is NOT set when running as 'root' in docker. Improve this.
+      error "FF_AGENT_HOME at ${FF_AGENT_HOME} is not writable by user $( whoami ). Aborting."
+      abort
+  fi
 
-    DO_BACKGROUND_INSTALL=false
+  DO_BACKGROUND_INSTALL=false
 
-    # Suppose I'm not the best user, but I can sudo to become the best! e.g. If I am root - I'm not the best user.
-    if [ "${USER}" != "${BEST_USER_TO_RUN_AS}" ]; then
-        if can_sudo "${USER}"; then
-            DO_BACKGROUND_INSTALL=true
-        fi
-    fi
+  # Suppose I'm not the best user, but I can sudo to become the best! e.g. If I am root - I'm not the best user.
+  if [ "${USER}" != "${FF_AGENT_USERNAME}" ]; then
+      if can_sudo "${USER}"; then
+          DO_BACKGROUND_INSTALL=true
+      fi
+  fi
 
-    # Am I effectively root?
-    if [ "${EUID}" -eq 0 ]; then
-        DO_BACKGROUND_INSTALL=true
-    fi
+  # Am I effectively root?
+  if [ "${EUID}" -eq 0 ]; then
+      DO_BACKGROUND_INSTALL=true
+  fi
 
-    if [ "${DO_BACKGROUND_INSTALL}" == "true" ]; then
-      echo "true"
-      ## background_install "${BEST_USER_TO_RUN_AS}"
-      ## We can not exit, since "set_environment" installer is sourced: ". ./install.sh"
-      ##exit 0
-    fi
+  if [ "${DO_BACKGROUND_INSTALL}" == "true" ]; then
+    echo "true"
+    ## background_install "${FF_AGENT_USERNAME}"
+    ## We can not exit, since "set_environment" installer is sourced: ". ./install.sh"
+    ##exit 0
+  fi
 
-    # Otherwise we continue happily through this instance of the script. No need to change user.
-    # i.e. I am not root, and I have sudo priveleges.
+  # Otherwise we continue happily through this instance of the script. No need to change user.
+  # i.e. I am not root, and I have sudo priveleges.
 }
 
 ###############################################################################
@@ -1166,29 +1190,84 @@ function check_if_need_background_install {
 # TODO: it seems the tmp directory created by "mktemp" never got deleted.
 function background_install {
 
-    # Take the only argument: target username to "run as"
-    USER_TO_RUN_AS="${1}"
+  # Take the only argument: target username to "run as"
+  USER_TO_RUN_AS="${1}"
 
-    # Check argument is not empty string
-    [ "${USER_TO_RUN_AS}" == "" ] && { error "background_install error: missing argument"; abort; }
+  # Check argument is not empty string
+  [ "${USER_TO_RUN_AS}" == "" ] && { error "background_install error: missing argument"; abort; }
 
-    # Check if target user can sudo
-    can_sudo "${USER_TO_RUN_AS}" || { error "background_install needs to sudo to user ${USER_TO_RUN_AS} but user ${USER} does not have sudo privileges"; abort; }
+  # Check if target user can sudo
+  can_sudo "${USER_TO_RUN_AS}" || { error "background_install needs to sudo to user ${USER_TO_RUN_AS} but user ${USER} does not have sudo privileges"; abort; }
 
-    # Create temporary folder
-    TEMP_DIR=$( mktemp -d ) || { error "background_install tried to create directory ${TEMP_DIR}."; abort; }
-    
-    # Check if folder created
-    [ ! -d "${TEMP_DIR}" ] && { error "background_install tried to create directory ${TEMP_DIR}."; abort; }
+  # Create temporary folder
+  TEMP_DIR=$( mktemp -d ) || { error "background_install tried to create directory ${TEMP_DIR}."; abort; }
+  
+  # Check if folder created
+  [ ! -d "${TEMP_DIR}" ] && { error "background_install tried to create directory ${TEMP_DIR}."; abort; }
 
-    # Copy set_environment project into the target temporary folder
-    cp -a ../set_environment "${TEMP_DIR}" || { error "background_install failed to copy project to temporary folder '${TEMP_DIR}'"; abort; }
+  # Copy set_environment project into the target temporary folder
+  cp -a ../set_environment "${TEMP_DIR}" || { error "background_install failed to copy project to temporary folder '${TEMP_DIR}'"; abort; }
 
-    # Chenge ownership of the temporary folder to the target user
-    chown -R "${BEST_USER_TO_RUN_AS}:$(id -gn ${BEST_USER_TO_RUN_AS})" "${TEMP_DIR}"
+  # Chenge ownership of the temporary folder to the target user
+  chown -R "${FF_AGENT_USERNAME}:$(id -gn ${FF_AGENT_USERNAME})" "${TEMP_DIR}"
 
-    # Pass control to the newly created set_environment copy (run by the target user) and exit
-    sudo --set-home --user="${USER_TO_RUN_AS}" bash -c "${TEMP_DIR}/set_environment/install.sh"
+  # Pass control to the newly created set_environment copy (run by the target user) and exit
+  sudo --set-home --user="${USER_TO_RUN_AS}" bash -c "${TEMP_DIR}/set_environment/install.sh"
+}
+
+###############################################################################
+#
+# Function preserve_sources require the only argument: root folder of the project from which installer was started.
+# It will analyze if installer was started from expected place (ff_agent/git/[companyname]/set_environment/ folder) and if not
+# it will preserve source code into appropriate folder for future reuse (updates etc.).
+#
+function preserve_sources {
+  PROJECT_ROOT_DIR="$1"
+  if [ ! -d "${PROJECT_ROOT_DIR}" ]; then
+    error "Error: failed to preserve_sources"
+    return 1
+  fi
+
+  # As a preparation to preserve project source files (used during this installation), let's change directory to the project root directory.
+  pushd "${PROJECT_ROOT_DIR}" || { error "Error: failed to change directory into the project root ${PROJECT_ROOT_DIR}" >&2; exit 1; }
+
+  # Make sure ${FF_AGENT_HOME} is set
+  [ -z "${FF_AGENT_HOME}" ] && { error "Error: FF_AGENT_HOME is not set." >&2; exit 1; }
+
+  # Extract project owner from github repository URL
+  local URL=$( git remote show origin | grep 'Fetch URL:' | awk -F'Fetch URL: ' '{print $2}' )
+  [ -z "${URL}" ] && { error "Error: failed to extract project repository URL." >&2; exit 1; }
+  local OWNER=$( parse_github_repository_url "${URL}" "OWNER" )
+  [ -z "${OWNER}" ] && { error "Error: failed to extract project owner from URL='${URL}'." >&2; exit 1; }
+
+  # All projects sources got preserved in this folder
+  local PRESERVED_PROJECTS_DIR="${FF_AGENT_HOME}/git"
+
+  # Current project-specific name and preserved location
+  local PROJECT_NAME='set_environment'
+  local PRESERVED_PROJECT_DIR="${PRESERVED_PROJECTS_DIR}/${OWNER}/${PROJECT_NAME}"
+
+  # Check if installer running from unexpected folder
+  if [ "${PWD}" != "${PRESERVED_PROJECT_DIR}" ]; then
+      # Current installer run from unexpected place (like some temporary folder) - need to preserve installed project source folder.
+      # Check if previously preserved folder exists, then remove it.
+      if [ -d "${PRESERVED_PROJECT_DIR}" ]; then
+          # Remove old project source folder
+          rm -fr "${PRESERVED_PROJECT_DIR}" || { error "failed_to_remove_old_project_source_folder"; exit 1; }
+      fi
+
+      # Make sure target project "owner" folder exists before trying to copy (otherwise copy result will 
+      # be incorrect - all the content of the current root project will be copied into "projects/"
+      # folder without project-specific "owner" containing folder).
+      if [ ! -d "${PRESERVED_PROJECTS_DIR}/${OWNER}" ]; then
+          mkdir -p "${PRESERVED_PROJECTS_DIR}/${OWNER}" || { error "failed_to_create_projects_owner_folder"; exit 1; }
+      fi
+
+      # Copy newly installed source folder (to preserve it)
+      cp -a "${PWD}" "${PRESERVED_PROJECTS_DIR}/${OWNER}" || { error "failed_to_preseve_project_source_folder"; exit 1; }
+  fi
+  # Restore
+  popd || { error "failed_to_popd_after_preserving_source_folder"; exit 1; }
 }
 
 ###############################################################################
@@ -1206,7 +1285,7 @@ function set_script_logging {
 
   # Let's find a good directory for logs. This assumes zero knowledge.
   # The _best_ place for these logs would be in ${HOME}/ff_agent/logs -- if we can write to it we'll create it
-  POTENTIAL_LOG_DIRECTORIES=( "${AGENT_HOME}/logs" /var/log/ff_agent /tmp/ff_agent/logs /tmp/ff_agent.$$/logs )
+  POTENTIAL_LOG_DIRECTORIES=( "${FF_AGENT_HOME}/logs" /var/log/ff_agent /tmp/ff_agent/logs /tmp/ff_agent.$$/logs )
 
   LOG_DIRECTORY=""
 
