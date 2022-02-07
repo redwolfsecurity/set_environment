@@ -1,0 +1,23 @@
+{
+  "name": "set_environment",
+  "version": "1.0.0",
+  "description": "This project will generate the environment in which a Agent will be initialized, providing the programs and tools for deployment",
+  "main": "cdn_upload.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/redwolfsecurity/set_environment.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "see LICENSE.txt",
+  "bugs": {
+    "url": "https://github.com/redwolfsecurity/set_environment/issues"
+  },
+  "homepage": "https://github.com/redwolfsecurity/set_environment#readme",
+  "dependencies": {
+    "aws-sdk": "^2.1070.0"
+  }
+}
