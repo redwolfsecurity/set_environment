@@ -1,35 +1,50 @@
 #!/bin/bash --login
 
-# We need to "npm install" because of aws-sdk dependency (used by cdn_upload.js)
-npm i
+# Making verbose output
+set -x
 
-# Capture date and build git commit numbers into separate files
-echo "BUILD_DATE=$(date +%Y%m%d)  # YYYYMMDD" > build_date
-echo "BUILD_COMMIT_ID=$(git rev-parse HEAD)"  > build_commit_id
+function build_tarball {
 
-# Delete target tmp folder, otherwise copy will result in wrong folder structure (1 level nested deeper)
-rm -fr ${TEMPORARY_DIR}/set_environment
+    # We need to "npm install" because of aws-sdk dependency (used by cdn_upload.js)
+    npm i || { set_state "${FUNCNAME[0]}" 'failed_to_npm_install'; abort; }
 
-# Before creating tarball: move all files into "set_environment" folder.
-# We do so because while Jenkins buidling the project all the files are located in ugly-looking folder:
-#     /var/jenkins_home/jobs/RedWolfSecurity/jobs/set-environment.ja761g/branches/master/workspace
-cp -a $(pwd) ${TEMPORARY_DIR}/set_environment
+    # Capture date and build git commit numbers into separate files
+    echo "BUILD_DATE=$(date +%Y%m%d)  # YYYYMMDD" > build_date || { set_state "${FUNCNAME[0]}" 'failed_to_write_build_date'; abort; }
+    echo "BUILD_COMMIT_ID=$(git rev-parse HEAD)"  > build_commit_id || { set_state "${FUNCNAME[0]}" 'failed_to_write_build_commit_id'; abort; }
 
-# Now we can create tarball which contain just 1 folder 'set_environment'
-# Note on used arguments:
-#       -C  - to tell tar to change directory to ${TEMPORARY_DIR}, so we do not
-#       have nested folders like ${TEMPORARY_DIR}/set_environment inside result tarball)
-#
-#       --exclude-vcs - will help to get rid of all git-related files (no need to publish them)
-#
-#       ${TEMPORARY_DIR}/set_environment.tgz - full path used for the result tarbal otherwize it will be created in
-#                                  current working jenkins directory, like: /var/jenkins_home/jobs/RedWolfSecurity/jobs/set-environment.ja761g/branches/master/workspace
-#
-#      set_environment - last argument is the folder to archive. It does not include full path (like: ${TEMPORARY_DIR}/set_environment)
-#                        because we already specified -C argument.
-#
+    # Delete target tmp folder, otherwise copy will result in wrong folder structure (1 level nested deeper)
+    if [ -d "${TEMPORARY_DIR}/set_environment" ]; then
+        rm -fr ${TEMPORARY_DIR}/set_environment || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmp_folder'; abort; }
+    fi
 
-tar -C ${TEMPORARY_DIR} --exclude-vcs -czf ${TARBALL_FILENAME} set_environment
+    # Before creating tarball: move all files into "set_environment" folder.
+    # We do so because while Jenkins buidling the project all the files are located in ugly-looking folder:
+    #     /var/jenkins_home/jobs/RedWolfSecurity/jobs/set-environment.ja761g/branches/master/workspace
+    cp -a $(pwd) ${TEMPORARY_DIR}/set_environment || { set_state "${FUNCNAME[0]}" 'failed_to_copy_files'; abort; }
 
-# Upload tarball to S3 so it is available via URL: https:#cdn.redwolfsecurity.com/ff/ff_agent/set_environment.tgz
-node cdn_upload.js ${TARBALL_FILEPATH} ${PRODUCTION_CONTENT_S3_BUCKET_NAME} ${PRODUCTION_CONTENT_S3_FF_AGENT_PATH} ${PRODUCTION_CONTENT_CDN_DISTRIBUTION_ID}
+    # Now we can create tarball which contain just 1 folder 'set_environment'
+    # Note on used arguments:
+    #       -C  - to tell tar to change directory to ${TEMPORARY_DIR}, so we do not
+    #       have nested folders like ${TEMPORARY_DIR}/set_environment inside result tarball)
+    #
+    #       --exclude-vcs - will help to get rid of all git-related files (no need to publish them)
+    #
+    #       ${TEMPORARY_DIR}/set_environment.tgz - full path used for the result tarbal otherwize it will be created in
+    #                                  current working jenkins directory, like: /var/jenkins_home/jobs/RedWolfSecurity/jobs/set-environment.ja761g/branches/master/workspace
+    #
+    #      set_environment - last argument is the folder to archive. It does not include full path (like: ${TEMPORARY_DIR}/set_environment)
+    #                        because we already specified -C argument.
+    #
+
+    tar -C "${TEMPORARY_DIR}" --exclude-vcs -czf "${TARBALL_FILENAME}" "set_environment" || { set_state "${FUNCNAME[0]}" 'failed_to_create_tarball'; abort; }
+
+    # Upload tarball to S3 so it is available via URL: https:#cdn.redwolfsecurity.com/ff/ff_agent/set_environment.tgz
+    node cdn_upload.js \
+        "${TARBALL_FILEPATH}" \
+        "${PRODUCTION_CONTENT_S3_BUCKET_NAME}" \
+        "${PRODUCTION_CONTENT_S3_FF_AGENT_PATH}" \
+        "${PRODUCTION_CONTENT_CDN_DISTRIBUTION_ID}" \
+         || { set_state "${FUNCNAME[0]}" 'failed_to_cdn_upload'; abort; }
+}
+
+build_tarball || { set_state "${FUNCNAME[0]}" 'failed_to_build_tarball'; abort; }
