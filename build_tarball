@@ -55,7 +55,7 @@ function build_tarball {
     echo "debug: PRODUCTION_CONTENT_S3_BUCKET_NAME size: ${#PRODUCTION_CONTENT_S3_BUCKET_NAME}"
     echo "debug: PRODUCTION_CONTENT_S3_FF_AGENT_PATH size: ${#PRODUCTION_CONTENT_S3_FF_AGENT_PATH}"
     echo "debug: PRODUCTION_CONTENT_CDN_DISTRIBUTION_ID size: ${#PRODUCTION_CONTENT_CDN_DISTRIBUTION_ID}"
-    echo "debug: checking aws-sdk version: $( cat package-lock.json | grep aws )"
+    echo "debug: checking aws-sdk version: $( cat package-lock.json | grep aws )" 
 
     # Upload tarball to S3 so it is available via URL: https:#cdn.redwolfsecurity.com/ff/ff_agent/set_environment.tgz
     node cdn_upload.js \
