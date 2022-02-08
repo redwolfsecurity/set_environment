@@ -45,6 +45,18 @@ function build_tarball {
     #
     tar -C "${TEMPORARY_DIR}" --exclude-vcs -czf "${TARBALL_FILENAME}" "set_environment" || { set_state "${FUNCNAME[0]}" 'failed_to_create_tarball'; abort; }
 
+    # Debug output: why cnd_upload script can't find the tarball
+    echo "debug: listing TEMPORARY_DIR: $( ls -l ${TEMPORARY_DIR} | grep 'environ')"
+    echo "debug: TARBALL_FILEPATH: ${TARBALL_FILEPATH}"
+    echo "debug: ls -l ${TARBALL_FILEPATH}: $( ls -l ${TARBALL_FILEPATH} )"
+    echo "debug: ls -l ./ : $( ls -l ./ )"
+    echo "debug: AWS_ACCESS_KEY_ID size: ${#AWS_ACCESS_KEY_ID}"
+    echo "debug: AWS_SECRET_ACCESS_KEY size: ${#AWS_SECRET_ACCESS_KEY}"
+    echo "debug: PRODUCTION_CONTENT_S3_BUCKET_NAME size: ${#PRODUCTION_CONTENT_S3_BUCKET_NAME}"
+    echo "debug: PRODUCTION_CONTENT_S3_FF_AGENT_PATH size: ${#PRODUCTION_CONTENT_S3_FF_AGENT_PATH}"
+    echo "debug: PRODUCTION_CONTENT_CDN_DISTRIBUTION_ID size: ${#PRODUCTION_CONTENT_CDN_DISTRIBUTION_ID}"
+    echo "debug: checking aws-sdk version: $( cat package-lock.json | grep aws )"
+
     # Upload tarball to S3 so it is available via URL: https:#cdn.redwolfsecurity.com/ff/ff_agent/set_environment.tgz
     node cdn_upload.js \
         "${TARBALL_FILENAME}" \
