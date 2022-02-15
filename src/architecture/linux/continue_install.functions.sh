@@ -179,6 +179,149 @@ function install_docker {
   set_state "${FUNCNAME[0]}" 'success'
 }
 
+
+###############################################################################
+#
+# Function installs "go" by certain version (see below) if it is not already installed.
+#
+# In case of successful install (or already at expected version) script return success code 0.
+# In case of any errors script prints error to standard error stream and exit with code 1.
+#
+function install_go {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Define required variables
+  local REQUIRED_VARIABLES=(
+    FF_CONTENT_URL
+  )
+
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
+  done
+
+  # The installation archives (size ~123MB) are located in the CDN by URL:
+  # https://cdn.redwolfsecurity.com/ff/ff_agent/hotpatch/hotpatch_files/go1.16.2.linux-amd64.tar.gz
+  # https://cdn.redwolfsecurity.com/ff/ff_agent/hotpatch/hotpatch_files/go1.17.1.linux-amd64.tar.gz
+  
+  #EXPECTED_VERSION="1.16.2"
+  EXPECTED_VERSION="1.17.1"  # Updated go version on 09-Sep-2021
+  EXPECTED_COMMAND="go"
+
+  # ------------------------ don't edit below this line -------------------------
+
+  # Define command to get version
+  GET_VERSION_COMMAND="go version"
+
+  # Define expected output of version command
+  GET_VERSION_EXPECTED_OUTPUT="go version go${EXPECTED_VERSION} linux/amd64"
+
+  # Check if go is installed and is in the PATH
+  IS_INSTALLED="$( command_exists go )"
+
+  # Check if go is already installed and has expected vesrion
+  if [ "${IS_INSTALLED}" != "" ]; then
+      # Yes, is installed. Check if installed 'go' version matches expected one.
+      GET_VERSION_OUTPUT="$( ${GET_VERSION_COMMAND} )"
+      
+      # Compare to expected version
+      if [ "${GET_VERSION_OUTPUT}" == "${GET_VERSION_EXPECTED_OUTPUT}" ]; then
+        # Match. Version is up to date, nothing to do.
+        return 0
+      fi
+  fi
+
+  # Create temporary folder
+  TEMP_DIR="$( mktemp --directory )"
+
+  # Check temporary folder created and we can write to it
+  TEMP_TEST_FILE="${TEMP_DIR}/test_file"
+  touch "${TEMP_TEST_FILE}"
+  TEMP_TEST_FILE_STATUS_CODE=$?
+  if [ ${TEMP_TEST_FILE_STATUS_CODE} -ne 0 ]; then
+      error "Failed to create test file in the temporary folder: '${TEMP_TEST_FILE}'"
+      return 1
+  fi
+
+  # Define tarball name by given expected version
+  TARBALL_FILENAME="go${EXPECTED_VERSION}.linux-amd64.tar.gz"
+
+  # Download tarball (by curl with retries)
+  URL="${FF_CONTENT_URL}/ff/ff_agent/hotpatch/hotpatch_files/${TARBALL_FILENAME}"
+  curl \
+        -sL \
+        --retry 5 \
+        --retry-delay 1 \
+        --retry-max-time 60 \
+        --max-time 55 \
+        --connect-timeout 12 \
+        -o "${TEMP_DIR}/${TARBALL_FILENAME}" \
+        "${URL}"
+
+  # Check if download succeed
+  DOWNLOAD_STATUS_CODE=$?
+  if [ ${DOWNLOAD_STATUS_CODE} -ne 0 ]; then
+      echo "error: failed to download tarball by URL: '${URL}'" >&2
+      exit 1
+  fi
+
+  # Install 'go'
+
+  # Remove old 'go'
+  sudo rm -fr /usr/local/go
+  # To cleanup old "bad installations" of "go" let's do 3 things:
+  # delete 2 symlinks and then delete few old directories before installing new 'go':
+  #    1) rm -f  /usr/bin/go
+  #    2) rm -f  /usr/lib/go
+  #    3) rm -fr /usr/lib/go-*
+  sudo rm -f  /usr/bin/go
+  sudo rm -f  /usr/lib/go
+  sudo rm -fr /usr/lib/go-*
+
+  # Unzip downloaded archive
+  sudo tar -C /usr/local -xzf "${TEMP_DIR}/${TARBALL_FILENAME}"
+  if [ $? -ne 0 ]; then
+      error "Failed to install tarball by command: sudo tar -C /usr/local -xzf ${TARBALL_FILENAME}  Current working directory: '$( pwd )'"
+      return 1
+  fi
+
+  # Remove temporary folder
+  rm -fr "${TEMP_DIR}" || { error "Failed to remove temporary folder: '${TEMP_DIR}'"; return 1; }
+
+  # Inject path to 'go' into /etc/profile (for all users)
+  # Check if profile already contain expected path
+  EXPECTED_PROFILE_LINE='export PATH=$PATH:/usr/local/go/bin' # note: we don't want to expand variables in this string, thus single quites used.
+  cat /etc/profile | grep --silent "${EXPECTED_PROFILE_LINE}"
+  if [ ! $? -eq 0 ]; then
+      # Expected profile line not found
+      echo "" | sudo tee -a /etc/profile
+      echo "# The path to 'go' inserted by $( pwd )/$( basename $0 ) on $( date --utc ) for 'go' version: 'go${EXPECTED_VERSION}'" | sudo tee -a /etc/profile
+      echo "${EXPECTED_PROFILE_LINE}" | sudo tee -a /etc/profile
+  fi
+
+  # Also inject path to 'go' into current PATH (if missing in PATH)
+  # do the export, so we don't have to relogin in order to call "go version"
+  echo ${PATH} | grep -q /usr/local/go/bin
+  if [ $? -ne 0 ]; then
+    # Path to 'go' is missing from PATH environment variable. Inject it:
+    export PATH=$PATH:/usr/local/go/bin
+    # TODO: this also must be injected into ff_agent/profile
+  fi
+
+  # Check by running "go version"
+  GET_VERSION_OUTPUT="$( $GET_VERSION_COMMAND )"
+      
+  # Compare to expected version
+  if [ "${GET_VERSION_OUTPUT}" != "${GET_VERSION_EXPECTED_OUTPUT}" ]; then
+      # Mismatch.
+      error "Failed to get expected version output after installation. Expected output was '${GET_VERSION_EXPECTED_OUTPUT}', but instead we got '${GET_VERSION_OUTPUT}'."
+      return 1
+  fi
+  
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+
 ###############################################################################
 #
 # Continuation of the "set_environment". Installing baseline components.
@@ -260,9 +403,16 @@ function assert_core_credentials {
 function create_npmrc_credentials {
   set_state "${FUNCNAME[0]}" 'started'
 
+  # Define required variables
+  local REQUIRED_VARIABLES=(
+    HOME
+    USER
+  )
+
   # Check required environment variables are set
-  [ "${HOME}" == "" ] && { set_state "${FUNCNAME[0]}" 'error_getting_home_dir'; return 1; }
-  [ "${USER}" == "" ] && { set_state "${FUNCNAME[0]}" 'error_user_environment_variable_unset'; return 1; }
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
+  done
 
   # TODO: Get these credentials from secret manager
   # TODO: .npmrc can substitue environment variables -- that's at least a touch more secure if we run npm from our FF framework
@@ -931,17 +1081,17 @@ function pm2_install () {
     # We will try to stop it. But that won't stop us from uninstalling it.
     is_pm2_running_as_me && stop_pm2
 
-    local PM2=$(command_exists "${NPM_PACKAGE}" )
+    local PM2=$( command_exists "${NPM_PACKAGE}" )
     [ "${PM2}" != "" ] && { set_state "${FUNCNAME[0]}" 'success_no_action_already_installed'; return 0; }
 
-    local NPM=$(command_exists npm)
+    local NPM=$( command_exists npm)
     [ "${NPM}" = "" ] && { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
 
     # Actually install it -- globally
     ${NPM} install --global "${NPM_PACKAGE}@${VERSION}"  || { set_state "${FUNCNAME[0]}" 'error_installing_pm2_npm'; return 1; }
 
     # Verify command actually exists in path after we have installed it
-    local PM2=$(command_exists "${NPM_PACKAGE}" )
+    local PM2=$( command_exists "${NPM_PACKAGE}" )
     [ "${PM2}" == "" ] && { set_state "${FUNCNAME[0]}" 'error_installing_pm2_command_not_found'; return 0; }
 
     set_state "${FUNCNAME[0]}" 'success'
@@ -984,7 +1134,7 @@ function pm2_uninstall () {
     is_pm2_installed || { set_state "${FUNCNAME[0]}" 'success_no_action_not_installed'; return 1; }
 
     # It's installed, so we will try to remove it
-    local NPM=$(command_exists npm)
+    local NPM=$( command_exists npm)
     [ "${NPM}" = "" ] && { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
     ${NPM} remove --global "${PACKAGE}" || { set_state "${FUNCNAME[0]}" 'error_uninstalling_package'; return 1; }
 
@@ -1005,7 +1155,7 @@ function is_pm2_installed () {
     set_state "${FUNCNAME[0]}" 'started'
     local STATUS=0
     local PACKAGE="pm2"
-    local NPM=$(command_exists npm) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
+    local NPM=$( command_exists npm) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
 
     # If it not installed, set STATUS=1
     ${NPM} list "${PACKAGE}" --global >/dev/null || STATUS=1
@@ -1144,8 +1294,15 @@ function add_to_install_if_missing {
 #
 function check_if_need_background_install {
 
+  # Define required variables
+  local REQUIRED_VARIABLES=(
+    FF_AGENT_USERNAME
+  )
+
   # Check required environment variables are set
-  [ "${FF_AGENT_USERNAME}" != "" ] || { set_state "${FUNCNAME[0]}" 'terminal_error_getting_ff_agent_username'; abort; }
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
+  done
 
   # It might already exist, but not be writable due to chmod changes
   if [ -f "${FF_AGENT_HOME}" ] && [ ! -w "${FF_AGENT_HOME}" ]; then
