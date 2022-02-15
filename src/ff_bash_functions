@@ -28,11 +28,12 @@
 #    - apt_remove 
 #    - apt_update 
 #    - apt_upgrade 
+#    - apt_dist_upgrade 
 ## END APT WRAPPER FUNCTIONS
 ## BEGIN UTILITY FUNCTIONS: STRINGS 
 #    - in_array 
 #    - index_of 
-#    - parse_github_repository_url
+#    - parse_github_repository_url 
 #    - trim_slash 
 ## END UTILITY FUNCTIONS: STRINGS 
 ## BEGIN UTILITY FUNCTIONS: FILE
@@ -41,8 +42,8 @@
 #    - does_file_have_eol_at_the_end 
 #    - f 
 #    - file_contains_pattern 
-#    - find_file_owner_in_all_packages
-#    - find_file_owner_in_installed_packages
+#    - find_file_owner_in_all_packages 
+#    - find_file_owner_in_installed_packages 
 #    - glob_matches 
 #    - inject_into_file 
 #    - remove_all_lines_by_regexp 
@@ -56,6 +57,7 @@
 #    - error 
 #    - log 
 #    - successful_exit 
+#    - warning 
 ## END UTILITY FUNCITONS: LOGGING / PROCESS CONTROl
 ## BEGIN UTILITY FUNCITONS: TERMINAL / SHELL
 #    - ensure_variable_defined 
@@ -68,7 +70,8 @@
 #    - terminal_reset 
 ## END UTILITY FUNCITONS: TERMINAL / SHELL
 ## BEGIN UTILITY FUNCTIONS: PROCESS
-#    - is_process_running_as_me
+#    - is_process_running_as_me 
+#    - stop_pm2 
 ## END UTILITY FUNCTIONS: PROCESS
 ## BEGIN UTILITY FUNCTIONS: CONTAINERS
 #    - container_name_exists 
@@ -118,7 +121,6 @@
 #    - is_set_environment_working 
 #    - publish_message 
 ## END SET ENVIRONMENT FUNCTIONS
-
 
 ### BEGIN USAGE/HELP FUNCTION
 
@@ -1398,7 +1400,7 @@ export -f terminal_reset
 # Category: process
 # checks if a process is running as current user or effectively as current user.
 # Note we are checking for the pattern at the beginning of the command by default
-function is_process_running_as_me () {
+function is_process_running_as_me {
     set_state "${FUNCNAME[0]}" 'started'
     local COMMAND_PATTERN="${1}"
     [ ! -z "${COMMAND_PATTERN}" ] || { set_state "${FUNCNAME[0]}" 'error_require_pattern_to_search_for'; return 1; }
@@ -1416,6 +1418,7 @@ function is_process_running_as_me () {
 }
 export -f is_process_running_as_me
 
+###############################################################################
 # stop_pm2 solves the problem of pm2 running by multiple user (designated "choosen user" and "root").
 # stop_pm2 would stop all found pm2 instances and remove it from automatic startup.
 #
@@ -1668,13 +1671,13 @@ function get_secret {
 
     # Check if FF_AGENT_HOME is not empty
     if [ "${FF_AGENT_HOME}" == "" ]; then
-      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
       return 1
     fi
 
     # Check if key is not empty
     if [ "${KEY}" == "" ]; then
-      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
       return 1
     fi
 
@@ -1690,7 +1693,7 @@ function get_secret {
     # Case: requested key already exists in ff_agent "secrets/" folder
     if [ -e "${FF_AGENT_HOME}/secrets/${KEY}" ]; then
         cat "${FF_AGENT_HOME}/secrets/${KEY}"
-        [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+        [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
         return
     fi
 
@@ -1701,7 +1704,7 @@ function get_secret {
         #       -n - true if the length of string is nonzero
         if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
             echo ${VALUE}
-            [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+            [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
             return
         fi
 
@@ -1711,7 +1714,7 @@ function get_secret {
           VALUE=$( sudo cat /var/lib/cloud/instance/user-data.txt | jq -r '.[] | select(.mime_type == "agent/configuration") | .roles[] | select(.role_name == "AgentRole") | .services[] | select(.service_name == "ActionManager") | .control_api_user' )
           if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
               echo ${VALUE}
-              [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+              [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
               return
           fi
         fi
@@ -1719,7 +1722,7 @@ function get_secret {
           VALUE=$( sudo cat /var/lib/cloud/instance/user-data.txt | jq -r '.[] | select(.mime_type == "agent/configuration") | .roles[] | select(.role_name == "AgentRole") | .services[] | select(.service_name == "ActionManager") | .control_api_password' )
           if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
               echo ${VALUE}
-              [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+              [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
               return
           fi
         fi
@@ -1732,7 +1735,7 @@ function get_secret {
         #       -n - true if the length of string is nonzero
         if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
             echo ${VALUE}
-            [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+            [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
             return
         fi
     fi
@@ -1742,7 +1745,7 @@ function get_secret {
     if [ -e "${USER_DATA}" ]; then
 	    VALUE=$( cat "${USER_DATA}" | jq ".${KEY}" | cut -d'"' -f2 )
         if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
-            [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+            [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
             echo ${VALUE}
             return
         fi
@@ -1752,7 +1755,7 @@ function get_secret {
     if [ -f /etc/ff/configuration/user_data.json ]; then
         VALUE=$( sudo cat /etc/ff/configuration/user_data.json | jq '.[] | select(.mime_type=="agent/configuration")' | jq -r ".${KEY}" | grep -v -e '^null$' )
         if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
-            [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+            [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
             echo ${VALUE}
             return
         fi
@@ -1779,13 +1782,13 @@ function get_secret {
             VALUE=$( grep -i "^${KEY}=" ${ENVPATH}/* | cut -d= -f2 | head -1 )
             if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
                 echo ${VALUE}
-                [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+                [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
                 return
             fi
         fi
     done
 
-    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
     return 1
 }
 export -f get_secret
@@ -1817,7 +1820,7 @@ function get_state {
   # Make sure "${FF_AGENT_HOME}" is not empty
   if [ -z "${FF_AGENT_HOME}" ]; then
       error "Can not set state. FF_AGENT_HOME variable not defined. State would have been set to ${STATE}=${VALUE}"
-      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
       return 1
   fi
 
@@ -1832,11 +1835,11 @@ function get_state {
     EXIT_CODE=$?
     # Print value to standard output
     echo -n "${VALUE}"
-    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
     return $EXIT_CODE
   else
     # Error: state file not found. Restore xtrace and eturn code 1
-    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
     return 1
   fi
 }
@@ -1869,14 +1872,14 @@ function set_secret {
     
     # Check SECRET is not empty
     if [ -z "${SECRET}" ]; then
-        [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+        [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
         error "${FUNCNAME[0]}: error_bad_argument_secret"
         return 1
     fi
 
     # Check URI is not empty
     if [ -z "${URI}" ]; then
-        [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+        [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
         error "${FUNCNAME[0]}: error_bad_argument_uri"
         return 1
     fi
@@ -1884,7 +1887,7 @@ function set_secret {
     # Store secret
     echo "${SECRET}" >"${SECRET_DIRECTORY}/${URI}" || { error "${FUNCNAME[0]}: failed_to_write_secret"; return 1; }
     
-    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
     
     return 0
 }
@@ -1920,7 +1923,7 @@ function set_state {
   # Make sure "${FF_AGENT_HOME}" is not empty
   if [ -z "${FF_AGENT_HOME}" ]; then
       error "Can not set state. FF_AGENT_HOME variable not defined. State would have been set to ${STATE}=${VALUE}"
-      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
       return 1
   fi
 
@@ -1938,14 +1941,14 @@ function set_state {
     if [ ${?} -ne 0 ]; then
         # Report an error, resotre trace and return error code (1)
         error "Can not set state. State file ${STATE_FILE} can not be written to. State would have been set to ${STATE}=${VALUE}"
-        [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+        [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
         return 1
     fi
 
   else
     # mkdir failed
     error "Can not set state. State directory ${STATE_DIR} can not be created. State would have been set to ${STATE}=${VALUE}"
-    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
     return 1
   fi
   
@@ -1954,7 +1957,7 @@ function set_state {
   # Check if framework API is defined
   if [ "$( is_framework_api_defined )" != "true" ]; then
     # No, the framework API is not defined. Simply return, we're done.
-    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
     # Return with success code 0
     return 0
   fi
@@ -2030,7 +2033,7 @@ function set_state {
 EOF
 ) | publish_message
 
-  [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+  [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
 
   # Return with success code 0
   return 0
@@ -2292,7 +2295,7 @@ function discover_environment {
   # # Discover set of "ff environment" variables
   # discover_ff_environment || { set_state "${FUNCNAME[0]}" "failed_to_discover_ff_environment"; return 1; }
 
-  [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+  [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
 
   # Note: we need explicitly return zero code here since the previous test for XTRACE_WAS_ENABLED might return false then f-n return 1
   return 0
@@ -2876,7 +2879,7 @@ function publish_message {
     # Check inputs
     CONTROL_API_USER=$( get_secret control_api_user )
     if [ "${CONTROL_API_USER}" == "" ]; then
-      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
       # error: CONTROL_API_USER is missing
       # can't use set_state here otherwize will fall into recursive loop
       return 1
@@ -2884,34 +2887,34 @@ function publish_message {
 
     CONTROL_API_PASSWORD=$( get_secret control_api_password )
     if [ "${CONTROL_API_PASSWORD}" == "" ]; then
-      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
       # error: CONTROL_API_PASSWORD is missing
       # can't use set_state here otherwize will fall into recursive loop
       return 1
     fi
 
     if [ "${INPUT_JSON}" == "" ]; then
-      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
       # error: INPUT_JSON is missing
       return 1
     fi
 
     if [ "${FF_HOST}" == "" ]; then
-      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
       # error: FF_HOST is missing
       return 1
     fi
 
     MESSAGE_UUID="$( uuidgen )"
     if [ "${MESSAGE_UUID}" == "" ]; then
-      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
       # error: failed to generate MESSAGE_UUID
       return 1
     fi
 
     TRANSACTION_ID="$( uuidgen )"
     if [ "${TRANSACTION_ID}" == "" ]; then
-      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
       # error: failed to generate TRANSACTION_ID
       return 1
     fi
@@ -2964,7 +2967,7 @@ EOF
     )
     STATUS=${?}
 
-    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set  -x  # Restore xtrace state (only  if it was enabled before)
+    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
 
     # Check result
     if [ "${STATUS}" != "0" ]; then
