@@ -535,6 +535,7 @@ function trim_slash {
 
 ###############################################################################
 # Usage: assert_cd directory
+# Ensures command must exit cleanly (0) else will abort the entire system
 function assert_cd {
 
   # Check first if it is a directory.
@@ -2637,7 +2638,8 @@ export -f check_nodejs_installation
 function choose_ff_agent_home {
     
     # These exports are our "return values"
-    # Note: we should not: "export SOMEVAR=$( some_function_call ) || { error "error details"; abort; } " because export would hide actual exit call of the "some_function_call" and thus we'll miss an error!
+    # Note: we should not get value from subprocess and call 'export' on the same 1-line liek this: "export SOMEVAR=$( some_function_call ) || { error "error details"; return 1; } "
+    #       because export would hide actual exit call of the "some_function_call" and thus we'll miss an error!
     FF_AGENT_USERNAME=$( get_ff_agent_username ) || { error "terminal_error_failed_to_choose_user"; return 1; }
     export FF_AGENT_USERNAME
     
@@ -2680,8 +2682,7 @@ function ensure_ff_agent_home_exists {
       # ${FF_AGENT_HOME} folder is missing: create new one.
       mkdir -p "${FF_AGENT_HOME}"
       if [ ${?} -ne 0 ]; then
-        # Failed to create ${FF_AGENT_HOME} - report error() and abort()
-        # error "Did not find FF_AGENT_HOME directory at ${FF_AGENT_HOME}. Tried to create it but failed. Aborting."
+        # Failed to create ${FF_AGENT_HOME} - report error and return code 1
         set_state "${FUNCNAME[0]}" "failed_to_create_ff_agent_home"
         return 1
       fi
@@ -2738,8 +2739,8 @@ export -f ff_api_get
 #
 # Find out the best user to run as.
 # Return:
-#  on success - return a string (username to use).
-#  on error - log error() and abort() execution
+#  on success - return code 0 and print a username to use to standard output.
+#  on error   - log error() and return 1
 #
 # The logic "best user" selection:
 # We don't run as root, or root-like account.
@@ -2768,7 +2769,7 @@ function get_ff_agent_username {
 
         error "Current user ${USER} is effectively root and this script can not run as root."
         error "Tried to find other users to run as (${POTENTIAL_USERS}) but was not successful."
-        abort
+        return 1
 
     else
         # We aren't root. But can we sudo? We need that to currently install certain packages.
@@ -2778,7 +2779,7 @@ function get_ff_agent_username {
             return 0
         else
             error "User ${USER} can not sudo. Currently sudo is required to install packages. Please run from a non-root account with sudo privileges."
-            exit 1
+            return 1
         fi
     fi
 }
