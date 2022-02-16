@@ -1078,13 +1078,16 @@ function pm2_install () {
     local NPM_PACKAGE="pm2"
     local VERSION="latest"
 
-    # We will try to stop it. But that won't stop us from uninstalling it.
-    is_pm2_running_as_me && stop_pm2
+    # Commented out, since stop_pm2() does not exist (was removed as empty function). If you want to kill that daemon process then run command
+    # "pm2 kill" instead of trying to use f-n stop_pm(). Also then update f-n comments to say that this f-n stops pm2 if it is already installed.
+    #
+    # # We will try to stop it. But that won't stop us from uninstalling it.
+    # is_pm2_running_as_me && stop_pm2
 
     local PM2=$( command_exists "${NPM_PACKAGE}" )
     [ "${PM2}" != "" ] && { set_state "${FUNCNAME[0]}" 'success_no_action_already_installed'; return 0; }
 
-    local NPM=$( command_exists npm)
+    local NPM=$( command_exists npm )
     [ "${NPM}" = "" ] && { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
 
     # Actually install it -- globally

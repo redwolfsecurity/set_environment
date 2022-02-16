@@ -71,7 +71,6 @@
 ## END UTILITY FUNCITONS: TERMINAL / SHELL
 ## BEGIN UTILITY FUNCTIONS: PROCESS
 #    - is_process_running_as_me 
-#    - stop_pm2 
 ## END UTILITY FUNCTIONS: PROCESS
 ## BEGIN UTILITY FUNCTIONS: CONTAINERS
 #    - container_name_exists 
@@ -1417,39 +1416,6 @@ function is_process_running_as_me {
     STATUS=$?
 }
 export -f is_process_running_as_me
-
-###############################################################################
-# stop_pm2 solves the problem of pm2 running by multiple user (designated "choosen user" and "root").
-# stop_pm2 would stop all found pm2 instances and remove it from automatic startup.
-#
-# Dependency: environment variables must be set:
-#    - FF_AGENT_USERNAME
-#
-function stop_pm2 {
-  set_state "${FUNCNAME[0]}" 'stopping'
-
-  # Define required variables
-  local REQUIRED_VARIABLES=(
-    FF_AGENT_USERNAME
-  )
-
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
-  done
-
-  # pm2 may not be  installed, so we have nothing to stop
-  PM2=$( command_exists pm2 )
-  if [ -z "${PM2}" ]; then
-    set_state "${FUNCNAME[0]}" 'pm2_executable_not_found_error'
-    return 1
-  fi
-
-  set_state "${FUNCNAME[0]}" 'success'
-
-  return ${STATUS}
-}
-export -f stop_pm2
 
 ### END UTILITY FUNCTIONS: PROCESS
 
