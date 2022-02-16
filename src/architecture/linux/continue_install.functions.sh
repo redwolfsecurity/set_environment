@@ -792,7 +792,7 @@ function install_ff_agent {
 function install_nodejs_suite {
   set_state "${FUNCNAME[0]}" 'started'
 
-  install_node_ubuntu                     || { set_state "${FUNCNAME[0]}" 'terminal_error_install_node'; abort; }
+  install_nodejs                     || { set_state "${FUNCNAME[0]}" 'terminal_error_install_node'; abort; }
 
   set_state "${FUNCNAME[0]}" 'success'
   return 0
@@ -800,7 +800,7 @@ function install_nodejs_suite {
 
 ###############################################################################
 #
-function install_node_ubuntu {
+function install_nodejs {
   set_state "${FUNCNAME[0]}" 'started'
 
   local APPROACH='n'
