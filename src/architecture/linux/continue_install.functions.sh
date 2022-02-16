@@ -3,9 +3,6 @@
 # It got sourced from src/architecture/linux/continue_install.sh
 #
 
-# Make installation output more verbose so we can audit all the steps
-set -x
-
 ###############################################################################
 #
 # Function makes sure "${FF_AGENT_HOME}/bin" folder is created.
@@ -819,7 +816,7 @@ function install_nodejs {
       n)
           # # We need to stop pm2 before replacing location of nodejs, otherwise any pm2 command would faild
           # stop_pm2
-          #uninstall_n_outside_ff_agent_home  || { set_state "${FUNCNAME[0]}" 'terminal_error_uninstall_n_outside_ff_agent_home'; abort; }
+          # uninstall_n_outside_ff_agent_home  || { set_state "${FUNCNAME[0]}" 'terminal_error_uninstall_n_outside_ff_agent_home'; abort; }
           install_n || { set_state "${FUNCNAME[0]}" 'terminal_error_install_n'; abort; }
           n install "${VERSION}" || { set_state "${FUNCNAME[0]}" 'terminal_error_switching_node_version'; abort; }
       ;;

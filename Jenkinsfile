@@ -22,7 +22,7 @@ pipeline {
         PRODUCTION_CONTENT_S3_FF_AGENT_PATH = credentials('production_content_s3_ff_agent_path')
 
         // AWS ECR related settings
-        PRODUCTION_AWS_ECR_FQDN = credentials('production_aws_ecr_fqdn')  // e.g. 209512847919.dkr.ecr.us-east-1.amazonaws.com
+        PRODUCTION_AWS_ECR_FQDN = credentials('production_aws_ecr_fqdn')
 
         // For AWS ECR to work we need to provide AWS key/secret via these 2 environment variables
         AWS_ACCESS_KEY_ID = credentials('production_aws_access_key_id_jenkins_build')

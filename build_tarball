@@ -33,15 +33,13 @@ function build_tarball {
     #       -C  - to tell tar to change directory to ${TEMPORARY_DIR}, so we do not
     #       have nested folders like ${TEMPORARY_DIR}/set_environment inside result tarball)
     #
-    #       --exclude-vcs - will help to get rid of all git-related files (no need to publish them)
-    #
     #       ${TEMPORARY_DIR}/set_environment.tgz - full path used for the result tarbal otherwize it will be created in
     #                                  current working jenkins directory, like: /var/jenkins_home/jobs/RedWolfSecurity/jobs/set-environment.ja761g/branches/master/workspace
     #
     #      set_environment - last argument is the folder to archive. It does not include full path (like: ${TEMPORARY_DIR}/set_environment)
     #                        because we already specified -C argument.
     #
-    tar -C "${TEMPORARY_DIR}" --exclude-vcs -czf "${TARBALL_FILENAME}" "set_environment" || { set_state "${FUNCNAME[0]}" 'failed_to_create_tarball'; abort; }
+    tar -C "${TEMPORARY_DIR}" -czf "${TARBALL_FILENAME}" "set_environment" || { set_state "${FUNCNAME[0]}" 'failed_to_create_tarball'; abort; }
 
     # Upload tarball to S3 so it is available via URL: https:#cdn.redwolfsecurity.com/ff/ff_agent/set_environment.tgz
     node cdn_upload.js \
