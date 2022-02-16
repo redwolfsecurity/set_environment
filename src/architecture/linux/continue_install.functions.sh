@@ -134,10 +134,10 @@ function install_docker {
   fi
 
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-  [ "${?}" != "0" ] && { set_state "${FUNCNAME[0]}" "failed_to_add_gpg_key"; return 1; }
+  [ $? -ne 0 ] && { set_state "${FUNCNAME[0]}" "failed_to_add_gpg_key"; return 1; }
 
   sudo add-apt-repository "deb [arch=${ARCHITECTURE}] https://download.docker.com/linux/ubuntu ${DISTRO} stable"
-  [ "${?}" != "0" ] && { set_state "${FUNCNAME[0]}" "failed_to_add_repository"; return 1; }
+  [ $? -ne 0 ] && { set_state "${FUNCNAME[0]}" "failed_to_add_repository"; return 1; }
 
   apt_update
 
@@ -159,7 +159,7 @@ function install_docker {
   if [ ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}" ]; then
     # Not in group
     sudo usermod -aG "${GROUP}" "${FF_AGENT_USERNAME}"
-    if [ "${?}" != "0" ]; then set_state "${FUNCNAME[0]}" "failed_to_modify_docker_user_group"; return 1; fi
+    if [ $? -ne 0 ]; then set_state "${FUNCNAME[0]}" "failed_to_modify_docker_user_group"; return 1; fi
     # Now check that we actually are in the group. This will work in current shell because it reads the groups file directly
     [ ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}" ] || { set_state "${FUNCNAME[0]}" "failed_postcondition_user_in_group"; return 1; }
   fi
@@ -167,8 +167,8 @@ function install_docker {
   # Postcondition checks
   # Verify docker is properly set up
   # Note we are running via sudo, and if we added user to the ${GROUP} then it won't be applied in this shell.
-  set_secret docker_release "$( sudo --user=${FF_AGENT_USERNAME} docker --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_to_get_release"; return 1; }
-  set_secret docker_compose_release "$( sudo --user=${FF_AGENT_USERNAME} docker-compose --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_compose_to_get_release"; return 1; }
+  set_secret docker_release "$( docker --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_to_get_release"; return 1; }
+  set_secret docker_compose_relase "$( docker-compose --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_compose_to_get_release"; return 1; }
 
   # Check if installed docker version is less than minimally required
   if [ "$( get_installed_docker_version )" -lt "${MINIMUM_VERSION}" ]; then
@@ -345,7 +345,7 @@ function install_set_environment_baseline {
   setup_logging || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_setup_logging"; abort; }
 
   # Install set of basic packages, bash functions, .bashrc and .profile files
-  assert_clean_exit assert_basic_components || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_assert_basic_components"; abort; }
+  assert_clean_exit assert_baseline_components || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_assert_baseline_components"; abort; }
 
   set_state "${FUNCNAME[0]}" 'success'
 }
@@ -355,7 +355,7 @@ function install_set_environment_baseline {
 # Install set of basic packages (most installed by "apt", but some installed by
 # different means (example: docker, n, npm, nodejs)), bash functions, .bashrc and .profile files.
 #
-function assert_basic_components {
+function assert_baseline_components {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Install basic packages before installing anything else. This will install "curl", thus "set_state" will be able to POST JSON.
@@ -368,7 +368,7 @@ function assert_basic_components {
   # TODO: DO WE REALLY DEPEND ON THIS BEFORE INSTALLING n/npm/nodejs??
   assert_clean_exit install_ff_agent_bashrc
   
-  # Install docker (not using "apt")
+  # Install docker (not using "apt") - COMMENTED OUT: docker is not part of baseline (it is part of "build" and/or "development", but not "baseline")
   #assert_clean_exit install_docker
 
   # Install nodejs suite and all its fixings (not using "apt")
@@ -423,36 +423,7 @@ function create_npmrc_credentials {
 
 ###############################################################################
 #
-# Assert .npmrc credentials
-#
-function assert_npmrc_credentials {
-  set_state "${FUNCNAME[0]}" 'started'
-
-  # TODO: Make a more rigorous check -- can we actually use these .npmrc credentials? They might be wrong or out of date!
-
-  NPMRC_FILE="${HOME}/.npmrc"
-  if [ ! -e "${NPMRC_FILE}" ]; then
-      set_state "${FUNCNAME[0]}" 'fatal_error_asserting_npmrc_credentials'; return 1;
-      error "assert_npmrc_credentials can't find ${NPMRC_FILE} which is required."
-      abort
-  fi
-
-  if file_contains_pattern "${NPMRC_FILE}" "development.acme.com"
-  then
-      :
-  else
-      set_state "${FUNCNAME[0]}" 'fatal_error_asserting_npmrc_credentials'
-      error "assert_npmrc_credentials can't find credentials in ${NPMRC_FILE}"
-      abort
-  fi
-
-  set_state "${FUNCNAME[0]}" 'success'
-}
-
-###############################################################################
-#
 # Install basic packages
-#
 #
 function apt_install_basic_packages {
 
