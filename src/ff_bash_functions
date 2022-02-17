@@ -1229,7 +1229,7 @@ export -f error
 
 ###############################################################################
 # Utility loging function to report given string to both: standard error stream and send it to logger
-# Require ${SERVICE} to be defined. Proudce all the output into both: standard error stream and send it to logger.
+# Require optional ${SERVICE} to be defined. Proudce all the output into both: standard error stream and send it to logger.
 #
 # Usage example:
 #   log "Some event happened."
@@ -1238,6 +1238,8 @@ export -f error
 #   Tue 07 Sep 2021 07:29:02 PM UTC: SomeService: Some event happened.
 #
 function log {
+
+  # Check if SERVICE is defined
   if [ "${SERVICE}" != "" ]; then
     local LOGGER_TAG="--tag '${SERVICE}'"
   fi
@@ -1249,22 +1251,32 @@ export -f log
 ###############################################################################
 #
 function successful_exit {
-    set_state ${SERVICE}_last_run_state success
-    log ${SERVICE}_last_run_state success
-    exit 0
+
+  # Check if SERVICE is defined
+  if [ "${SERVICE}" != "" ]; then
+    local SERVICE_SUFFIX="${SERVICE}_"
+    set_state "${SERVICE_SUFFIX}last_run_state" success
+  fi
+  
+  log "${SERVICE_SUFFIX}_last_run_state" success
+  exit 0
 }
 export -f successful_exit
 
 ###############################################################################
 # Utility error logging function
 function warning {
+    
+    # Check input: not empty
+    if [ -z "${@}" ]; then
+      return
+    fi
+
     log warning "${@}"
 }
 export -f warning
 
 ### END UTILITY FUNCITONS: LOGGING / PROCESS CONTROl
-
-
 
 
 ### BEGIN UTILITY FUNCITONS: TERMINAL / SHELL
