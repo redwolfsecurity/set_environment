@@ -3,7 +3,7 @@
 # This is OS-family specific script to continue installing "set_environment" project.
 
 # Source OS-specific install functions
-. src/architecture/linux/continue_install.functions.sh || { error "Failed to source OS-specific install functions."; exit 1; }
+source src/architecture/linux/continue_install.functions.sh || { error "Failed to source OS-specific install functions."; exit 1; }
 
 ###############################################################################
 #

@@ -530,7 +530,7 @@ function apt_install_basic_packages {
 # # end user devices like laptops, but it could definitely cause problems for distributed systems that want greater time precision.
 # # (source article: https://unix.stackexchange.com/questions/305643/ntpd-vs-systemd-timesyncd-how-to-achieve-reliable-ntp-syncing/464729#464729 )
 # #
-# # So install_ntp disables "systemd-timesyncd" and leaves only "ntpd".
+# # So install_ntp() disables "systemd-timesyncd" and leaves only "ntpd".
 # #
 # # Return value: 0 = success, 1 = failure
 # #
@@ -547,7 +547,7 @@ function apt_install_basic_packages {
 #     #   BUT AT THE SAME TIME the "systemctl status systemd-timesyncd.service" output shows "Active: inactive (dead)"
 #     #   and only after we run "sudo timedatectl set-ntp no" the output of "timedatectl status" will be finally expected: "Network time on: no"
 #     #
-#     # if [ "${IS_TIMESYNCD_ACTIVE}" == "active" ]; then
+#     #if [ "${IS_TIMESYNCD_ACTIVE}" == "active" ]; then
 
 #         # timesyncd is active, need to deactivate it:
 #         sudo timedatectl set-ntp no
@@ -572,7 +572,7 @@ function apt_install_basic_packages {
 #         IS_NTP_INSTALLED=$( dpkg --get-selections ntp | grep -v deinstall | grep install | awk '{print $2}' )  # returns 'install' if is installed or emptry string if not
 #         if [ "${IS_NTP_INSTALLED}" != "install" ]; then
 #             # Still not isntalled! Error out
-#             set_state "${FUNCNAME[0]}" 'failed_install_ntp'
+#             set_state "${FUNCNAME[0]}" 'failed_to_install_ntp'
 #             return 1
 #         fi
 #     fi
@@ -580,13 +580,13 @@ function apt_install_basic_packages {
 #     # Enble NTP (this will make it to autostart on reboot)
 #     sudo systemctl enable ntp
 #     if [ $? -ne 0 ]; then
-#         set_state "${FUNCNAME[0]}" 'failed'
+#         set_state "${FUNCNAME[0]}" 'failed_to_enable_ntp'
 #     fi
 
 #     # Start NTP (note: it is safe to try to start in case it is already running - this might happen if ntp was not installed and was just added 1st time by apt)
 #     sudo systemctl start ntp
 #     if [ $? -ne 0 ]; then
-#         set_state "${FUNCNAME[0]}" 'failed'
+#         set_state "${FUNCNAME[0]}" 'failed_to_start_ntp'
 #     fi
 
 #     # Last status check: query local ntpd
@@ -594,13 +594,14 @@ function apt_install_basic_packages {
 #     LOCAL_NTP_QUERY_STATUS_EXIT_CODE=$?
 
 #     if [ ${LOCAL_NTP_QUERY_STATUS_EXIT_CODE} -ne 0 ]; then
-#         set_state "${FUNCNAME[0]}" 'failed'
+#         set_state "${FUNCNAME[0]}" 'failed_to_query_ntp'
 #         return 1
 #     fi
 
 #     set_state "${FUNCNAME[0]}" 'success'
 #     return 0
 # }
+
 
 ###############################################################################
 #
