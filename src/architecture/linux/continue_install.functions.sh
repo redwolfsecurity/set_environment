@@ -1134,7 +1134,7 @@ function is_pm2_installed () {
     set_state "${FUNCNAME[0]}" 'success'
     return ${STATUS}
 }
-export is_pm2_installed
+export -f is_pm2_installed
 
 ###############################################################################
 # Category: process

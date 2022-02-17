@@ -340,8 +340,15 @@ export -f apt_remove
 ###############################################################################
 # Utility wrapper around apt_update for safer headless operation
 function apt_update {
-    APT_COMMAND=update
-    sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND}
+    local APT_COMMAND=update
+    
+    #        --force-yes is deprecetaed now.
+    #       Force yes; this is a dangerous option that will cause apt to continue without prompting if it is doing something potentially harmful. It should not be used
+    #       except in very special situations. Using force-yes can potentially destroy your system! Configuration Item: APT::Get::force-yes. This is deprecated and
+    #       replaced by --allow-unauthenticated , --allow-downgrades , --allow-remove-essential , --allow-change-held-packages in 1.1.
+    local FORCE_YES="--allow-unauthenticated --allow-downgrades --allow-remove-essential --allow-change-held-packages"
+
+    sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${FORCE_YES} ${APT_COMMAND}
     if [ ${?} -ne 0 ]; then
        error "updating packages"
        return 1
@@ -353,8 +360,15 @@ export -f apt_update
 ###############################################################################
 # Utility wrapper around apt_update for safer headless operation
 function apt_upgrade {
-    APT_COMMAND=upgrade
-    sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true --force-yes ${APT_COMMAND}
+    local APT_COMMAND=upgrade
+    
+    #        --force-yes is deprecetaed now.
+    #       Force yes; this is a dangerous option that will cause apt to continue without prompting if it is doing something potentially harmful. It should not be used
+    #       except in very special situations. Using force-yes can potentially destroy your system! Configuration Item: APT::Get::force-yes. This is deprecated and
+    #       replaced by --allow-unauthenticated , --allow-downgrades , --allow-remove-essential , --allow-change-held-packages in 1.1.
+    local FORCE_YES="--allow-unauthenticated --allow-downgrades --allow-remove-essential --allow-change-held-packages"
+
+    sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${FORCE_YES} ${APT_COMMAND}
     if [ ${?} -ne 0 ]; then
        error "Error upgrading packages"
        return 1
@@ -366,9 +380,16 @@ export -f apt_upgrade
 ###############################################################################
 # Utility wrapper around apt dist-upgrade for safer headless operation
 function apt_dist_upgrade {
-    APT_COMMAND=dist-upgrade
+    local APT_COMMAND=dist-upgrade
+
+    #        --force-yes is deprecetaed now.
+    #       Force yes; this is a dangerous option that will cause apt to continue without prompting if it is doing something potentially harmful. It should not be used
+    #       except in very special situations. Using force-yes can potentially destroy your system! Configuration Item: APT::Get::force-yes. This is deprecated and
+    #       replaced by --allow-unauthenticated , --allow-downgrades , --allow-remove-essential , --allow-change-held-packages in 1.1.
+    local FORCE_YES="--allow-unauthenticated --allow-downgrades --allow-remove-essential --allow-change-held-packages"
+
     apt_update && apt_upgrade
-    sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confdef" -yq -o Dpkg::Options::="--force-confold" ${APT_COMMAND}
+    sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confdef" -yq -o Dpkg::Options::="--force-confold" ${FORCE_YES} ${APT_COMMAND}
     if [ ${?} -ne 0 ]; then
        error "Error upgrading distribution"
        return 1
@@ -2360,7 +2381,7 @@ function discover_optional_environment_variable {
   # Case: can't find variable value neither from "get_secret()" nor from "DEFAULT_VALUE". Not an error.
   return 0
 }
-export discover_optional_environment_variable
+export -f discover_optional_environment_variable
 
 ###############################################################################
 #
