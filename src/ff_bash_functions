@@ -2559,24 +2559,63 @@ function check_set_get_state {
 
   # Check STATE_VALUE is not empty
   if [ "${STATE_VALUE}" == "" ]; then
-    echo "Error: check_set_get_state(): failed to generate random state value." >&2
+    echo "Error: check_set_get_state(): failed to generate random value." >&2
     return 1
   fi
 
   set_state "${STATE_NAME}" "${STATE_VALUE}" || { echo "failed to set_state ${STATE_NAME} ${STATE_VALUE}"; return 1; }
-  local RETRIEVED_STATE=$( get_state "${STATE_NAME}" ) || { echo "failed to get_state ${STATE_NAME}"; return 1; }
+  local RETRIEVED_VALUE=$( get_state "${STATE_NAME}" ) || { echo "failed to get_state ${STATE_NAME}"; return 1; }
 
   # Compare retrieved state with expected
-  if [ "${RETRIEVED_STATE}" == "${STATE_VALUE}" ]; then
+  if [ "${RETRIEVED_VALUE}" == "${STATE_VALUE}" ]; then
     # Match
     return 0
   else
     # Mismatch (error)
-    echo "Error: check_set_get_state(): failed to get expected state value. Details: state name '${STATE_NAME}', expected value '${STATE_VALUE}', but got '${RETRIEVED_STATE}'." >&2
+    echo "Error: check_set_get_state(): failed to get expected state value. Details: state name '${STATE_NAME}', expected value '${STATE_VALUE}', but got '${RETRIEVED_VALUE}'." >&2
     return 1
   fi
 }
-export -f check_environment_variables_are_set
+export -f check_set_get_state
+
+###############################################################################
+# Utility function check_set_get_secret() checks if set_secret() and get_secret()
+# work as expected.
+#
+# On success: reuturn 0
+# On failure: return 1 and prints error to standard error stream
+#
+function check_set_get_secret {
+
+  # Check uuidgen is installed
+  if ! command_exists uuidgen >/dev/null; then
+    echo "Error: check_set_get_state(): dependency 'jq' is not installed." >&2
+    return 1
+  fi
+  
+  SECRET_NAME="check_set_get_secret"
+  SECRET_VALUE=$( uuidgen )
+
+  # Check SECRET_VALUE is not empty
+  if [ "${SECRET_VALUE}" == "" ]; then
+    echo "Error: check_set_get_secret(): failed to generate random value." >&2
+    return 1
+  fi
+
+  set_secret "${SECRET_NAME}" "${SECRET_VALUE}" || { echo "failed to set_secret ${SECRET_NAME} ${SECRET_VALUE}"; return 1; }
+  local RETRIEVED_VALUE=$( get_secret "${SECRET_NAME}" ) || { echo "failed to get_secret ${SECRET_NAME}"; return 1; }
+
+  # Compare retrieved state with expected
+  if [ "${RETRIEVED_VALUE}" == "${SECRET_VALUE}" ]; then
+    # Match
+    return 0
+  else
+    # Mismatch (error)
+    echo "Error: check_set_get_secret(): failed to get expected secret value. Details: secret name '${SECRET_NAME}', expected value '${SECRET_VALUE}', but got '${RETRIEVED_VALUE}'." >&2
+    return 1
+  fi
+}
+export -f check_set_get_secret
 
 ###############################################################################
 # Utility function converts given associative array into JSON string
@@ -3039,12 +3078,17 @@ function is_set_environment_working {
 
   # Check nodejs installation
   FUNCTION_NAME="check_nodejs_installation"
-  CHECK_CODE="${FUNCTION_NAME}"     # Note: Fucntion name (same as check_code)
+  CHECK_CODE="${FUNCTION_NAME}"
   run_check ${FUNCTION_NAME} ${CHECK_CODE} ERRORS ALL_CHECKS
 
   # Check set_state() / get_state() by setting random value to some test state and then retrieving it back
   FUNCTION_NAME="check_set_get_state"
-  CHECK_CODE="${FUNCTION_NAME}"     # Note: Fucntion name (same as check_code)
+  CHECK_CODE="${FUNCTION_NAME}"
+  run_check ${FUNCTION_NAME} ${CHECK_CODE} ERRORS ALL_CHECKS
+
+  # Check set_secret() / get_secret() by setting random value to some test secret and then retrieving it back
+  FUNCTION_NAME="check_set_get_secret"
+  CHECK_CODE="${FUNCTION_NAME}"
   run_check ${FUNCTION_NAME} ${CHECK_CODE} ERRORS ALL_CHECKS
 
   # Check ff_agent/bin is in the path
