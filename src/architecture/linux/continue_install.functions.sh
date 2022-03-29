@@ -256,8 +256,8 @@ function install_go {
         "${URL}"
 
   # Check if download succeed
-  DOWNLOAD_STATUS_CODE=$?
-  if [ ${DOWNLOAD_STATUS_CODE} -ne 0 ]; then
+  STATUS_CODE=$?
+  if [ ${STATUS_CODE} -ne 0 ]; then
       echo "error: failed to download tarball by URL: '${URL}'" >&2
       exit 1
   fi
