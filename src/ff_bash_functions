@@ -110,7 +110,8 @@
 ## END DISCOVER FUNCTIONS
 ## BEGIN SET ENVIRONMENT FUNCTIONS
 #    - check_environment_variables_are_set 
-#    - check_nodejs_installation 
+#    - check_nodejs_installation
+#    - check_ff_agent_bin_is_in_the_path
 #    - choose_ff_agent_home 
 #    - ensure_ff_agent_home_exists 
 #    - ff_api_get 
@@ -2089,7 +2090,7 @@ export -f can_sudo
 # Utility function check_group_exists takes one argument (group name) and return 0 if such group exists.
 # Return:
 #  0 - group exists
-#  non-zero code - group does not exist or no arguments given
+#  1 - group does not exist or no arguments given
 #
 # Usage example:
 #   if ! check_group_exists 'docker'; then error "Group docker does not exist"; fi
@@ -2520,6 +2521,7 @@ export -f get_lsb_release
 # On failure: return 1
 #
 function check_environment_variables_are_set {
+  set_state "${FUNCNAME[0]}" 'started'
 
   # Define list of expected non-empty variables
   local ALL_EXPECTED_ENVRIONMENT_VARIABLES=(
@@ -2534,8 +2536,15 @@ function check_environment_variables_are_set {
 
   # Check required environment variables are set
   for VARIABLE_NAME in ${ALL_EXPECTED_ENVRIONMENT_VARIABLES[@]}; do 
-    ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }    # Note: the error details were already reported by ensure_variable_not_empty()
+    ensure_variable_not_empty "${VARIABLE_NAME}" || {    # Note: the error details were already reported by ensure_variable_not_empty()
+      local ERROR_CODE=$( echo "error_check_environment_variables_are_set_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )
+      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      return 1
+    }
   done
+
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
 }
 export -f check_environment_variables_are_set
 
@@ -2547,10 +2556,11 @@ export -f check_environment_variables_are_set
 # On failure: return 1 and prints error to standard error stream
 #
 function check_set_get_state {
+  set_state "${FUNCNAME[0]}" 'started'
 
   # Check uuidgen is installed
   if ! command_exists uuidgen >/dev/null; then
-    echo "Error: check_set_get_state(): dependency 'jq' is not installed." >&2
+    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_uuidgen'
     return 1
   fi
   
@@ -2559,22 +2569,25 @@ function check_set_get_state {
 
   # Check STATE_VALUE is not empty
   if [ "${STATE_VALUE}" == "" ]; then
-    echo "Error: check_set_get_state(): failed to generate random value." >&2
+    set_state "${FUNCNAME[0]}" 'failed_generate_random_uuid'
     return 1
   fi
 
-  set_state "${STATE_NAME}" "${STATE_VALUE}" || { echo "failed to set_state ${STATE_NAME} ${STATE_VALUE}"; return 1; }
-  local RETRIEVED_VALUE=$( get_state "${STATE_NAME}" ) || { echo "failed to get_state ${STATE_NAME}"; return 1; }
+  set_state "${STATE_NAME}" "${STATE_VALUE}" || { return 1; }
+  local RETRIEVED_VALUE=$( get_state "${STATE_NAME}" ) || { 
+    set_state "${FUNCNAME[0]}" 'failed_retrieve_state'
+    return 1
+  }
 
   # Compare retrieved state with expected
-  if [ "${RETRIEVED_VALUE}" == "${STATE_VALUE}" ]; then
-    # Match
-    return 0
-  else
+  if [ "${RETRIEVED_VALUE}" != "${STATE_VALUE}" ]; then
     # Mismatch (error)
-    echo "Error: check_set_get_state(): failed to get expected state value. Details: state name '${STATE_NAME}', expected value '${STATE_VALUE}', but got '${RETRIEVED_VALUE}'." >&2
+    set_state "${FUNCNAME[0]}" 'error_retrieved_value_mismatch'
     return 1
   fi
+
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
 }
 export -f check_set_get_state
 
@@ -2586,10 +2599,11 @@ export -f check_set_get_state
 # On failure: return 1 and prints error to standard error stream
 #
 function check_set_get_secret {
+  set_state "${FUNCNAME[0]}" 'started'
 
   # Check uuidgen is installed
   if ! command_exists uuidgen >/dev/null; then
-    echo "Error: check_set_get_state(): dependency 'jq' is not installed." >&2
+    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_uuidgen'
     return 1
   fi
   
@@ -2598,70 +2612,31 @@ function check_set_get_secret {
 
   # Check SECRET_VALUE is not empty
   if [ "${SECRET_VALUE}" == "" ]; then
-    echo "Error: check_set_get_secret(): failed to generate random value." >&2
+    set_state "${FUNCNAME[0]}" 'failed_generate_random_uuid'
     return 1
   fi
 
-  set_secret "${SECRET_NAME}" "${SECRET_VALUE}" || { echo "failed to set_secret ${SECRET_NAME} ${SECRET_VALUE}"; return 1; }
-  local RETRIEVED_VALUE=$( get_secret "${SECRET_NAME}" ) || { echo "failed to get_secret ${SECRET_NAME}"; return 1; }
+  set_secret "${SECRET_NAME}" "${SECRET_VALUE}" || {
+    set_state "${FUNCNAME[0]}" 'failed_set_secret'
+    return 1
+  }
+
+  local RETRIEVED_VALUE=$( get_secret "${SECRET_NAME}" ) || {
+    set_state "${FUNCNAME[0]}" 'failed_retrieve_secret'
+    return 1
+  }
 
   # Compare retrieved state with expected
-  if [ "${RETRIEVED_VALUE}" == "${SECRET_VALUE}" ]; then
-    # Match
-    return 0
-  else
+  if [ "${RETRIEVED_VALUE}" != "${SECRET_VALUE}" ]; then
     # Mismatch (error)
-    echo "Error: check_set_get_secret(): failed to get expected secret value. Details: secret name '${SECRET_NAME}', expected value '${SECRET_VALUE}', but got '${RETRIEVED_VALUE}'." >&2
+    set_state "${FUNCNAME[0]}" 'error_retrieved_value_mismatch'
     return 1
   fi
+  
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
 }
 export -f check_set_get_secret
-
-###############################################################################
-# Utility function converts given associative array into JSON string
-# 
-# Usage example:
-#  declare -A AR=( [$'foo\naha']=$'a\nb' [bar]=2 [baz]=$'{"x":0}' )
-#  JSON=$( associative_array_to_json AR )
-#  if [ $? -eq 0 ]; then
-#    echo "${JSON}"
-#  else
-#    echo "Error: failed to convert associative array to JSON." >&2
-#  fi
-#
-# More details:
-#  https://stackoverflow.com/questions/44792241/constructing-a-json-hash-from-a-bash-associative-array -> https://stackoverflow.com/a/44792751/7022062
-#
-function associative_array_to_json {
-
-  # Ger input element by reference
-  local -n ASSOCIATIVE_ARRAY_REFERENCE=$1
-
-  # # Check if input is an associative array
-  # # For details of this check see 2 links:s
-  # # https://stackoverflow.com/questions/26925905/in-bash-test-if-associative-array-is-declared
-  # # https://stackoverflow.com/questions/65233512/what-is-the-use-of-the-a-operator-on-shell-expansions 
-  # if [ ${ASSOCIATIVE_ARRAY_REFERENCE@a} != 'a' ]; then
-  #   error "associative_array_to_json(): argument is not of an 'associative array' type."
-  #   return 1
-  # fi
-
-  # Check dependency: 'jq'
-  if ! command_exists jq >/dev/null; then
-    error "associative_array_to_json(): missing dependency: 'jq' is not installed."
-    return 1
-  fi
-
-  # Turn associative array -> JSON
-  for key in "${!ASSOCIATIVE_ARRAY_REFERENCE[@]}"; do
-    printf '%s\0%s\0' "$key" "${ASSOCIATIVE_ARRAY_REFERENCE[$key]}"
-  done |
-  jq -Rs '
-    split("\u0000")
-    | . as $a
-    | reduce range(0; length/2) as $i 
-        ({}; . + {($a[2*$i]): ($a[2*$i + 1]|fromjson? // .)})'
-}
 
 ###############################################################################
 # Utility function check_nodejs_installation() checks if nodejs is installed under right path (TODO: and right version)
@@ -2669,90 +2644,97 @@ function associative_array_to_json {
 # On failure: 1
 #
 function check_nodejs_installation {
+  set_state "${FUNCNAME[0]}" 'started'
 
-  # Let's run all the checks and collect all the found errors into associative array (key = name of the check, value = error code)
-  declare -A CHECK_CODES
-  declare -A ERRORS
-
+  local ERRORS_COUNT=0
   # Check nodejs is installed
-  local CHECK_NAME='is_nodejs_installed'
   local WHICH_NODE="$( command_exists node )"
   if [ "${WHICH_NODE}" == "" ]; then
     # 'node' does not exist
     ERROR_CODE="error_check_nodejs_installation_nodejs_not_installed"
-    set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
-    ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; 
+    set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+    (( ERRORS_COUNT++ ))
   else
     # 'node' exists: run few more node-related checks
     # Check nodejs is not installed under /usr
-    CHECK_NAME='is_nodejs_installed_into_right_path'
     [[ "${WHICH_NODE}" =~ ^/usr/ ]] && { 
       ERROR_CODE="error_check_nodejs_installation_wrong_installation_dir"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
-      ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; 
+      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      (( ERRORS_COUNT++ ))
     }
 
     # Get expected nodejs version
-    CHECK_NAME='get_expected_nodejs_version'
     local EXPECTED_VERSION="$( get_expected_nodejs_version )"
     [ -z "${EXPECTED_VERSION}" ] && { 
       ERROR_CODE="failed_to_get_expected_nodejs_version"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
-      ERRORS[${CHECK_NAME}]="${ERROR_CODE}";
+      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      (( ERRORS_COUNT++ ))
     }
 
     # Get actual nodejs version
-    CHECK_NAME='get_actual_nodejs_version'
     local ACTUAL_VERSION="$( node --version )"
     [ -z "${ACTUAL_VERSION}" ] && {
       ERROR_CODE="failed_to_get_actual_nodejs_version"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; 
-      ERRORS[${CHECK_NAME}]="${ERROR_CODE}";
+      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      (( ERRORS_COUNT++ ))
     }
 
     # Compare expected vs actual nodejs versions
-    CHECK_NAME='is_nodejs_right_versions'
     if [ "${EXPECTED_VERSION}" != "${ACTUAL_VERSION}" ]; then
       # Version mismatch
       ERROR_CODE="error_mismatching_nodejs_versions"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; 
-      ERRORS[${CHECK_NAME}]="${ERROR_CODE}";
+      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      (( ERRORS_COUNT++ ))
     fi
   fi
 
   # Check npm is installed
-  CHECK_NAME='is_npm_installed'
   WHICH_NPM=$( command_exists npm )
   [ "${WHICH_NPM}" != "" ] || { 
     ERROR_CODE="error_check_npm_installation_nodejs_not_installed"
-    set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; 
-    ERRORS[${CHECK_NAME}]="${ERROR_CODE}";
+    set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+    (( ERRORS_COUNT++ ))
   }
 
   # Check npm is not installed under /usr
-  CHECK_NAME='is_npm_installed_into_right_path'
   [[ "${WHICH_NPM}" =~ ^/usr/ ]] && { 
     ERROR_CODE="error_check_npm_installation_wrong_installation_dir"
-    set_state "${FUNCNAME[0]}" "${ERROR_CODE}";
-    ERRORS[${CHECK_NAME}]="${ERROR_CODE}"; 
+    set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+    (( ERRORS_COUNT++ ))
   }
   
   # List of all the checks done with their statuses
-  if [ ${#ERRORS[@]} -eq 0 ]; then
-    # No errors
-    return 0
-  else
+  if [ ${ERRORS_COUNT} -gt 0 ]; then
     # We found errors
-    # Print associative array with erros to the standard error as JSON
-    local ERRORS_JSON=$( associative_array_to_json ERRORS )
-    if [ $? -eq 0 ]; then
-      # Successfully turned associative array -> JSON  (else, just don't print it)
-      echo "${ERRORS_JSON}" | jq . >&2
-    fi
+    set_state "${FUNCNAME[0]}" 'failed'
     return 1
   fi
+
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
 }
 export -f check_nodejs_installation
+
+###############################################################################
+# Utility function check_ff_agent_bin_is_in_the_path()
+# On success: reuturn 0
+# On failure: 1
+#
+function check_ff_agent_bin_is_in_the_path {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  local FF_AGENT_BIN="${FF_AGENT_HOME}/bin"
+  printenv PATH | grep --quiet "${FF_AGENT_BIN}"
+  [ ${?} -ne 0 ] && {
+    # Error
+    set_state "${FUNCNAME[0]}" 'failed_to_find_expected_path'
+    return 1
+  }
+
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f check_ff_agent_bin_is_in_the_path
 
 ###############################################################################
 #
@@ -2962,230 +2944,33 @@ function is_framework_api_defined {
 }
 export -f is_framework_api_defined
 
-################################################
-#
-# F-n run_check() is a wrapper that:
-#    - runs given function
-#    - collects it's output
-#    - adds check_code into the passed ALL_CHECKS associative array
-#    - checks the function run result and preserve errors in the passed associative array ERRORS
-#    - forwards function return code to caller
-#
-# Function takes:
-#   - reference to the ERRORS associative array,
-#   - function name to call
-#   - check code (string, no spaces, all lowercase, usually same as a f-n name to call)
-#
-# In case given function fails (return non-zero code) run_check modifies passed ERRORS associative array
-# and forwards failed to return call back to the caller.
-#
-function run_check {
-    
-    # Get arguments
-    FUNCTION_NAME="${1}"
-    CHECK_CODE="${2}"
-    
-    # Get ERRORS_REFERENCE so we can modify passed associative array.
-    # Not: local -n  -- Give each name the nameref attribute, making it a name reference to another variable.
-    # That other variable is defined by the value of name. All references, assignments, and attribute
-    # modifications to name, except for those using or changing the -n attribute itself, are performed
-    # on the variable referenced by name’s value. The nameref attribute cannot be applied to array variables.
-    local -n ERRORS_REFERENCE=$3
-    local -n ALL_CHECKS_REFERENCE=$4
-
-    # Add check code into ALL_CHECKS_REFERENCE
-    ALL_CHECKS_REFERENCE["${CHECK_CODE}"]=""
-
-    # Check given function exists
-    if [[ $(type -t ${FUNCTION_NAME}) != function ]]; then
-        OUTPUT="Error: function '${FUNCTION_NAME}' does not exist"
-        ERRORS_REFERENCE["${CHECK_CODE}"]="${OUTPUT}"
-        return 1
-    fi
-    
-    # Call function, collect output
-    # None: the OUTPUT here can be a simple string, like error code, or can be JSON for more complex checks (still as string here)
-    OUTPUT=$( ${FUNCTION_NAME} 2>&1 )
-    
-    # Preserve function exit code and push collected output into errors associative array if function failed
-    STATUS_CODE=$?
-    if [ ${STATUS_CODE} -ne 0 ]; then
-        # Preserve error details for the final report
-        ERRORS_REFERENCE["${CHECK_CODE}"]="${OUTPUT}"
-    fi
-    
-    # Forward function return code to caller
-    return ${STATUS_CODE}
-}
-export -f run_check
-
-###############################################################################
-# Utility function is_json checks if given string represents JSON or not.
-# Return:
-#    0 - is json
-#    1 - is not a json
-#
-# Usage example:
-#
-#    DOC1="some text\n goes \n here"
-#    DOC2='{"foo\naha": "a\nb", "bar": 2, "baz": {"x": 0}}'
-#    DOC3=''
-#
-#    if is_json "${DOC1}"; then echo 'valid JSON'; else echo 'not a JSON'; fi     # <-- not a JSON
-#    if is_json "${DOC2}"; then echo 'valid JSON'; else echo 'not a JSON'; fi     # <-- valid JSON
-#    if is_json "${DOC3}"; then echo 'valid JSON'; else echo 'not a JSON'; fi     # <-- not a JSON
-#
-function is_json {
-  # Get passed json candidate string
-  JSON_CANDIDATE="$@"
-  
-  # Check strins is not empty
-  [ -z "${JSON_CANDIDATE}" ] && return 1
-
-  # Return 0 if string can be parsed by 'jq' as JSON
-  [ $( echo "${JSON_CANDIDATE}" | jq empty > /dev/null 2>&1; echo $?;) -eq 0 ] && return 0
-  
-  # Is not json
-  return 1
-}
-export -f is_json
-
 ###############################################################################
 # Utility function is_set_environment_working() checks if all the aspects of "set_environment"
 # are in place and functioning as expected
 #
 function is_set_environment_working {
-  set_state "${FUNCNAME[0]}" "started"
-
-  # Declare an associative array ERRORS (key = check code (same as check f-n name), value = collected error data.
-  # For now string with error details, for more complex error shoudl be able to take JSON error details in future).
-  #
-  # To add more items either:
-  #    - ERRORS+=(['new_key']='New value')
-  #    or
-  #    - ERRORS['new_key']='New Value'
-  #
-  # To iterate collected pairs one can:
-  #   for KEY in "${!ERRORS[@]}"; do VALUE="${ERRORS[$KEY]}"; echo "key: ${KEY}, value: ${VALUE}"; done
-  #
-  declare -A ERRORS
-  declare -A ALL_CHECKS
+  set_state "${FUNCNAME[0]}" 'started'
 
   # Check expected environments are in place
-  FUNCTION_NAME="check_environment_variables_are_set"
-  CHECK_CODE="${FUNCTION_NAME}"     # Note: Fucntion name (same as check_code)
-  run_check ${FUNCTION_NAME} ${CHECK_CODE} ERRORS ALL_CHECKS
+  check_environment_variables_are_set
 
   # Check nodejs installation
-  FUNCTION_NAME="check_nodejs_installation"
-  CHECK_CODE="${FUNCTION_NAME}"
-  run_check ${FUNCTION_NAME} ${CHECK_CODE} ERRORS ALL_CHECKS
+  check_nodejs_installation
 
   # Check set_state() / get_state() by setting random value to some test state and then retrieving it back
-  FUNCTION_NAME="check_set_get_state"
-  CHECK_CODE="${FUNCTION_NAME}"
-  run_check ${FUNCTION_NAME} ${CHECK_CODE} ERRORS ALL_CHECKS
+  check_set_get_state
 
   # Check set_secret() / get_secret() by setting random value to some test secret and then retrieving it back
-  FUNCTION_NAME="check_set_get_secret"
-  CHECK_CODE="${FUNCTION_NAME}"
-  run_check ${FUNCTION_NAME} ${CHECK_CODE} ERRORS ALL_CHECKS
+  check_set_get_secret
 
   # Check ff_agent/bin is in the path
-  CHECK_CODE="ff_agent_bin_in_path"
-  local FF_AGENT_BIN="${FF_AGENT_HOME}/bin"
-  printenv PATH | grep --quiet "${FF_AGENT_BIN}"
-  [ ${?} -ne 0 ] && {
-    # Error
-    ERRORS_REFERENCE["${CHECK_CODE}"]="Expected path '${FF_AGENT_BIN}' was not injected into the PATH. PATH is: '${PATH}'"
-  }
-  
+  check_ff_agent_bin_is_in_the_path
+
   # TODO: check docker is installed with >= minimal version (if install_docker() was required in given environment)
 
   # TOOD: check if list of required basic packages is installed
 
   # TODO: instead of "cherry-picking" what to check we should have 1:1 "doer/instaler" and corresponding "checker" functions defined, which we'll call here by list.
-
-  ###############################
-  ##  Generate JSON report     ## 
-  ###############################
-
-  # TODO: Check dependencies: variables are set: FF_AGENT_URI, FF_HOST
-
-  # Create JSON using 'jq' from scratch
-  MIME_TYPE='selfcheck/report'
-  REPORT_JSON=$(jq --null-input \
-    --arg mime_type "${MIME_TYPE}" \
-    '{"mime_type": $mime_type }')
-
-  # # Add URI_TEMPLATE, URI
-  REPORT_JSON=$( echo "${REPORT_JSON}" | jq ".uri_template |= \"/[mime_type]/[ff_agent_uri]\"" )
-  REPORT_JSON=$( echo "${REPORT_JSON}" | jq ".uri          |= \"/${MIME_TYPE}${FF_AGENT_URI}\"" )
-
-  # Add FF_AGENT_URI
-  REPORT_JSON=$( echo "${REPORT_JSON}" | jq ".ff_agent_uri |= \"${FF_AGENT_URI}\"" )
-
-  # Add FF_HOST
-  REPORT_JSON=$( echo "${REPORT_JSON}" | jq ".ff_host |= \"${FF_HOST}\"" )
-
-  # Add FF_AGENT_URI
-  REPORT_JSON=$( echo "${REPORT_JSON}" | jq ".ff_agent_uri |= \"${FF_AGENT_URI}\"" )
-  
-  # Add timestamp
-  REPORT_JSON=$( echo "${REPORT_JSON}" | jq ".timestamp_epoch_ms |= $( get_epoch_ms )" )
-  
-  # Add all checks
-  if [ ${#ALL_CHECKS[@]} -gt 0 ]; then
-    # We have checks > 0, create "all_checks" attribute in report JSON
-    REPORT_JSON=$( echo "${REPORT_JSON}" | jq '.all_checks |= []' )
-
-    # Add all checks into JSON
-    for CHECK_CODE in "${!ALL_CHECKS[@]}"; do
-      # None: the VALUE here can be a simple string, like error code, or can be JSON for more complex checks (still as string here)
-      VALUE="${ALL_CHECKS[${CHECK_CODE}]}"
-
-      # Removing doublequotes from value, else it breaks JSON
-      SANITIZED_VALUE=$( echo "${VALUE}" | tr -d '"' )
-
-      # Add key:value pair into the "errors" property
-      REPORT_JSON=$( echo "${REPORT_JSON}" | jq ".all_checks += [\"${CHECK_CODE}\"]" )      
-    done
-  fi
-
-  # Check if we have any errors, add them into JSON report
-  if [ ${#ERRORS[@]} -gt 0 ]; then
-    # We have errors, create "errors" attribute in report JSON
-    REPORT_JSON=$( echo "${REPORT_JSON}" | jq '.errors |= {}' )
-    REPORT_JSON=$( echo "${REPORT_JSON}" | jq '.is_error |= true' )
-
-    # Add all errors into JSON
-    for CHECK_CODE in "${!ERRORS[@]}"; do
-        VALUE="${ERRORS[${CHECK_CODE}]}"
-
-        # Check if collected VALUE is valid JSON, then use it as a part of report "as is", else sanitize it and use as a string.
-        if is_json "${VALUE}"; then 
-          # Is JSON
-          # Insert Value not as a string, but as a straight JSON part
-          REPORT_JSON=$( echo "${REPORT_JSON}" | jq ".errors += {\"${CHECK_CODE}\": ${VALUE}}" )
-        else
-          # Isn't JSON
-          # Removing doublequotes from value, else it breaks JSON
-          SANITIZED_VALUE=$( echo "${VALUE}" | tr -d '"' )
-
-          # Add key:value pair into the "errors" property
-          REPORT_JSON=$( echo "${REPORT_JSON}" | jq ".errors += {\"${CHECK_CODE}\": \"${SANITIZED_VALUE}\"}" )
-        fi
-    done
-  else
-    # Success (no errors)
-    # Why we don't have "is_success: true" in the master-dictionary?
-    # There should be a way to indicate the successful outcomes, so we don't have to query by absence of error flags (like "not is_error:true").
-    # At the same time we can not use "is_error:false", thus "is_success:true" or alike is required to exist.
-    REPORT_JSON=$( echo "${REPORT_JSON}" | jq '.is_success |= true' )
-  fi
-
-  # Print report
-  echo "${REPORT_JSON}"
 
   # Check if we have any errors
   if [ ${#ERRORS[@]} -gt 0 ]; then
