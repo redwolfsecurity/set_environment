@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 
-# Caller must source this script.
+# This script implements the installer logic of the "set_environment" project.
+# Project github page: https://github.com/redwolfsecurity/set_environment
+#
+# Caller must source this script, so it can inject environment into the current terminal as well.
 # Caller can check if set_environment was started by right user (after sourcing ". ./install") by chkecking:
 #    - environment variable FF_AGENT_USERNAME
 #      Example: if [ "${FF_AGENT_USERNAME}" == "$(whoami)" ]; then echo "I'm the right/proper user"; fi
@@ -19,27 +22,24 @@ export SERVICE="set_environment"
 ###############################################################################
 #
 function install_set_environment {
-    # Log installer started
-    logger -t "${SERVICE}" "Installer started by $(whoami) on $(date --utc) under PWD: $(pwd)"
-
-    # This script implements the installer logic of the "set_environment" project.
-    # Project github page: [TODO: add a link to the new github location of this project]
+    set_state "${FUNCNAME[0]}" 'started'
 
     # Change directory into the script's directory. This ensure all relative paths working correctly.
-    cd "$( dirname $( readlink -f "${BASH_SOURCE[0]}" ) )" || { echo "Error: failed to change directory to $( dirname ${BASH_SOURCE[0]} )" >&2; exit 1; } # note: can not yet use error()
+    cd "$( dirname $( readlink -f "${BASH_SOURCE[0]}" ) )" || { echo "Error: failed to change directory to $( dirname ${BASH_SOURCE[0]} )" >&2; exit 1; } # note: can not yet use error() / abort() / set_state()
     
     # Source common functions
-    source src/ff_bash_functions || { echo "Error: failed to source common functions." >&2; exit 1; } # note: can not yet use error()
+    source src/ff_bash_functions || { echo "Error: failed to source common functions." >&2; exit 1; } # note: can not yet use error() / abort() / set_state()
 
     # Initialize terminal
-    terminal_initialize || { error "failed_to_initialize_terminal"; exit 1; }
+    terminal_initialize || { set_state "${FUNCNAME[0]}" "terminal_error_initialize_terminal"; abort; }
 
     # Continue by calling OS-specific installer
-    source "src/architecture/$( discover_os )/continue_install.sh" "$@" || { error "continue_install.sh returned bad code: ${?}"; exit 1; }
+    source "src/architecture/$( discover_os )/continue_install.sh" "$@" || { set_state "${FUNCNAME[0]}" "terminal_error_continue_install"; abort; }
 
     # Last step: run a selfcheck
     is_set_environment_working || { set_state "${FUNCNAME[0]}" "terminal_error_selfcheck_failed"; abort; }
+
+    set_state "${FUNCNAME[0]}" 'success'
 }
 
-install_set_environment
-set_state "${SERVICE}" success
+install_set_environment  # no need to check errors here, the f-n itself reports errors (all of which are "terminal" errors) and aborts/exits.
