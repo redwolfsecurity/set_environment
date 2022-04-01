@@ -1103,7 +1103,6 @@ function is_pm2_installed () {
     set_state "${FUNCNAME[0]}" 'success'
     return ${STATUS}
 }
-export -f is_pm2_installed
 
 # ##########################################################################################
 # #
@@ -1262,7 +1261,6 @@ function is_pm2_running_as_me () {
 
     return ${STATUS}
 }
-export -f is_pm2_running_as_me
 
 ###############################################################################
 # Category: process
@@ -1314,7 +1312,6 @@ function pm2_ensure () {
     # If all above works, we have it running
     set_state "${FUNCNAME[0]}" 'success'
 }
-export -f pm2_ensure
 
 ###############################################################################
 # Category: process
@@ -1348,7 +1345,6 @@ function pm2_install () {
 
     set_state "${FUNCNAME[0]}" 'success'
 }
-export -f pm2_install
 
 ###############################################################################
 # Category: process
@@ -1370,7 +1366,6 @@ function pm2_start () {
 
     set_state "${FUNCNAME[0]}" 'error_failed_to_start_pm2'
 }
-export -f pm2_start
 
 ###############################################################################
 # Category: process
@@ -1396,7 +1391,6 @@ function pm2_stop () {
     # We have stopped it, and it is not running.
     set_state "${FUNCNAME[0]}" 'success'
 }
-export -f pm2_stop
 
 ###############################################################################
 # Category: process
@@ -1420,7 +1414,6 @@ function pm2_uninstall () {
 
     set_state "${FUNCNAME[0]}" 'error_validating_uninstallation'
 }
-export -f pm2_uninstall
 
 ###############################################################################
 #
