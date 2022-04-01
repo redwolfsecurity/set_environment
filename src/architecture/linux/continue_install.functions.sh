@@ -39,35 +39,53 @@
 ###############################################################################
 #
 # Return information if package is installed in system, dpkg depend
-# @param $1 string package name
-# @param ${2} array  package list to append
-# @return  Success if value exists, Failure otherwise
+# @param ${1} string package name
+# @param ${2} array package list to append
+#
+# Return code value:
+#  0 - Success
+#      Note: disregard of package is already installed or not, the success 
+#            for function "add_to_install_if_missing" means we checked and added
+#            (if it was missing) and didn't face any errors.
+#
+#  1 - on error (e.g.: bad arguments)
+# 
 # Usage: add_to_install_if_missing "vim" PACKAGES
 #
 function add_to_install_if_missing {
 
+  # Check inputs: ${1} - must be not empty string (package name to check)
+  if [ "${1}" == "" ]; then
+    error "${FUNCNAME[0]} bad arguments: package name is not specified (no arguments)"
+    return 1
+  fi
+  
+  # Take argument ${1} - package name
+  local PACKAGE="${1}"
+
+  # Check inputs: ${2} - must be a reference to an array
+  if [ "${PACKAGES_TO_INSTALL@a}" != "a" ]; then
+    # Error: passed reference does not point to array
+    error "${FUNCNAME[0]} bad arguments: 2nd argument must be reference to array"
+    return 1
+  fi
+
+  # Take argument ${2} - reference to array
 	declare -n PACKAGES_TO_INSTALL=${2}
-
-	local CHECK_PKG_MSG="INFO: Checking availability of ${FONT_STYLE_BOLD}%s${FONT_STYLE_NORMAL} package in system"
-	local   ADD_PKG_MSG="DEBUG: Adding ${FONT_STYLE_BOLD}%s${FONT_STYLE_NORMAL} to required packages to install"
-	local  HAVE_PKG_MSG="INFO: Package ${FONT_STYLE_BOLD}%s${FONT_STYLE_NORMAL} already installed, skipping"
-
-	#log "${CHECK_PKG_MSG/\%s/$1}"
 
 	# Grep exit code 0=installed, 1=not installed.
 	# Note we use grep to cover case "Status: deinstall ok config-files" when package was uninstalled.
-	dpkg --status ${1} 2>/dev/null | grep --silent "installed"
+	dpkg --status ${PACKAGE} 2>/dev/null | grep --silent "installed"
 	INSTALLED=${?}
 
-    # Check exit code
-	if [[ ${INSTALLED} != 0 ]]; then
-		PACKAGES_TO_INSTALL+=(${1})
-	# 	log "${ADD_PKG_MSG/\%s/$1}"
-	# else
-	# 	log "${HAVE_PKG_MSG/\%s/$1}"
+  # Check exit code
+	if [ ${INSTALLED} != 0 ]; then
+    # Not installed. Add package name into the list.
+		PACKAGES_TO_INSTALL+=(${PACKAGE})
 	fi
 
-	return ${INSTALLED}
+  # Return success
+	return 0
 }
 
 ###############################################################################
@@ -104,11 +122,15 @@ function apt_install_basic_packages {
       # System: CA certificates
       ca-certificates # Common CA certificates - Docker requires
   )
+  local MISSING_PACKAGES=()
 
-  # Temporarily disabled because Dmitry broke it all
-  # add_to_install_if_missing ${REQUIRED_PACKAGES[@]}
+  # Iterate required packages and collect only missing ones
+  for REQUIRED_PACKAGE in ${REQUIRED_PACKAGES[@]}; do
+    add_to_install_if_missing ${REQUIRED_PACKAGE} MISSING_PACKAGES
+  done
 
-  apt_install ${REQUIRED_PACKAGES[@]} || { set_state "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
+  # Install only missing packages
+  apt_install ${MISSING_PACKAGES[@]} || { set_state "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
 
   set_state "${FUNCNAME[0]}" 'success'
   return 0
