@@ -914,7 +914,7 @@ function install_n {
   export N_PREFIX="${FF_AGENT_HOME}/.n"  # example: /home/ubuntu/ff_agent/.n
 
   # Add '# Export N_PREFIX' into the custom .profile file if in was not injected earlier.
-  # TODO: add into ff_bash_funcitons a function to add/edit/remove our custom profile file.
+  # TODO: add into ff_bash_functions a function to add/edit/remove our custom profile file.
   TARGET_FILE="${FF_AGENT_PROFILE_FILE}"
   PATTERN="^export N_PREFIX=\"${FF_AGENT_HOME}/.n\""
   EXPECTED_LINE="export N_PREFIX=\"${FF_AGENT_HOME}/.n\""
@@ -939,7 +939,7 @@ EOT
   export NODE_PATH="${FF_AGENT_HOME}/.n/lib/node_modules"
 
   # Add '# Export NODE_PATH' into the custom .profile file if in was not injected earlier.
-  # TODO: add into ff_bash_funcitons a function to add/edit/remove our custom profile file.
+  # TODO: add into ff_bash_functions a function to add/edit/remove our custom profile file.
   TARGET_FILE="${FF_AGENT_PROFILE_FILE}"
   PATTERN="^export NODE_PATH=\"${FF_AGENT_HOME}/.n/lib/node_modules\""
   EXPECTED_LINE="export NODE_PATH=\"${FF_AGENT_HOME}/.n/lib/node_modules\""

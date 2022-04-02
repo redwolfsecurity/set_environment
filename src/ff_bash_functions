@@ -51,15 +51,15 @@
 #    - s 
 #    - truncate_file 
 ## END UTILITY FUNCTIONS: FILE
-## BEGIN UTILITY FUNCITONS: LOGGING / PROCESS CONTROl
+## BEGIN UTILITY FUNCTIONS: LOGGING / PROCESS CONTROl
 #    - abort 
 #    - assert_clean_exit 
 #    - error 
 #    - log 
 #    - successful_exit 
 #    - warning 
-## END UTILITY FUNCITONS: LOGGING / PROCESS CONTROl
-## BEGIN UTILITY FUNCITONS: TERMINAL / SHELL
+## END UTILITY FUNCTIONS: LOGGING / PROCESS CONTROl
+## BEGIN UTILITY FUNCTIONS: TERMINAL / SHELL
 #    - ensure_variable_defined 
 #    - ensure_variable_not_empty 
 #    - is_shell_attribute_set 
@@ -68,7 +68,7 @@
 #    - terminal_is_interactive 
 #    - terminal_is_tty 
 #    - terminal_reset 
-## END UTILITY FUNCITONS: TERMINAL / SHELL
+## END UTILITY FUNCTIONS: TERMINAL / SHELL
 ## BEGIN UTILITY FUNCTIONS: PROCESS
 #    - is_process_running_as_me 
 ## END UTILITY FUNCTIONS: PROCESS
@@ -98,6 +98,7 @@
 #    - user_exists 
 ## END UTILITY FUNCTIONS: USER / GROUPS
 ## BEGIN DISCOVER FUNTIONS
+#    - get_best_ff_content_url
 #    - discover_environment 
 #    - discover_optional_environment_variable 
 #    - discover_os 
@@ -258,7 +259,7 @@ export -f file_toc
 
 ###############################################################################
 # Utility help function
-# This will list all the defined bash funcitons *build in" and our "custom" ones.
+# This will list all the defined bash functions *build in" and our "custom" ones.
 function help {
     echo "Builtin functions:"
     typeset -F | cut -d' ' -f3
@@ -1223,7 +1224,7 @@ export -f truncate_file
 
 
 
-### BEGIN UTILITY FUNCITONS: LOGGING / PROCESS CONTROl
+### BEGIN UTILITY FUNCTIONS: LOGGING / PROCESS CONTROl
 
 ###############################################################################
 # Utility abort / exit function - called when terminal conditions
@@ -1237,8 +1238,13 @@ function abort {
 export -f abort
 
 ###############################################################################
-# Usage: assert_clean_exit command
-# Ensures command must exit cleanly (0) else will abort the entire system
+# 
+# Ensures command must exit cleanly (with exit code 0) else abort the entire
+# process by calling abort(), which will log error and exit(1).
+#
+# Usage example:
+#    assert_clean_exit apt_update
+#
 function assert_clean_exit {
   #echo "TRY: ${@}"
   "${@}"
@@ -1317,10 +1323,10 @@ function warning {
 }
 export -f warning
 
-### END UTILITY FUNCITONS: LOGGING / PROCESS CONTROl
+### END UTILITY FUNCTIONS: LOGGING / PROCESS CONTROl
 
 
-### BEGIN UTILITY FUNCITONS: TERMINAL / SHELL
+### BEGIN UTILITY FUNCTIONS: TERMINAL / SHELL
 
 ###############################################################################
 #
@@ -1472,7 +1478,7 @@ function terminal_reset {
 }
 export -f terminal_reset
 
-### END UTILITY FUNCITONS: TERMINAL / SHELL
+### END UTILITY FUNCTIONS: TERMINAL / SHELL
 
 
 ### BEGIN UTILITY FUNCTIONS: PROCESS
@@ -2240,35 +2246,161 @@ export -f user_exists
 
 ###############################################################################
 #
+# Function ff_uuid() generates UUID and prints it to the standard output.
+# Dependency: uuidgen
+# Note: function will try to install dependency if missing.
+#
+# Function return code:
+#   0 - success
+#   1 - failure
+#
+# Usage example:
+#    NEW_UUID=$( ff_uuid )
+#    [ $? -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_ff_uuid"; return 1; }
+#
+function ff_uuid {
+
+  # Check dependency: "uuidgen" we need to make sure it is installed ('uuidgen' is part of 'uuid-runtime' package)
+  if ! command_exists uuidgen >/dev/null; then
+    # Try to install missing dependency
+    assert_clean_exit apt_update
+    assert_clean_exit apt_install uuid-runtime
+
+    # Check again
+    if ! command_exists uuidgen; then
+      # Still failing to find
+      return 1
+    fi
+  fi
+
+  # Generate uuid and return it's exit code as a return code
+  uuidgen
+}
+export -f ff_uuid
+
+###############################################################################
+#
+# Auxiliary function wraps the logic of choosing the best value for: 'FF_AGENT_URI'
+# Note: this function uses get/set secrets and state, thus it can be called only after "choose proper user" step is complete.
+#
+# Function return code:
+#   0 - on success and choosen value printed to standard outout
+#   1 - on failure
+#
+# Usage example:
+#    FF_AGENT_URI=$( get_best_ff_agent_uri )
+#    [ $? -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_agent_uri"; return 1; }
+#
+function get_best_ff_agent_uri {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Try to get FF_AGENT_URI from environment or by get_secret()
+  discover_optional_environment_variable "FF_AGENT_URI" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable"; return 1; }
+  
+  # Check if variable already set. If not set - generate new uuid
+  if [ -z "${FF_AGENT_URI}" ]; then
+      # Generate new uuid, check errors, export new value
+      local NEW_UUID="$( ff_uuid )"
+      [ $? -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_generate_new_uuid"; return 1; }
+      FF_AGENT_URI="/agent/agent_guid/${NEW_UUID}"
+  fi
+  
+  # At this point we must have not empty FF_AGENT_URI value.
+  # Make sure the variable is now not empty or error out.
+  ensure_variable_not_empty 'FF_AGENT_URI' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_agent_uri"; return 1; }
+
+  # Print result to standard output, set state to 'success' and return success code.
+  echo "${FF_AGENT_URI}"
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f get_best_ff_agent_uri
+
+###############################################################################
+#
+# Auxiliary function wraps the logic of choosing the best value for: 'FF_CONTENT_URL'
+# Note: this function uses get/set secrets and state, thus it can be called only after "choose proper user" step is complete.
+#
+# Function return code:
+#   0 - on success and choosen value printed to standard outout
+#   1 - on failure
+#
+# Usage example:
+#  FF_CONTENT_URL=$( get_best_ff_content_url )
+#  [ $? -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_content_url"; return 1; }
+#
+function get_best_ff_content_url {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Try to get FF_CONTENT_URL from environment or by get_secret()
+  discover_optional_environment_variable "FF_CONTENT_URL" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable"; return 1; }
+
+  # Remove trailing slash from FF_CONTENT_URL, so it works correctly when we concatenate
+  # FF_CONTENT_URL with other path components (e.g.: ${}/subfolder/file.txt)
+  # Note: its save to call trim_slash() even if FF_CONTENT_URL is empty at this step.
+  FF_CONTENT_URL="$( trim_slash "${FF_CONTENT_URL}" )" || { set_state "${FUNCNAME[0]}" "error_trim_slash_from_ff_content_url"; return 1; }
+
+  # Make sure the variable is now not empty or error out.
+  ensure_variable_not_empty 'FF_CONTENT_URL' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_content_url"; return 1; }
+
+  # Print result to standard output, set state to 'success' and return success code.
+  echo "${FF_CONTENT_URL}"
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f get_best_ff_content_url
+
+###############################################################################
+#
+# Auxiliary function wraps the logic of choosing the best value for: 'FF_HOST'
+# Note: this function uses get/set secrets and state, thus it can be called only after "choose proper user" step is complete.
+#
+# Function return code:
+#   0 - on success and choosen value printed to standard outout
+#   1 - on failure
+#
+# Usage example:
+#  FF_HOST=$( get_best_ff_host )
+#  [ $? -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_host"; return 1; }
+#
+function get_best_ff_host {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Try to get FF_HOST from environment or by get_secret()
+  discover_optional_environment_variable "FF_HOST" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_host";   return 1; } # Note: FF_HOST: FF_HOST will be set to legacy control hostname if this is a control.
+
+  # Check if variable already set. If not try to get it's value by command 'hostname'
+  [ -z "${FF_HOST}" ] && { FF_HOST="$( hostname )"; }
+
+  # Make sure the variable is now not empty or error out.
+  ensure_variable_not_empty 'FF_HOST' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_host"; return 1; }
+
+  # Print result to standard output, set state to 'success' and return success code.
+  echo "${FF_HOST}"
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f get_best_ff_host
+
+###############################################################################
+#
 # Figure out environment - where are we?
-# Function sets secrets (by set_secret f-n calls), which stores them under ${HOME}/ff_agent/secrets/ folder.
-# Function also sets corresponding environment variables:
-#     - is_container,
-#     - is_portal,
-#     - is_local,
-#     - is_traffic_generator
-#     - ff_agent_uri
-#     - ff_host
-#     - namespace
-#     - organization
-#     - ff_api_username
-#     - ff_api_password
-#
-# Note: The discover_environment() step must check if the above variables are set (exist in environment),
-# if not, then it must check those by the "get_secret()". This step discovers values (no "mkdir" or any other actions taken).
-#
+# 
+# First the function is trying to choose right FF_AGENT_HOME, then it
+# gets the best values for the following environment variables:
+#    - FF_CONTENT_URL
+#    - FF_AGENT_URI
+#    - FF_HOST
 #
 # Dependencies:
 #    - FF_CONTENT_URL variable must be set either by "set_secrets" or in environment variable
 #    - uuidgen must be installed (used to generate FF_AGENT_URI)
 #
+# Function return code:
+#   0 - on success
+#   1 - on failure
+#
 function discover_environment {
-
-  ######################################################################
-  # Preserve current xtrace state
-  if is_shell_attribute_set x; then
-    local XTRACE_WAS_ENABLED=true
-  fi
 
   ######################################################################
   # Choose user, agent home and make sure agent home folder exists
@@ -2278,82 +2410,21 @@ function discover_environment {
   # We need to choose_ff_agent_home before we can set/get secrets.
   # This sets some of environment variables: FF_AGENT_USERNAME, FF_AGENT_HOME.
   # Also creates FF_AGENT_HOME directory.
-  choose_ff_agent_home || {
-    set_state "${FUNCNAME[0]}" "failed_to_choose_ff_agent_home"
-    return 1
-  }
-  ensure_ff_agent_home_exists || {
-    set_state "${FUNCNAME[0]}" "failed_to_ensure_ff_agent_home_exists"
-    return 1
-  }
+  choose_ff_agent_home || { set_state "${FUNCNAME[0]}" "failed_to_choose_ff_agent_home"; return 1; }
+  ensure_ff_agent_home_exists || { set_state "${FUNCNAME[0]}" "failed_to_ensure_ff_agent_home_exists"; return 1; }
 
-  # XXX TODO - as above, this function should be very clear and readable and have steps that are individual things we call.
-  # make a get_best_content_url function, and similarly, get_best_XYZ for others so they are simple and clean to read here. Don't implement that logic here.
-  # Below we also are violating the DRY principle
-  # FF_CONTENT_URL=$( get_best_ff_content_url )
-  # ... then uyou do your if check here, and export if happy
-  # 
-
-
-  ######################################################################
-  # FF_CONTENT_URL: check if FF_CONTENT_URL is set (non-empty), else error out.
-  # Note: only after "choose user" is complete can we reliably set_secret()
-  # XXX TODO: make a function to get_best_ff_content_url and put the logic there.
-  # we should call FF_CONTENT_URL=$( get_best_ff_content_url ) and then check if that is happy or not and export it.
-
-  if [ -z "${FF_CONTENT_URL}" ]; then
-    # The FF_CONTENT_URL variable is not set or empty. Try to retrieve it from stored secrets.
-    FF_CONTENT_URL=$( get_secret "ff_content_url" ) || {
-      set_state "${FUNCNAME[0]}" "error_get_secret_ff_content_url"
-      return 1
-    }
-    
-    # Make sure FF_CONTENT_URL is now not empty or error out.
-    ensure_variable_not_empty 'FF_CONTENT_URL' || {
-      set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_content_url"
-      return 1
-    }
-    
-    # Export newly retrieved value
-    export FF_CONTENT_URL
-  fi
-
-  # Remove trailing slash from FF_CONTENT_URL, so it works correctly when we concatenate FF_CONTENT_URL with our paths
-  FF_CONTENT_URL="$( trim_slash "${FF_CONTENT_URL}" )" || {
-    set_state "${FUNCNAME[0]}" "error_trim_slash_from_ff_content_url"
-    return 1
-  }
-
-  # Store/update FF_CONTENT_URL value
+  # Get best values, check errors, export and set_secret().
+  FF_CONTENT_URL=$( get_best_ff_content_url ) || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_content_url"; return 1; }
   set_secret ff_content_url "${FF_CONTENT_URL}"
+  export FF_CONTENT_URL
 
-  ######################################################################
-  # Get AGENT_URI or generate a new one.
-  # XXX TODO - Review Fri. Jan 28 - remvoe AGENT_URI as a variable we set -- of course check if we use it anywhere. We might, but where we use it we can do 'get_secret' instead.
-  # Don't run apt_update here, it could run a LOT and is the wrong place. The purpose of this function is to discover environment, not install packages.
-  # The concept of making uuid's should be a function ff_uuid, and that function can try and install its dependencies. But it should not use which, it should use command_exists (that function we wrote).
-  discover_optional_environment_variable "FF_AGENT_URI" || { return 1; }
-  
-  # Check if variable already set. If not set - generate it
-  if [ -z "${FF_AGENT_URI}" ]; then
-      # Before using "uuidgen" we need to make sure it is installed (is part of 'uuid-runtime' package)
-      [ "$(command_exists uuidgen)" != "" ] || { assert_clean_exit apt_update; assert_clean_exit apt_install uuid-runtime; }
-      export FF_AGENT_URI="/agent/agent_guid/$( uuidgen )"
-  fi
-  
-  # XXX TODO - I think this can go, if we have a function to get_best_agent_uri vs. inlining all of this code here.
-  # set_secret() only if not empty
-  [ ! -z "${FF_AGENT_URI}" ] && { set_secret ff_agent_uri "${FF_AGENT_URI}"; }
+  FF_AGENT_URI=$( get_best_ff_agent_uri )     || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_agent_uri";   return 1; }
+  set_secret ff_agent_uri "${FF_AGENT_URI}"
+  export FF_AGENT_URI
 
-  ######################################################################
-  # FF_HOST: FF_HOST will be set to legacy control hostname if this is a control.
-  discover_optional_environment_variable "FF_HOST" || { return 1; }
-
-  # Check if variable already set. If not set - generate it
-  [ -z "${FF_HOST}" ] && { export FF_HOST="$( hostname )"; }
-  
-  # set_secret() only if not empty
-  [ ! -z "${FF_HOST}" ] && { set_secret ff_host "${FF_HOST}"; }  
+  FF_HOST=$( get_best_ff_host )               || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_host";        return 1; }
+  set_secret ff_host "${FF_HOST}"
+  export FF_HOST
   
   # ######################################################################
   # # Discover set of "ff environment" variables
@@ -2417,11 +2488,13 @@ export -f discover_environment
 #    - default value (can be blank if no default value set)
 #
 # F-n checks:
-#    - if such variable already exists function exit with no changes to environment
+#    - if such variable already exists function export that variable and exits with no changes to the existing value
 #    - if no such variable exists f-n tries to get previously stored value by calling "get_secret ${NAME}" and export this value (if found)
 #    - if no value found on previous steps, then f-n exports this variable with ${DEFAULT_VALUE} (only if default value is not blank)
 #
-# Return: 0 on success, any other code on error
+# Return code:
+#   0 - on success
+#   1 - on error
 #
 function discover_optional_environment_variable {
   local NAME="$1"
@@ -2430,9 +2503,12 @@ function discover_optional_environment_variable {
   # Check inputs: NAME can be empty
   [ -z "${NAME}" ] && { return 1; }
 
-  # Check if such environment already defined (bash 4.2+ around 2011)
+  # Check if such environment already defined
   if [[ -v "${NAME}" ]]; then
-      # Variable '${NAME}' is already defined (has DEFAULT_VALUE: '${!NAME}').
+      # Variable '${NAME}' is already defined (has value: '${!NAME}').
+      # Make sure to export it, so if it was just "shell variable" 
+      # it becomes "environment variable", thus available even for child processes.
+      export "${NAME}"="${!NAME}"
       return 0
   fi
 
