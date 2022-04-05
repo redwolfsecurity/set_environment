@@ -1324,7 +1324,7 @@ function pm2_ensure () {
     is_pm2_installed || pm2_install || { set_state "${FUNCNAME[0]}" 'error_failed_to_install'; abort; }
 
     # Now it has to at least be installed, and not running, so we try to start it.
-    pm2_start
+    pm2_start || { set_state "${FUNCNAME[0]}" 'failed_to_pm2_start'; return 1; }
 
     is_pm2_running_as_me || { set_state "${FUNCNAME[0]}" 'error_not_running_as_user'; return 1; }
 
