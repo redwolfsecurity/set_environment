@@ -1528,7 +1528,7 @@ export -f terminal_is_tty
 ###############################################################################
 # Reset terminal state - sometimes useful if a command messes up terminal state
 function terminal_reset {
-  [ is_tty && command_exists tput ] && tput reset && tput sane
+  terminal_is_tty && command_exists tput && tput reset && tput sane
 }
 export -f terminal_reset
 

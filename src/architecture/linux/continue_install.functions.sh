@@ -63,15 +63,15 @@ function add_to_install_if_missing {
   # Take argument ${1} - package name
   local PACKAGE="${1}"
 
+  # Take argument ${2} - reference to array
+	declare -n PACKAGES_TO_INSTALL=${2}
+
   # Check inputs: ${2} - must be a reference to an array
   if [ "${PACKAGES_TO_INSTALL@a}" != "a" ]; then
     # Error: passed reference does not point to array
     error "${FUNCNAME[0]} bad arguments: 2nd argument must be reference to array"
     return 1
   fi
-
-  # Take argument ${2} - reference to array
-	declare -n PACKAGES_TO_INSTALL=${2}
 
 	# Grep exit code 0=installed, 1=not installed.
 	# Note we use grep to cover case "Status: deinstall ok config-files" when package was uninstalled.
@@ -847,6 +847,9 @@ EOT
 function install_n {
   set_state "${FUNCNAME[0]}" "installing"
 
+  # Define path to ff_agent .profile
+  FF_AGENT_PROFILE_FILE="${FF_AGENT_HOME}/.profile"    # example: /home/ubuntu/ff_agent/.profile  (Note: FF_AGENT_PROFILE_FILE is not local, but shell environment used in other install functions)
+
   # Define required variables
   local REQUIRED_VARIABLES=(
     FF_AGENT_PROFILE_FILE
@@ -1071,7 +1074,7 @@ function install_nodejs {
 function install_nodejs_suite {
   set_state "${FUNCNAME[0]}" 'started'
 
-  install_nodejs                     || { set_state "${FUNCNAME[0]}" 'terminal_error_install_node'; abort; }
+  install_nodejs || { set_state "${FUNCNAME[0]}" 'terminal_error_install_node'; abort; }
 
   set_state "${FUNCNAME[0]}" 'success'
   return 0

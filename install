@@ -20,7 +20,8 @@ export SERVICE="set_environment"
 ###############################################################################
 #
 function install_set_environment {
-    set_state "${FUNCNAME[0]}" 'started'
+    # Can't set_state() here yet
+    # set_state "${FUNCNAME[0]}" 'started'
 
     # Change directory into the script's directory. This ensure all relative paths working correctly.
     cd "$( dirname $( readlink -f "${BASH_SOURCE[0]}" ) )" || { echo "Error: failed to change directory to $( dirname ${BASH_SOURCE[0]} )" >&2; exit 1; } # note: can not yet use error() / abort() / set_state()
