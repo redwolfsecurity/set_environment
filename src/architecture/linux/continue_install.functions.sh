@@ -153,13 +153,13 @@ function assert_baseline_components {
   # Install docker (not using "apt") - COMMENTED OUT: docker is not part of baseline (it is part of "build" and/or "development", but not "baseline")
   #assert_clean_exit install_docker
 
-  # Install nodejs suite and all its fixings (not using "apt")
-  assert_clean_exit install_nodejs_suite
-
-  # Ensure file "ff_agent/.profile" created and sourced from ~/.bashrc
+  # Ensure file "ff_agent/.profile" created and sourced from ~/.bashrc (Note: this must be done before install node)
   assert_clean_exit install_ff_agent_bashrc
   
-  # Note: assert_clean_exit aborts on error
+  # Install nodejs suite and all its fixings (not using "apt") (Note: this will modify ff_agent/.profile)
+  assert_clean_exit install_nodejs_suite
+
+    # Note: assert_clean_exit aborts on error
   assert_clean_exit install_ff_agent
 
   # Install pm2
