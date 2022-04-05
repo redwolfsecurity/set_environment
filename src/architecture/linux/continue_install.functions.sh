@@ -87,6 +87,7 @@ function add_to_install_if_missing {
   # Return success
 	return 0
 }
+export -f add_to_install_if_missing
 
 ###############################################################################
 #
@@ -135,6 +136,7 @@ function apt_install_basic_packages {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
+export -f apt_install_basic_packages
 
 ###############################################################################
 #
@@ -170,6 +172,7 @@ function assert_baseline_components {
 
   set_state "${FUNCNAME[0]}" 'success'
 }
+export -f assert_baseline_components
 
 ###############################################################################
 #
@@ -184,6 +187,7 @@ function assert_core_credentials {
 
     set_state "${FUNCNAME[0]}" 'success'
 }
+export -f assert_core_credentials
 
 ###############################################################################
 #
@@ -235,6 +239,7 @@ function background_install {
   # Clean-up: remove temp directory we've just created
   rm -fr "${TEMP_DIR}"
 }
+export -f background_install
 
 ###############################################################################
 #
@@ -297,6 +302,7 @@ function check_if_need_background_install {
   # Otherwise we continue happily through this instance of the script. No need to change user.
   # i.e. I am not root, and I have sudo priveleges.
 }
+export -f check_if_need_background_install
 
 ###############################################################################
 #
@@ -331,6 +337,7 @@ function ensure_ff_agent_bin_exists {
 
   set_state "${FUNCNAME[0]}" 'success'
 }
+export -f ensure_ff_agent_bin_exists
 
 ###############################################################################
 #
@@ -375,6 +382,7 @@ function ensure_set_environment_install_exists {
 
   set_state "${FUNCNAME[0]}" 'success'
 }
+export -f ensure_set_environment_install_exists
 
 ###############################################################################
 #
@@ -482,6 +490,7 @@ function install_docker {
 
   set_state "${FUNCNAME[0]}" 'success'
 }
+export -f install_docker
 
 ###############################################################################
 #
@@ -513,6 +522,7 @@ function install_ff_agent {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
+export -f install_ff_agent
 
 ###############################################################################
 #
@@ -664,6 +674,7 @@ EOT
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
+export -f install_ff_agent_bashrc
 
 ###############################################################################
 #
@@ -828,6 +839,7 @@ EOT
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
+export -f install_go
 
 ###############################################################################
 #
@@ -1036,6 +1048,7 @@ EOT
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
+export -f install_n
 
 ###############################################################################
 #
@@ -1067,6 +1080,7 @@ function install_nodejs {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
+export -f install_nodejs
 
 ###############################################################################
 #
@@ -1079,6 +1093,7 @@ function install_nodejs_suite {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
+export -f install_nodejs_suite
 
 ###############################################################################
 #
@@ -1107,13 +1122,14 @@ function install_set_environment_baseline {
 
   set_state "${FUNCNAME[0]}" 'success'
 }
+export -f install_set_environment_baseline
 
 ###############################################################################
 # Category: process
 # is_pm2_installed
 # Checks if pm2 is installed
 # Returns 0 if it is, 1 if it isn't
-function is_pm2_installed () {
+function is_pm2_installed {
     set_state "${FUNCNAME[0]}" 'started'
     local STATUS=0
     local PACKAGE="pm2"
@@ -1125,6 +1141,7 @@ function is_pm2_installed () {
     set_state "${FUNCNAME[0]}" 'success'
     return ${STATUS}
 }
+export -f is_pm2_installed
 
 # ##########################################################################################
 # #
@@ -1270,7 +1287,7 @@ function is_pm2_installed () {
 # Category: process
 # is_pm2_running_as_me
 # Will return 0 if it is, 1 if it is not
-function is_pm2_running_as_me () {
+function is_pm2_running_as_me {
     set_state "${FUNCNAME[0]}" 'started'
     # Process will look like PM2 v4.5.5: God Daemon (/home/user/.pm2)
     local PATTERN="PM2 .*: God Daemon"
@@ -1283,12 +1300,13 @@ function is_pm2_running_as_me () {
 
     return ${STATUS}
 }
+export -f is_pm2_running_as_me
 
 ###############################################################################
 # Category: process
 # pm2_configure
 # Configures pm2 the way we want it configured
-function pm2_configure () {
+function pm2_configure {
     set_state "${FUNCNAME[0]}" 'started'
     # Now it is installed, and command is in path. So we shall configure it
     # Configure it to automatically save state
@@ -1306,13 +1324,14 @@ function pm2_configure () {
 
     set_state "${FUNCNAME[0]}" 'success'
 }
+export -f pm2_configure
 
 ###############################################################################
 # Category: process
 # pm2_ensure
 # This ensures that pm2 is running, and working as we wish. aborts otherwise.
 # If it is not installed, we install it.
-function pm2_ensure () {
+function pm2_ensure {
     set_state "${FUNCNAME[0]}" 'started'
 
     # We are good if pm2 is running as me
@@ -1334,13 +1353,14 @@ function pm2_ensure () {
     # If all above works, we have it running
     set_state "${FUNCNAME[0]}" 'success'
 }
+export -f pm2_ensure
 
 ###############################################################################
 # Category: process
 # pm2_install
 # Will install pm2 if there is no command 'pm2'
 # Will not start it
-function pm2_install () {
+function pm2_install {
     set_state "${FUNCNAME[0]}" 'started'
 
     local NPM_PACKAGE="pm2"
@@ -1367,11 +1387,12 @@ function pm2_install () {
 
     set_state "${FUNCNAME[0]}" 'success'
 }
+export -f pm2_install
 
 ###############################################################################
 # Category: process
 # pm2_start
-function pm2_start () {
+function pm2_start {
     set_state "${FUNCNAME[0]}" 'started'
 
     # Check if it is running. If it is, we're happy.
@@ -1388,13 +1409,14 @@ function pm2_start () {
 
     set_state "${FUNCNAME[0]}" 'error_failed_to_start_pm2'
 }
+export -f pm2_start
 
 ###############################################################################
 # Category: process
 # pm2_stop stops the running pm2 daemon running as the current user.
 # does not stop any root level or other user pm2 daemons.
 #
-function pm2_stop () {
+function pm2_stop {
     set_state "${FUNCNAME[0]}" 'started'
 
     # Check if it is running. If it isn't, we finish.
@@ -1413,12 +1435,13 @@ function pm2_stop () {
     # We have stopped it, and it is not running.
     set_state "${FUNCNAME[0]}" 'success'
 }
+export -f pm2_stop
 
 ###############################################################################
 # Category: process
 # pm2_uninstall
 # Removes PM2
-function pm2_uninstall () {
+function pm2_uninstall {
     set_state "${FUNCNAME[0]}" 'started'
 
     local PACKAGE="pm2"
@@ -1436,6 +1459,7 @@ function pm2_uninstall () {
 
     set_state "${FUNCNAME[0]}" 'error_validating_uninstallation'
 }
+export -f pm2_uninstall
 
 ###############################################################################
 #
@@ -1491,6 +1515,7 @@ function preserve_sources {
   # Restore
   popd || { error "failed_to_popd_after_preserving_source_folder"; exit 1; }
 }
+export -f preserve_sources
 
 ###############################################################################
 # Log this script standard output and standard error to a log file AND system logger
@@ -1530,9 +1555,11 @@ function set_script_logging {
   # Note: we can not yet call "set_state" on that early stages
  	#set_state "${FUNCNAME[0]}" 'success'
 }
+export -f set_script_logging
 
 ###############################################################################
 #
 function setup_logging {
 	set_script_logging 
 }
+export -f setup_logging
