@@ -2509,15 +2509,15 @@ function discover_environment {
   ensure_ff_agent_home_exists || { set_state "${FUNCNAME[0]}" "failed_to_ensure_ff_agent_home_exists"; return 1; }
 
   # Get best values, check errors, export and set_secret().
-  FF_CONTENT_URL=$( get_best_ff_content_url ) || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_content_url"; return 1; }
+  FF_CONTENT_URL=$( get_best_ff_content_url ) || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_content_url"; abort "failed_to_get_best_ff_content_url"; }
   set_secret ff_content_url "${FF_CONTENT_URL}"
   export FF_CONTENT_URL
 
-  FF_AGENT_URI=$( get_best_ff_agent_uri )     || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_agent_uri";   return 1; }
+  FF_AGENT_URI=$( get_best_ff_agent_uri )     || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_agent_uri";   abort "failed_to_get_best_ff_agent_uri"; }
   set_secret ff_agent_uri "${FF_AGENT_URI}"
   export FF_AGENT_URI
 
-  FF_HOST=$( get_best_ff_host )               || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_host";        return 1; }
+  FF_HOST=$( get_best_ff_host )               || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_host";        abort "failed_to_get_best_ff_host"; }
   set_secret ff_host "${FF_HOST}"
   export FF_HOST
   
