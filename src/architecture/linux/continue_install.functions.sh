@@ -1104,10 +1104,12 @@ export -f install_nodejs_suite
 # On errror: function aborts (so no need to errorcheck on caller side)
 #
 function install_set_environment_baseline {
-  set_state "${FUNCNAME[0]}" 'started'
 
   # Discover environment (choose user, make sure it's home folder exists, check FF_CONTENT_URL is set etc.)
-  discover_environment || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_discover_environment"; abort; }
+  discover_environment || { abort "terminal_error_failed_to_discover_environment"; }
+
+  # Now we can set_state()
+  set_state "${FUNCNAME[0]}" 'started'
 
   # Analyzes currently selected user and might call "background_install()" to re-run the installer under a different user
   # Note: it have a dependency: variable FF_AGENT_USERNAME - must be set (by calling choose_ff_agent_home)

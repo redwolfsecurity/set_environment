@@ -2984,14 +2984,14 @@ export -f check_set_get_state
 # Tested in Ubuntu 20.04: docker run -it --rm ubuntu:20.04 bash  => echo "${USER}"  => blank
 #
 function get_current_user {
-  set_state "${FUNCNAME[0]}" 'started'
+  # set_state "${FUNCNAME[0]}" 'started'
 
   # Check if environment variable USER is set, then use it.
   if [ -z "${USER}" ]; then
     # The USER environment variable is blank.
     # Use command_exists to check if 'whoami' is available
     if ! command_exists whoami >/dev/null; then
-      set_state "${FUNCNAME[0]}" 'error_whoami_not_installed'
+      # set_state "${FUNCNAME[0]}" 'error_whoami_not_installed'
       return 1
     fi
 
@@ -3004,7 +3004,7 @@ function get_current_user {
   echo "${USER}"
 
   # Return success
-  set_state "${FUNCNAME[0]}" 'success'
+  # set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
 export -f get_current_user
