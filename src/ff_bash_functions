@@ -2340,9 +2340,9 @@ export -f ff_uuid
 # Auxiliary function wraps the logic of choosing the best value for: 'FF_AGENT_URI'
 # Note: this function uses get/set secrets and state, thus it can be called only after "choose proper user" step is complete.
 #
-# Function return code:
-#   0 - on success and choosen value printed to standard outout
-#   1 - on failure
+# Function return:
+#   - on success: return code 0 and choosen value printed to standard outout
+#   - on failure: return code 1
 #
 # Usage example:
 #    FF_AGENT_URI=$( get_best_ff_agent_uri )
@@ -2378,9 +2378,9 @@ export -f get_best_ff_agent_uri
 # Auxiliary function wraps the logic of choosing the best value for: 'FF_CONTENT_URL'
 # Note: this function uses get/set secrets and state, thus it can be called only after "choose proper user" step is complete.
 #
-# Function return code:
-#   0 - on success and choosen value printed to standard outout
-#   1 - on failure
+# Function return:
+#   - on success: return code 0 and choosen value printed to standard outout
+#   - on failure: return code 1
 #
 # Usage example:
 #  FF_CONTENT_URL=$( get_best_ff_content_url )
@@ -2412,13 +2412,51 @@ export -f get_best_ff_content_url
 # Auxiliary function wraps the logic of choosing the best value for: 'FF_HOST'
 # Note: this function uses get/set secrets and state, thus it can be called only after "choose proper user" step is complete.
 #
-# Function return code:
-#   0 - on success and choosen value printed to standard outout
-#   1 - on failure
+# Function return:
+#   - on success: return code 0 and choosen value printed to standard outout
+#   - on failure: return code 1
 #
 # Usage example:
 #  FF_HOST=$( get_best_ff_host )
 #  [ $? -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_host"; return 1; }
+#
+function get_best_ff_host {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Try to get FF_HOST from environment or by get_secret()
+  discover_optional_environment_variable "FF_HOST" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_host";   return 1; } # Note: FF_HOST: FF_HOST will be set to legacy control hostname if this is a control.
+
+  # Check if variable already set. If not try to get it's value by command 'hostname'
+  [ -z "${FF_HOST}" ] && { FF_HOST="$( hostname )"; }
+
+  # Make sure the variable is now not empty or error out.
+  ensure_variable_not_empty 'FF_HOST' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_host"; return 1; }
+
+  # Print result to standard output, set state to 'success' and return success code.
+  echo "${FF_HOST}"
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f get_best_ff_host
+
+###############################################################################
+#
+# Figure out environment - where are we?
+# Function sets secrets (by set_secret f-n calls), which stores them under ${FF_AGENT_HOME}/secrets/ folder.
+# Function also sets corresponding environment variables:
+#     - is_container,
+#     - is_portal,
+#     - is_local,
+#     - is_traffic_generator
+#     - ff_agent_uri
+#     - ff_host
+#     - namespace
+#     - organization
+#     - ff_api_username
+#     - ff_api_password
+#
+# Note: The discover_environment() step must check if the above variables are set (exist in environment),
+# if not, then it must check those by the "get_secret()". This step discovers values (no "mkdir" or any other actions taken).
 #
 function get_best_ff_host {
   set_state "${FUNCNAME[0]}" 'started'
