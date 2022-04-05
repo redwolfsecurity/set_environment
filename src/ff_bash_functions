@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-# Enable tracing (more verbose output)
-set -x
-
 # This file is a collection of useful bash functions, which we want to source for all
 # users and other scripts.
 #

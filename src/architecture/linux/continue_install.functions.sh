@@ -1,8 +1,5 @@
 #!/bin/bash -
 
-# Enable tracing (more verbose output)
-set -x
-
 #
 # This script is a part of "set_environment" installer and should not be called directry.
 # It got sourced from src/architecture/linux/continue_install.sh

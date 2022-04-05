@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Enable tracing (more verbose output)
+set -x
+
 # This script implements the installer logic of the "set_environment" project.
 # Project github page: https://github.com/redwolfsecurity/set_environment
 #
