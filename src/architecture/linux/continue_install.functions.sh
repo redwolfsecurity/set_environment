@@ -161,9 +161,6 @@ function assert_baseline_components {
   # Install nodejs suite and all its fixings (not using "apt") (Note: this will modify ff_agent/.profile)
   assert_clean_exit install_nodejs_suite
 
-    # Note: assert_clean_exit aborts on error
-  assert_clean_exit install_ff_agent
-
   # Install pm2
   assert_clean_exit pm2_ensure
 
