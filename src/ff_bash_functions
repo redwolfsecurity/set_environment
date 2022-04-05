@@ -139,6 +139,7 @@
 # SOME_VAR=""
 # ask_for_value SOME_VAR "Set value for SOME_VAR" "SOME_VAR="
 # ask_for_value SOME_VAR "Update value for SOME_VAR" "SOME_VAR=" "${SOME_VALUE}"
+#
 function ask_for_value {
     local VALUE=""
 
@@ -171,6 +172,7 @@ export -f ask_for_value
 # @param ${1} string Question
 # @return  Success (0) if user enter Y, Failure (1) on n
 # Usage: ask_for_yn "Does vim rox the house?"
+#
 function ask_for_yn {
     local QUESTION=${1}
     local ANSWER=""
@@ -242,7 +244,10 @@ function command_exists {
 export -f command_exists
 
 ###############################################################################
-# Auxilary function to make TOC of any arbitrary file
+# Auxilary function to make bash file "Table of contents" (TOC).
+# Usage example:
+#    file_toc /path/to/some/bashfile.sh
+#
 function file_toc {
 
   # Define path to ff_bash_functions file
@@ -267,13 +272,15 @@ function help {
 export -f help
 
 ###############################################################################
-# Utility help function: table of content
+# Utility help function: table of content.
+# See also: file_toc()
+#
 function help_toc {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Check FF_AGENT_HOME is set
   ensure_variable_not_empty 'FF_AGENT_HOME' || {
-    set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_agent_home"
+    set_state "${FUNCNAME[0]}" 'error_ensure_variable_not_empty_ff_agent_home'
     return 1
   }
 
@@ -299,40 +306,49 @@ export -f help_toc
 ###############################################################################
 # Utility wrapper around apt dist-upgrade for safer headless operation
 function apt_dist_upgrade {
-    local APT_COMMAND=dist-upgrade
+  set_state "${FUNCNAME[0]}" 'started'
+  local APT_COMMAND=dist-upgrade
 
-    #        --force-yes is deprecetaed now.
-    #       Force yes; this is a dangerous option that will cause apt to continue without prompting if it is doing something potentially harmful. It should not be used
-    #       except in very special situations. Using force-yes can potentially destroy your system! Configuration Item: APT::Get::force-yes. This is deprecated and
-    #       replaced by --allow-unauthenticated , --allow-downgrades , --allow-remove-essential , --allow-change-held-packages in 1.1.
-    local FORCE_YES="--allow-unauthenticated --allow-downgrades --allow-remove-essential --allow-change-held-packages"
+  #        --force-yes is deprecetaed now.
+  #       Force yes; this is a dangerous option that will cause apt to continue without prompting if it is doing something potentially harmful. It should not be used
+  #       except in very special situations. Using force-yes can potentially destroy your system! Configuration Item: APT::Get::force-yes. This is deprecated and
+  #       replaced by --allow-unauthenticated , --allow-downgrades , --allow-remove-essential , --allow-change-held-packages in 1.1.
+  local FORCE_YES="--allow-unauthenticated --allow-downgrades --allow-remove-essential --allow-change-held-packages"
 
-    apt_update && apt_upgrade
-    sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confdef" -yq -o Dpkg::Options::="--force-confold" ${FORCE_YES} ${APT_COMMAND}
-    if [ ${?} -ne 0 ]; then
-       error "Error upgrading distribution"
-       return 1
-    fi
-    return 0
+  apt_update  || { set_state "${FUNCNAME[0]}" "failed_to_apt_update"; return 1; }
+  apt_upgrade || { set_state "${FUNCNAME[0]}" "failed_to_apt_upgrade"; return 1; }
+  sudo DEBIAN_FRONTEND=noninteractive \
+    apt-get \
+      -yq \
+      -o Dpkg::Options::="--force-confdef" \
+      -o Dpkg::Options::="--force-confold" \
+      ${FORCE_YES} ${APT_COMMAND} || { set_state "${FUNCNAME[0]}" "failed_to_apt_dist_upgrade"; return 1; }
+  
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
 }
 export -f apt_dist_upgrade
 
 ###############################################################################
 # Utility wrapper around apt install for safer headless operation
 function apt_install {
-    PACKAGES=${@}
-    APT_COMMAND=install
+  set_state "${FUNCNAME[0]}" 'started'  
+  PACKAGES=${@}
+  APT_COMMAND=install
 
-    for PACKAGE in ${PACKAGES}
-    do
-        # Note: we suppress stdout noise (only stderr will still be "visible", but TODO: think of better way to collect evidences insted of just 1 large pile)
-        sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} ${PACKAGE} > /dev/null
-        if [ ${?} -ne 0 ]; then
-            error "Error installing package: ${PACKAGE}"
-            return 1
-        fi
-    done
-    return 0
+  for PACKAGE in ${PACKAGES}
+  do
+      # Note: we suppress stdout noise (only stderr will still be "visible", but TODO: think of better way to collect evidences insted of just 1 large pile)
+      sudo DEBIAN_FRONTEND=noninteractive \
+      apt-get \
+        -o Dpkg::Options::="--force-confold" \
+        -yq \
+        -o Acquire::ForceIPv4=true \
+        ${APT_COMMAND} ${PACKAGE} > /dev/null || { set_state "${FUNCNAME[0]}" "failed_to_apt_install"; return 1; }
+  done
+
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
 }
 export -f apt_install
 
@@ -349,7 +365,44 @@ export -f apt_install
 #    apt_list libjansson-dev
 #
 function apt_list {
-    apt-get download -o Dir::Cache::archives="./" --print-uris "$@" |awk -F\' '{print $2}' | xargs -I '{}' curl -skL '{}' | dpkg-deb -c /dev/stdin 
+  set_state "${FUNCNAME[0]}" 'started'
+  
+  # Check inputs:
+  local PACKAGE_NAME="$1"
+  if [ "${PACKAGE_NAME}" == "" ]; then
+    set_state "${FUNCNAME[0]}" "bad_arguments_missing_package_name"
+    return 1
+  fi
+  
+  # Get package URIs by apt-get download --print-uris
+  # Official doc: https://help.ubuntu.com/community/AptGet/Offline/PrintUris
+  # apt-get --print-uris
+  #  --print-uris : instead of fetching the files to install, their URIs (links to download them) are printed. 
+  PACKAGE_URI=$( apt-get download \
+    -o Dir::Cache::archives="./" \
+    --print-uris "${PACKAGE_NAME}"
+  )
+
+  # Check errors
+  if [ $? -ne 0 ]; then
+    set_state "${FUNCNAME[0]}" "failed_to_find_package_uris"
+    return 1
+  fi
+
+  # Try to list files by given package name
+  PACKAGE_FILES=$( apt-get download \
+    -o Dir::Cache::archives="./" \
+    --print-uris "${PACKAGE_NAME}" | awk -F\' '{print $2}' | xargs -I '{}' curl -skL '{}' | dpkg-deb -c /dev/stdin 
+  )
+
+  # Check we got files list
+  if [ "${PACKAGE_FILES}" == "" ]; then
+    set_state "${FUNCNAME[0]}" "failed_to_list_package_files"
+    return 1
+  fi
+
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
 }
 export -f apt_list
 
@@ -439,6 +492,7 @@ export -f apt_upgrade
 # @return  Success (0) if value exists, Failure (1) otherwise
 # Usage: in_array "$needle" "${haystack[@]}"
 # See: http://fvue.nl/wiki/Bash:_Check_if_array_element_exists
+#
 function in_array {
     local hay needle=${1}
     shift
@@ -1492,16 +1546,17 @@ function is_process_running_as_me {
     local COMMAND_PATTERN="${1}"
     [ ! -z "${COMMAND_PATTERN}" ] || { set_state "${FUNCNAME[0]}" 'error_require_pattern_to_search_for'; return 1; }
 
-    # We are not passed, but require USER to be set.
-    ensure_variable_not_empty "USER" || { set_state "${FUNCNAME[0]}" 'error_user_environment_variable_not_found'; return 1; }
-
     # We require PS and GREP commands
     local PS=$(command_exists ps) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_ps_command'; return 1; }
     local GREP=$( command_exists grep ) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_grep_command'; return 1; }
 
-    # Note: we prefix pattern with ^ -- we are looking for command string
-    ${PS} -u "${USER}" -U "${USER}" o command | ${GREP} --silent -e "^${COMMAND_PATTERN}"
+    # Get current user. Note: the ${USER} environment is NOT set when running as 'root' in docker, we must use f-n get_current_user() instead.
+    CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
+
+    ${PS} -u "${CURRENT_USER}" -U "${CURRENT_USER}" o command | ${GREP} --silent -e "^${COMMAND_PATTERN}"
     STATUS=$?
+    set_state "${FUNCNAME[0]}" 'success'
+    return ${STATUS}
 }
 export -f is_process_running_as_me
 
@@ -1639,12 +1694,12 @@ export -f restart_containers
 # Runction return code 0 on success
 #
 function stop_and_remove_container_by_name {
+  set_state "${FUNCNAME[0]}" 'started'
+
   CONTAINER_NAME="${1}"
 
   # Check the container name isn't blank
-  if [ "${CONTAINER_NAME}" == "" ]; then
-    return 1
-  fi
+  [ "${CONTAINER_NAME}" != "" ] || { set_state "${FUNCNAME[0]}" 'error_bad_arguments'; return 1; }
 
   # Count existing container(s) by given docker name
   FOUND_CONTAINERS_COUNT=$( docker ps -a | grep "${CONTAINER_NAME}" | wc -l )
@@ -1655,7 +1710,7 @@ function stop_and_remove_container_by_name {
     for DOCKER_ID in $(docker ps -a | grep "${CONTAINER_NAME}" | awk '{print $1}'); do
       # Make sure DOCKER_ID is not a blank string
       if [ "${DOCKER_ID}" == "" ]; then
-        # TODO: shall the utility f-n use set_state?
+        set_state "${FUNCNAME[0]}" 'failed_to_get_docker_id'
         return 1
       fi
 
@@ -1673,6 +1728,7 @@ function stop_and_remove_container_by_name {
         PID_TO_KILL=$( sudo ps aux | grep "${DOCKER_ID}" )
         if [ ${PID_TO_KILL_COUNT} -ne 1 ]; then
           # Something went wrong, we supposed to find exactly ONE pid to terminate.
+          set_state "${FUNCNAME[0]}" 'failed_to_get_docker_pid'
           return 1
         fi
         
@@ -1680,14 +1736,15 @@ function stop_and_remove_container_by_name {
         sudo kill -9 "${PID_TO_KILL}" || { set_state "${FUNCNAME[0]}" 'error_killing_process'; return 1; }
 
         # The "unstoppable" docker terminated, now we can safely remove the container
-        docker rm "${DOCKER_ID}"
+        docker rm "${DOCKER_ID}" || { set_state "${FUNCNAME[0]}" 'error_removing_docker'; return 1; }
       fi
     done
 
     # Cleanup some space
-    docker system prune -a -f
+    docker system prune -a -f || { set_state "${FUNCNAME[0]}" 'failed_to_docker_system_prune'; return 1; }
   fi
 
+  set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
 export -f stop_and_remove_container_by_name
@@ -2700,7 +2757,9 @@ function check_ff_agent_bin_is_in_the_path {
 export -f check_ff_agent_bin_is_in_the_path
 
 ###############################################################################
-# Utility function check_nodejs_installation() checks if nodejs is installed under right path (TODO: and right version)
+# Utility function check_nodejs_installation() checks if nodejs is installed
+# under right path and expected version
+#
 # On success: reuturn 0
 # On failure: 1
 #
@@ -2868,6 +2927,49 @@ export -f check_set_get_state
 
 ###############################################################################
 #
+# Function get_current_user is a smarter alternative to ${USER} environment variable,
+# which might not be set when running inside docker.
+#
+# Function sets state and return following:
+#   On success function prints current user to standard output and return code 0.
+#   On error/failure function return code 1.
+#
+# Usage example:
+#     CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
+#
+# For more details see discussion:
+# https://stackoverflow.com/questions/54411218/docker-why-isnt-user-environment-variable-set
+#
+# Tested in Ubuntu 20.04: docker run -it --rm ubuntu:20.04 bash  => echo "${USER}"  => blank
+#
+function get_current_user {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Check if environment variable USER is set, then use it.
+  if [ -z "${USER}" ]; then
+    # The USER environment variable is blank.
+    # Use command_exists to check if 'whoami' is available
+    if ! command_exists whoami >/dev/null; then
+      set_state "${FUNCNAME[0]}" 'error_whoami_not_installed'
+      return 1
+    fi
+
+    # Try to get current username by 'whoami'
+    USER="$( whoami )" || { echo "ERROR whoami command failed"; return 1; }
+    [ ! -z "${USER}" ] || { echo "failed_to_get_current_user"; return 1; }
+  fi
+
+  # Print username to standard output
+  echo "${USER}"
+
+  # Return success
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f get_current_user
+
+###############################################################################
+#
 # Function choose_ff_agent_home:
 #
 # Sets the following environment variables:
@@ -3015,7 +3117,9 @@ export -f get_expected_nodejs_version
 #
 function get_ff_agent_username {
 
-    POTENTIAL_USERS=( ff_agent ubuntu ${USER} )
+    CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
+    
+    POTENTIAL_USERS=( ff_agent ubuntu ${CURRENT_USER} )
 
     if effectively_root
     then
@@ -3032,18 +3136,18 @@ function get_ff_agent_username {
             fi
         done
 
-        error "Current user ${USER} is effectively root and this script can not run as root."
+        error "Current user ${CURRENT_USER} is effectively root and this script can not run as root."
         error "Tried to find other users to run as (${POTENTIAL_USERS}) but was not successful."
         return 1
 
     else
         # We aren't root. But can we sudo? We need that to currently install certain packages.
-        if can_sudo "${USER}"
+        if can_sudo "${CURRENT_USER}"
         then
-            echo "${USER}"
+            echo "${CURRENT_USER}"
             return 0
         else
-            error "User ${USER} can not sudo. Currently sudo is required to install packages. Please run from a non-root account with sudo privileges."
+            error "User ${CURRENT_USER} can not sudo. Currently sudo is required to install packages. Please run from a non-root account with sudo privileges."
             return 1
         fi
     fi
@@ -3217,7 +3321,6 @@ EOF
     )
 
     # Run command, capture server response as ${RESULT} and curl exit code as ${STATUS}
-    # TODO: why "https://${FF_HOST}/service/delivery" endpoint return "201 Created", but JSON isn't stored to DB? Does it have to me a message (not just a body)?
     RESULT=$(
       curl \
         --silent   \

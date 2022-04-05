@@ -150,23 +150,22 @@ function assert_baseline_components {
   # Install NTP and make sure timesyncd is disabled (not working in parallel)
   # assert_clean_exit replace_timesyncd_with_ntpd
 
-  # Before installing locally (into local ff_agent/) packages, like "n / npm / nodejs" we need to put in place ff_agent .bashrc and .profile
-  # TODO: DO WE REALLY DEPEND ON THIS BEFORE INSTALLING n/npm/nodejs??
-  assert_clean_exit install_ff_agent_bashrc
-  
   # Install docker (not using "apt") - COMMENTED OUT: docker is not part of baseline (it is part of "build" and/or "development", but not "baseline")
   #assert_clean_exit install_docker
 
   # Install nodejs suite and all its fixings (not using "apt")
   assert_clean_exit install_nodejs_suite
 
+  # Ensure file "ff_agent/.profile" created and sourced from ~/.bashrc
+  assert_clean_exit install_ff_agent_bashrc
+  
   # Note: assert_clean_exit aborts on error
   assert_clean_exit install_ff_agent
 
   # Install pm2
   assert_clean_exit pm2_ensure
 
-  # Note: assert_clean_exit aborts on error
+  # Install npm package "@ff/ff_agent" -> ff_agent/
   assert_clean_exit install_ff_agent
 
   set_state "${FUNCNAME[0]}" 'success'
@@ -178,7 +177,11 @@ function assert_baseline_components {
 #
 function assert_core_credentials {
     set_state "${FUNCNAME[0]}" 'started'
-    # TODO - we should be part of docker group. That's about it I think.
+
+    # [Q] We should be part of docker group. That's about it I think.
+    # [A] Nope, we don't install docker as a 'baseline' environment, thus assection of core credentials will
+    #     only take care of user being part of the 'docker group' in case corresponding environment was installed.
+
     set_state "${FUNCNAME[0]}" 'success'
 }
 
@@ -190,32 +193,47 @@ function assert_core_credentials {
 #   - Writing a copy of the set_environment into temporary location and changing permissions to the target user.
 #   - Running that script as correct target user.
 #
-# TODO: it seems the tmp directory created by "mktemp" never got deleted.
 function background_install {
 
   # Take the only argument: target username to "run as"
   USER_TO_RUN_AS="${1}"
 
   # Check argument is not empty string
-  [ "${USER_TO_RUN_AS}" == "" ] && { error "background_install error: missing argument"; abort; }
+  [ "${USER_TO_RUN_AS}" != "" ] || { error "background_install error: missing argument"; abort; }
+
+  # Get current user. Note: the ${USER} environment is NOT set when running as 'root' in docker, we must use f-n get_current_user() instead.
+  CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
 
   # Check if target user can sudo
-  can_sudo "${USER_TO_RUN_AS}" || { error "background_install needs to sudo to user ${USER_TO_RUN_AS} but user ${USER} does not have sudo privileges"; abort; }
+  can_sudo "${USER_TO_RUN_AS}" || { error "background_install needs to sudo to user ${USER_TO_RUN_AS} but user ${CURRENT_USER} does not have sudo privileges"; abort; }
 
   # Create temporary folder
   TEMP_DIR=$( mktemp -d ) || { error "background_install tried to create directory ${TEMP_DIR}."; abort; }
   
   # Check if folder created
-  [ ! -d "${TEMP_DIR}" ] && { error "background_install tried to create directory ${TEMP_DIR}."; abort; }
+  [ -d "${TEMP_DIR}" ] || { error "background_install tried to create directory ${TEMP_DIR}."; abort; }
 
   # Copy set_environment project into the target temporary folder
-  cp -a ../set_environment "${TEMP_DIR}" || { error "background_install failed to copy project to temporary folder '${TEMP_DIR}'"; abort; }
+  cp -a ../set_environment "${TEMP_DIR}" || {
+    error "background_install failed to copy project to temporary folder '${TEMP_DIR}'"
+    # Clean-up: remove temp directory we've just created
+    rm -fr "${TEMP_DIR}"
+    abort
+  }
 
   # Chenge ownership of the temporary folder to the target user
-  chown -R "${FF_AGENT_USERNAME}:$(id -gn ${FF_AGENT_USERNAME})" "${TEMP_DIR}"
+  chown -R "${FF_AGENT_USERNAME}:$(id -gn ${FF_AGENT_USERNAME})" "${TEMP_DIR}" || {
+    error "background_install error: missing argument"; 
+    # Clean-up: remove temp directory we've just created
+    rm -fr "${TEMP_DIR}"
+    abort; 
+  }
 
   # Pass control to the newly created set_environment copy (run by the target user) and exit
   sudo --set-home --user="${USER_TO_RUN_AS}" bash -c "${TEMP_DIR}/set_environment/install.sh"
+
+  # Clean-up: remove temp directory we've just created
+  rm -fr "${TEMP_DIR}"
 }
 
 ###############################################################################
@@ -248,16 +266,18 @@ function check_if_need_background_install {
 
   # It might already exist, but not be writable due to chmod changes
   if [ -f "${FF_AGENT_HOME}" ] && [ ! -w "${FF_AGENT_HOME}" ]; then
-      # TODO: The ${USER} environment is NOT set when running as 'root' in docker. Improve this.
       error "FF_AGENT_HOME at ${FF_AGENT_HOME} is not writable by user $( whoami ). Aborting."
       abort
   fi
 
   DO_BACKGROUND_INSTALL=false
 
+  # Get current user. Note: the ${USER} environment is NOT set when running as 'root' in docker, we must use f-n get_current_user() instead.
+  CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
+
   # Suppose I'm not the best user, but I can sudo to become the best! e.g. If I am root - I'm not the best user.
-  if [ "${USER}" != "${FF_AGENT_USERNAME}" ]; then
-      if can_sudo "${USER}"; then
+  if [ "${CURRENT_USER}" != "${FF_AGENT_USERNAME}" ]; then
+      if can_sudo "${CURRENT_USER}"; then
           DO_BACKGROUND_INSTALL=true
       fi
   fi
@@ -276,35 +296,6 @@ function check_if_need_background_install {
 
   # Otherwise we continue happily through this instance of the script. No need to change user.
   # i.e. I am not root, and I have sudo priveleges.
-}
-
-###############################################################################
-#
-# Create .npmrc credentials
-#
-function create_npmrc_credentials {
-  set_state "${FUNCNAME[0]}" 'started'
-
-  # Define required variables
-  local REQUIRED_VARIABLES=(
-    HOME
-    USER
-  )
-
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-      return 1
-    }
-  done
-
-  # TODO: Get these credentials from secret manager
-  # TODO: .npmrc can substitue environment variables -- that's at least a touch more secure if we run npm from our FF framework
-
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
 }
 
 ###############################################################################
@@ -494,7 +485,7 @@ function install_docker {
 
 ###############################################################################
 #
-# Install @ff/ff_agent -> ff_agent/bin
+# Install npm package "@ff/ff_agent" -> ff_agent/
 #
 function install_ff_agent {
   set_state "${FUNCNAME[0]}" 'started'
@@ -525,8 +516,7 @@ function install_ff_agent {
 
 ###############################################################################
 #
-# Сreate a new ff_agent/.profile file and source it from the ~/.bashrc
-# and ~/.profile files of the selected user.
+# Ensure file "ff_agent/.profile" created and sourced from ~/.bashrc
 #
 # Require environment variables set:
 #   - FF_AGENT_USERNAME
@@ -554,6 +544,7 @@ function install_ff_agent_bashrc {
   if [ ! -d "${FF_AGENT_HOME}" ]; then
     # ${FF_AGENT_HOME} folder is missing. Don't try to create it (it is responsibility of ensure_ff_agent_home_exists()).
     # Report an error and abort.
+    set_state "${FUNCNAME[0]}" 'terminal_error_ff_agent_home_folder_does_not_exist'
     error "FF_AGENT_HOME='${FF_AGENT_HOME}' directory Does not exist. Aborting."
     abort
   fi
@@ -627,7 +618,6 @@ EOT
   #
   # --------------------------------------------------------------------
   
-
   # --------------------------------------------------------------------
   # Inject call to "discover_environment" into the custom .profile
   TARGET_FILE="${FF_AGENT_PROFILE_FILE}"
@@ -644,7 +634,6 @@ EOT
   #
   # --------------------------------------------------------------------
   
-
   # --------------------------------------------------------------------
   # Inject ${FF_AGENT_BIN} into PATH in .profile and modify current PATH if needed. 
   
@@ -787,17 +776,36 @@ function install_go {
 
   # Remove temporary folder
   rm -fr "${TEMP_DIR}" || { error "Failed to remove temporary folder: '${TEMP_DIR}'"; return 1; }
+  
+  # Inject path to 'go' into ff_agent/.profile
+  TARGET_FILES=( "${FF_AGENT_HOME}/.profile" )  # /etc/profile - excluded for now. User's profile is good enough.
 
-  # Inject path to 'go' into /etc/profile (for all users)
-  # Check if profile already contain expected path
-  EXPECTED_PROFILE_LINE='export PATH=$PATH:/usr/local/go/bin' # note: we don't want to expand variables in this string, thus single quites used.
-  cat /etc/profile | grep --silent "${EXPECTED_PROFILE_LINE}"
-  if [ ! $? -eq 0 ]; then
-      # Expected profile line not found
-      echo "" | sudo tee -a /etc/profile
-      echo "# The path to 'go' inserted by $( pwd )/$( basename $0 ) on $( date --utc ) for 'go' version: 'go${EXPECTED_VERSION}'" | sudo tee -a /etc/profile
-      echo "${EXPECTED_PROFILE_LINE}" | sudo tee -a /etc/profile
-  fi
+  # Iterate target files
+  for TARGET_FILE in "${TARGET_FILES[@]}"; do
+    # Create TARGET_FILE if missing
+    if [ ! -f "${TARGET_FILE}" ]; then
+      (
+        cat <<EOT
+# File ${TARGET_FILE} created by set_environment ${FUNCNAME[0]}() on $(date --utc).
+EOT
+      ) > "${TARGET_FILE}" || { set_state "${FUNCNAME[0]}" "failed_to_create_file"; return 1; }
+    fi
+    
+    PATTERN='^export PATH=.PATH:/usr/local/go/bin' # note: we don't want to expand variables in this string, thus single quites used.
+    INJECT_CONTENT=$(
+      cat <<EOT
+# The path to 'go' inserted by $( pwd )/$( basename $0 ) on $( date --utc ) for 'go' version: 'go${EXPECTED_VERSION}'
+export PATH=\$PATH:/usr/local/go/bin
+EOT
+    )
+    ERROR_CODE='error_injecting_source_custom_profile'
+      
+    # Do injection and check result
+    inject_into_file  \
+      "${TARGET_FILE}" \
+      "${PATTERN}" \
+      "${INJECT_CONTENT}" || { set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; return 1; }
+  done
 
   # Also inject path to 'go' into current PATH (if missing in PATH)
   # do the export, so we don't have to relogin in order to call "go version"
@@ -805,7 +813,6 @@ function install_go {
   if [ $? -ne 0 ]; then
     # Path to 'go' is missing from PATH environment variable. Inject it:
     export PATH=$PATH:/usr/local/go/bin
-    # TODO: this also must be injected into ff_agent/profile
   fi
 
   # Check by running "go version"
@@ -858,7 +865,7 @@ function install_n {
   # Check custom .profile file exists
   if [ ! -f "${FF_AGENT_PROFILE_FILE}" ]; then
     # Let's not try to re-create it if missing.
-    # It should have been created by existing f-n install_ff_agent_bashrc() (defined in project: "set_environment", see file: src/ff_bash_functions)
+    # It should have been created by existing install_ff_agent_bashrc()
   	set_state "${FUNCNAME[0]}" "error_custom_ff_agent_profile_does_not_exist"
     return 1
   fi
@@ -902,7 +909,8 @@ function install_n {
       if [ ${?} -ne 0 ]; then
         # The 2nd attempt failed too, giving up.
         # Error: clean up tmp folder, report an error and return error code 1
-        popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
+        popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }
+        rm -fr "${TMPDIR}" || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
         set_state "${FUNCNAME[0]}" 'warning_failed_to_download_n_from_github'
         return 1
       fi      
@@ -914,23 +922,29 @@ function install_n {
   export N_PREFIX="${FF_AGENT_HOME}/.n"  # example: /home/ubuntu/ff_agent/.n
 
   # Add '# Export N_PREFIX' into the custom .profile file if in was not injected earlier.
-  # TODO: add into ff_bash_functions a function to add/edit/remove our custom profile file.
   TARGET_FILE="${FF_AGENT_PROFILE_FILE}"
   PATTERN="^export N_PREFIX=\"${FF_AGENT_HOME}/.n\""
   EXPECTED_LINE="export N_PREFIX=\"${FF_AGENT_HOME}/.n\""
-  if ! file_contains_pattern "${TARGET_FILE}" "${PATTERN}"; then
-    # Expected line is missing, Inject text
-    (
-      cat <<EOT
-# Injected by set_environment ${FUNCNAME[0]} on $(date --utc)
+  INJECT_CONTENT=$(
+  cat <<EOT
+# N_PREFIX environment injected by set_environment ${FUNCNAME[0]} on $(date --utc)
 ${EXPECTED_LINE}
 EOT
-    ) >> "${TARGET_FILE}" || {
-        # Error: clean up tmp folder, report an error and return error code 1
-        popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
-        set_state "${FUNCNAME[0]}" 'error_injecting_export_n_prefix_to_ff_agent_profile'; return 1;
-    }
-  fi
+  )
+  ERROR_CODE='error_injecting_export_n_prefix_to_ff_agent_profile'
+
+  # Do injection and check result
+  inject_into_file  \
+    "${TARGET_FILE}" \
+    "${PATTERN}" \
+    "${INJECT_CONTENT}" || {
+      # Error: clean up tmp folder, report an error and return error code 1
+      popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }
+      rm -fr "${TMPDIR}" || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
+      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      return 1
+  }
+  
   # ------------------ Export N_PREFIX and inject that export into FF_AGENT_PROFILE_FILE (begin) ----------------
 
 
@@ -939,23 +953,28 @@ EOT
   export NODE_PATH="${FF_AGENT_HOME}/.n/lib/node_modules"
 
   # Add '# Export NODE_PATH' into the custom .profile file if in was not injected earlier.
-  # TODO: add into ff_bash_functions a function to add/edit/remove our custom profile file.
   TARGET_FILE="${FF_AGENT_PROFILE_FILE}"
   PATTERN="^export NODE_PATH=\"${FF_AGENT_HOME}/.n/lib/node_modules\""
   EXPECTED_LINE="export NODE_PATH=\"${FF_AGENT_HOME}/.n/lib/node_modules\""
-  if ! file_contains_pattern "${TARGET_FILE}" "${PATTERN}"; then
-    # Expected line is missing, Inject text
-    (
-      cat <<EOT
+  INJECT_CONTENT=$(
+  cat <<EOT
 # Injected by set_environment ${FUNCNAME[0]} on $(date --utc)
 ${EXPECTED_LINE}
 EOT
-    ) >> "${TARGET_FILE}" || {
-        # Error: clean up tmp folder, report an error and return error code 1
-        popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
-        set_state "${FUNCNAME[0]}" 'error_injecting_export_node_path_to_ff_agent_profile'; return 1;
-    }
-  fi
+  )
+  ERROR_CODE='error_injecting_export_node_path_to_ff_agent_profile'
+
+  # Do injection and check result
+  inject_into_file  \
+    "${TARGET_FILE}" \
+    "${PATTERN}" \
+    "${INJECT_CONTENT}" || {
+      # Error: clean up tmp folder, report an error and return error code 1
+      popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }
+      rm -fr "${TMPDIR}" || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
+      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      return 1
+  }   
   # ------------------ Export NODE_PATH and inject that export into FF_AGENT_PROFILE_FILE (end) ----------------
   
 
