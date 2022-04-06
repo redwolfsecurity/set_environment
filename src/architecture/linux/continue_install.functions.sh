@@ -1344,6 +1344,7 @@ function pm2_ensure {
     # Now it has to at least be installed, and not running, so we try to start it.
     pm2_start || { set_state "${FUNCNAME[0]}" 'failed_to_pm2_start'; return 1; }
 
+    # Check if pm2 started and running by expected user
     is_pm2_running_as_me || { set_state "${FUNCNAME[0]}" 'error_not_running_as_user'; return 1; }
 
     # Now it is running, so let's configure it
@@ -1382,7 +1383,7 @@ function pm2_install {
 
     # Verify command actually exists in path after we have installed it
     local PM2=$( command_exists "${NPM_PACKAGE}" )
-    [ "${PM2}" == "" ] && { set_state "${FUNCNAME[0]}" 'error_installing_pm2_command_not_found'; return 0; }
+    [ "${PM2}" == "" ] && { set_state "${FUNCNAME[0]}" 'error_installing_pm2_command_not_found'; return 1; }
 
     set_state "${FUNCNAME[0]}" 'success'
 }
@@ -1395,16 +1396,16 @@ function pm2_start {
     set_state "${FUNCNAME[0]}" 'started'
 
     # Check if it is running. If it is, we're happy.
-    is_pm2_running_as_me && { set_state "${FUNCNAME[0]}" 'success_no_action_pm2_not_running'; return 1; }
+    is_pm2_running_as_me && { set_state "${FUNCNAME[0]}" 'success_no_action_pm2_is_running'; return 0; }
 
     local PM2=$( command_exists pm2 )
-    [ -z "${PM2}" ] && { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_pm2_command'; return 0; }
+    [ -z "${PM2}" ] && { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_pm2_command'; return 1; }
     $PM2 start
 
     # Check if it is running. If it is, we're happy.
     # Note: pm2 can start and still return non-zero (i.e. it started but there was no ecosystem.config.js
     # So it is not sufficient to test for return code, but if it is running as me, then it is at least started
-    is_pm2_running_as_me && { set_state "${FUNCNAME[0]}" 'success'; return 1; }
+    is_pm2_running_as_me && { set_state "${FUNCNAME[0]}" 'success'; return 0; }
 
     set_state "${FUNCNAME[0]}" 'error_failed_to_start_pm2'
 }
@@ -1419,7 +1420,7 @@ function pm2_stop {
     set_state "${FUNCNAME[0]}" 'started'
 
     # Check if it is running. If it isn't, we finish.
-    is_pm2_running_as_me || { set_state "${FUNCNAME[0]}" 'success_no_action_pm2_not_running'; return 1; }
+    is_pm2_running_as_me || { set_state "${FUNCNAME[0]}" 'success_no_action_pm2_not_running'; return 0; }
 
     # Check if we have the pm2 command. We need it to be able to stop pm2
     local PM2=$( command_exists pm2 ) || { set_state "${FUNCNAME[0]}" 'error_pm2_command_not_found'; return 1; }
@@ -1446,7 +1447,7 @@ function pm2_uninstall {
     local PACKAGE="pm2"
 
     # If it is not installed, we are done.
-    is_pm2_installed || { set_state "${FUNCNAME[0]}" 'success_no_action_not_installed'; return 1; }
+    is_pm2_installed || { set_state "${FUNCNAME[0]}" 'success_no_action_not_installed'; return 0; }
 
     # It's installed, so we will try to remove it
     local NPM=$( command_exists npm)
