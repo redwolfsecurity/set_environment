@@ -3,7 +3,57 @@
 # Making verbose output
 set -x
 
+###############################################################################
+#
+# Function build_tarball() implements the following logic:
+#   - copy source code to temporary folder
+#   - create tarbal (by compressing copied sources into one "tgz" file)
+#   - upload to S3 (by cdn_upload)
+#
+# Dependencies: 
+#   Environment variables must be defined:
+#      - PRODUCTION_CONTENT_S3_BUCKET_NAME
+#      - PRODUCTION_CONTENT_S3_FF_AGENT_PATH
+#      - PRODUCTION_CONTENT_CDN_DISTRIBUTION_ID
+#
+#   Packages:
+#      - node
+#      - npm
+#      - tar
+#
+# Also build script relies on set_environment functions installed (e.g.: set_state(), ensure_variable_not_empty())
+#
+# Return:
+#   - on success: script exits with code 0
+#   - on error: script exits with code 1
+#
 function build_tarball {
+    set_state "${FUNCNAME[0]}" 'started'
+
+    # Check dependencies: define required variables
+    local REQUIRED_VARIABLES=(
+        PRODUCTION_CONTENT_S3_BUCKET_NAME
+        PRODUCTION_CONTENT_S3_FF_AGENT_PATH
+        PRODUCTION_CONTENT_CDN_DISTRIBUTION_ID
+    )
+
+    # Check required environment variables are set
+    for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+        ensure_variable_not_empty "${VARIABLE_NAME}" || {
+            local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
+            set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+            abort "${ERROR_CODE}"
+        }
+    done
+
+    # Check required packages
+    #   Packages:
+    #      - node
+    #      - npm
+    #      - tar
+    command_exists node >/dev/null || { echo "Dependency check failed: node not found"; }
+    command_exists npm >/dev/null || { echo "Dependency check failed: npm not found"; }
+    command_exists tar >/dev/null || { echo "Dependency check failed: tar not found"; }
 
     # Define location of temporary folder and tarball filename
     local TARBALL_FILENAME="set_environment-dev.tgz"
@@ -18,7 +68,7 @@ function build_tarball {
     echo "BUILD_DATE=$(date +%Y%m%d)  # YYYYMMDD" > build_date || { set_state "${FUNCNAME[0]}" 'failed_to_write_build_date'; abort; }
     echo "BUILD_COMMIT_ID=$(git rev-parse HEAD)"  > build_commit_id || { set_state "${FUNCNAME[0]}" 'failed_to_write_build_commit_id'; abort; }
 
-    # Delete target tmp folder, otherwise copy will result in wrong folder structure (1 level nested deeper)
+    # Delete target tmp "set_environment" folder, otherwise copy will result in wrong folder structure (1 level nested deeper)
     if [ -d "${TEMPORARY_DIR}/set_environment" ]; then
         rm -fr ${TEMPORARY_DIR}/set_environment || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmp_folder'; abort; }
     fi
@@ -48,6 +98,10 @@ function build_tarball {
         "${PRODUCTION_CONTENT_S3_FF_AGENT_PATH}" \
         "${PRODUCTION_CONTENT_CDN_DISTRIBUTION_ID}" \
          || { set_state "${FUNCNAME[0]}" 'failed_to_cdn_upload'; abort; }
+
+    set_state "${FUNCNAME[0]}" 'success'
+    return 0
 }
 
-build_tarball || { set_state "${FUNCNAME[0]}" 'failed_to_build_tarball'; abort; }
+build_tarball # no error check since the function aborts on errors
+exit 0

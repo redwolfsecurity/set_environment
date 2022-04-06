@@ -263,7 +263,11 @@ function check_if_need_background_install {
 
   # Check required environment variables are set
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || { return 1; }  # Note: the error details were already reported by ensure_variable_not_empty()
+    ensure_variable_not_empty "${VARIABLE_NAME}" || {
+      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
+      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      return 1
+    }
   done
 
   # It might already exist, but not be writable due to chmod changes
@@ -1132,7 +1136,7 @@ function is_pm2_installed {
     set_state "${FUNCNAME[0]}" 'started'
     local STATUS=0
     local PACKAGE="pm2"
-    local NPM=$( command_exists npm) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
+    local NPM=$( command_exists npm ) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
 
     # If it not installed, set STATUS=1
     ${NPM} list "${PACKAGE}" --global >/dev/null || STATUS=1

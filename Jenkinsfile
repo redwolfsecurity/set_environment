@@ -10,6 +10,17 @@ pipeline {
   tools {nodejs "node"}
   
   stages {
+    
+    // Try to build
+    stage('Build / install') {
+			environment {
+        CONTENT_URL = credentials('production_content_url')
+      }
+      steps {
+				sh 'time ./install 2>&1'
+			}
+		}
+
     stage('Upload to CDN') {
       when {
         anyOf {

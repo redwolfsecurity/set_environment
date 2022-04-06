@@ -199,7 +199,7 @@ export -f ask_for_yn
 #
 # Usage examples:
 #   Simple if-then check
-#      if command_exists tput ; then echo "yes, command exists"; fi
+#      if command_exists tput >/dev/null; then echo "yes, command exists"; fi
 #
 #   Use with other commands "chained" by &&
 #      command_exists tty && tty -s && return 0 || return 1
