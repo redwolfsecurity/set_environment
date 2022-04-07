@@ -6,17 +6,15 @@ pipeline {
           args '--user=ff_agent'  // This enforces docker started by Jenknis to use proper "ubuntu" user with all the expected groups (i.e. "docker")
       }
   }
-
-  tools {nodejs "node"}
   
   stages {
     
-    // Try to build
-    stage('Build / install') {
+    stage('Install') {
 			environment {
         CONTENT_URL = credentials('production_content_url')
       }
       steps {
+        // For now the 'install' contains the tests.
 				sh './install'
 			}
 		}
