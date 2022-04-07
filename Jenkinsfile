@@ -17,7 +17,7 @@ pipeline {
         CONTENT_URL = credentials('production_content_url')
       }
       steps {
-				sh 'time ./install 2>&1'
+				sh './install'
 			}
 		}
 
