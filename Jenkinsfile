@@ -11,7 +11,7 @@ pipeline {
     
     stage('Install') {
 			environment {
-        CONTENT_URL = credentials('production_content_url')
+        FF_CONTENT_URL = credentials('production_content_url')
       }
       steps {
         // For now the 'install' contains the tests.
