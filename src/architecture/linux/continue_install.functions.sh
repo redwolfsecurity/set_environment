@@ -1513,11 +1513,13 @@ function preserve_sources {
       # (we don't want the preserved folder to be a mix/merge with old deleted files).
       if [ -d "${PRESERVED_PROJECT_DIR}" ]; then
           # Remove old project source folder content (leaving the folder itself)
-          rm -fr "${PRESERVED_PROJECT_DIR}/*" || { set_state "${FUNCNAME[0]}" 'failed_to_remove_old_project_source_folder'; return 1; }
+          # Note: we don't rm -fr some/path/* since this would miss hidden files. The 'find' gets them all!
+          find "${PRESERVED_PROJECT_DIR}" -mindepth 1 -delete || { set_state "${FUNCNAME[0]}" 'failed_to_remove_old_project_source_folder'; return 1; }
       fi
 
       # Copy newly installed source folder (to preserve it)
-      cp -a "${PWD}/*" "${PRESERVED_PROJECT_DIR}" || { set_state "${FUNCNAME[0]}" 'failed_to_preserve_source_folder'; return 1; }
+      # Note: the "/." is here to copy all files including hidden (which starts with dot). Just '*' would not work.
+      cp -a "${PWD}/." "${PRESERVED_PROJECT_DIR}" || { set_state "${FUNCNAME[0]}" 'failed_to_preserve_source_folder'; return 1; }
   fi
 
   # Restore the original folder
