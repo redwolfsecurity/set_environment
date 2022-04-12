@@ -28,7 +28,7 @@ function install_set_environment {
 
     # Change directory into the script's directory. This ensure all relative paths working correctly.
     cd "$( dirname $( readlink -f "${BASH_SOURCE[0]}" ) )" || { echo "Error: failed to change directory to $( dirname ${BASH_SOURCE[0]} )" >&2; exit 1; } # note: can not yet use error() / abort() / set_state()
-    
+
     # Source common functions
     source src/ff_bash_functions || { echo "Error: failed to source common functions." >&2; exit 1; } # note: can not yet use error() / abort() / set_state()
 
@@ -45,3 +45,5 @@ function install_set_environment {
 }
 
 install_set_environment  # no need to check errors here, the f-n itself reports errors (all of which are "terminal" errors) and aborts/exits.
+
+set +x
