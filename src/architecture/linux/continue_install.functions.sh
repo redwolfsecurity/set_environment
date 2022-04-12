@@ -222,7 +222,7 @@ function background_install {
     abort
   }
 
-  # Chenge ownership of the temporary folder to the target user
+  # Change ownership of the temporary folder to the target user
   chown -R "${FF_AGENT_USERNAME}:$(id -gn ${FF_AGENT_USERNAME})" "${TEMP_DIR}" || {
     error "background_install error: missing argument";
     # Clean-up: remove temp directory we've just created
