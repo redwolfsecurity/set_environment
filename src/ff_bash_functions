@@ -2983,7 +2983,7 @@ function check_set_get_state {
   STATE_VALUE=$( uuidgen | tr -d '-' )
 
   # Check generated STATE_VALUE is not empty
-  [ ! -z "${STATE_VALUE}" == "" ] || { set_state "${FUNCNAME[0]}" 'failed_generate_random_uuid'; return 1; }
+  [ ! -z "${STATE_VALUE}" ] || { set_state "${FUNCNAME[0]}" 'failed_generate_random_uuid'; return 1; }
 
   # Set state and try to retrieve value
   set_state "${STATE_NAME}" "${STATE_VALUE}" || { return 1; }
@@ -3143,21 +3143,11 @@ export -f ensure_ff_agent_home_exists
 #
 function ff_api_get {
     CALL="${1}"
-    if [ "${CALL}" == "" ]; then
-        return 1
-    fi
-
-    if [ "${FF_API_USERNAME}" == "" ]; then
-        return 1
-    fi
-
-    if [ "${FF_API_PASSWORD}" == "" ]; then
-        return 1
-    fi
-
-    if [ "${FF_HOST}" == "" ]; then
-        return 1
-    fi
+    
+    [ ! -z "${CALL}" ] || { return 1; }
+    [ ! -z "${FF_API_USERNAME}" ] || { return 1; }
+    [ ! -z "${FF_API_PASSWORD}" ] || { return 1; }
+    [ ! -z "${FF_HOST}" ] || { return 1; }
 
     # Run command, capture server response as ${RESULT} and curl exit code as ${STATUS}
     RESULT=$( curl -s --retry 5 -u "${FF_API_USERNAME}:${FF_API_PASSWORD}" https://${FF_HOST}${CALL} )
