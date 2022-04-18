@@ -1397,7 +1397,10 @@ export -f warning
 function ensure_variable_defined {
   
   # Dependency check: 'tr' is installed
-  [ command_exists tr >/dev/null ] || { error "${FUNCNAME[0]}" 'error_dependency_not_met_tr'; return 1; }
+  if ! command_exists tr >/dev/null; then
+    error "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
+    return 1
+  fi
 
   local NAME="$1"
   [[ -z "${NAME}" ]] && { error "error_ensure_variable_defined_no_arguments"; return 1; }  # Check: NAME is not blank
@@ -1785,7 +1788,10 @@ export -f generate_strong_password
 function get_secret {
 
   # Dependency check: 'tr' is installed
-  [ command_exists tr >/dev/null ] || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'; return 1; }
+  if ! command_exists tr >/dev/null; then
+    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
+    return 1
+  fi
 
   # Preserve current xtrace state
   if is_shell_attribute_set x; then
@@ -2625,7 +2631,10 @@ function discover_optional_environment_variable {
   fi
 
   # Dependency check: 'tr' is installed
-  [ command_exists tr >/dev/null ] || { error "${FUNCNAME[0]}" 'error_dependency_not_met_tr'; return 1; }
+  if ! command_exists tr >/dev/null; then
+    error "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
+    return 1
+  fi
   
   # Try to get value by "get_secret()"
   local NAME_LOWERCASE="$( echo "${NAME}" | tr '[:upper:]' '[:lower:]' )"
@@ -2769,7 +2778,10 @@ function check_environment_variables_are_set {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Dependency check: 'tr' is installed
-  [ command_exists tr >/dev/null ] || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'; return 1; }
+  if ! command_exists tr >/dev/null; then
+    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
+    return 1
+  fi
 
   # Define list of expected non-empty variables
   local ALL_EXPECTED_ENVRIONMENT_VARIABLES=(
@@ -2907,7 +2919,10 @@ function check_set_get_secret {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Check uuidgen is installed
-  [ command_exists uuidgen >/dev/null ] || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_uuidgen'; return 1; }
+  if ! command_exists uuidgen >/dev/null; then
+    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_uuidgen'
+    return 1
+  fi
   
   SECRET_NAME="check_set_get_secret"
   SECRET_VALUE=$( uuidgen )
@@ -3081,7 +3096,10 @@ function ensure_ff_agent_home_exists {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Dependency check: 'tr' is installed
-  [ command_exists tr >/dev/null ] || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'; return 1; }
+  if ! command_exists tr >/dev/null; then
+    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
+    return 1
+  fi
 
   # Define required variables
   local REQUIRED_VARIABLES=(
