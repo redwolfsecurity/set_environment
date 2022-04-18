@@ -2962,6 +2962,8 @@ export -f check_set_get_secret
 # On success: reuturn 0
 # On failure: return 1 and prints error to standard error stream
 #
+# Depend on: uuidgen, tr.
+#
 function check_set_get_state {
   set_state "${FUNCNAME[0]}" 'started'
 
@@ -2971,22 +2973,23 @@ function check_set_get_state {
     return 1
   fi
 
-  STATE_NAME="check_set_get_state"
-  STATE_VALUE=$( uuidgen )
-
-  # Check STATE_VALUE is not empty
-  if [ "${STATE_VALUE}" == "" ]; then
-    set_state "${FUNCNAME[0]}" 'failed_generate_random_uuid'
+  # Check tr is installed
+  if ! command_exists tr >/dev/null; then
+    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
     return 1
   fi
 
-  set_state "${STATE_NAME}" "${STATE_VALUE}" || { return 1; }
-  local RETRIEVED_VALUE=$( get_state "${STATE_NAME}" ) || {
-    set_state "${FUNCNAME[0]}" 'failed_retrieve_state'
-    return 1
-  }
+  STATE_NAME="check_set_get_state"
+  STATE_VALUE=$( uuidgen | tr -d '-' )
 
-  # Compare retrieved state with expected
+  # Check generated STATE_VALUE is not empty
+  [ ! -z "${STATE_VALUE}" == "" ] || { set_state "${FUNCNAME[0]}" 'failed_generate_random_uuid'; return 1; }
+
+  # Set state and try to retrieve value
+  set_state "${STATE_NAME}" "${STATE_VALUE}" || { return 1; }
+  local RETRIEVED_VALUE=$( get_state "${STATE_NAME}" ) || { set_state "${FUNCNAME[0]}" 'failed_retrieve_state'; return 1; }
+
+  # Compare retrieved and expected values
   if [ "${RETRIEVED_VALUE}" != "${STATE_VALUE}" ]; then
     # Mismatch (error)
     set_state "${FUNCNAME[0]}" 'error_retrieved_value_mismatch'
