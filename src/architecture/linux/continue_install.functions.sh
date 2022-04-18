@@ -126,7 +126,7 @@ function apt_install_basic_packages {
   local MISSING_PACKAGES=()
 
   # Iterate required packages and collect only missing ones
-  for REQUIRED_PACKAGE in ${REQUIRED_PACKAGES[@]}; do
+  for REQUIRED_PACKAGE in "${REQUIRED_PACKAGES[@]}"; do
     add_to_install_if_missing ${REQUIRED_PACKAGE} MISSING_PACKAGES
   done
 
@@ -1554,7 +1554,7 @@ function set_script_logging {
  	#set_state "${FUNCNAME[0]}" 'started'
 
   # Let's find a good directory for logs. This assumes zero knowledge.
-  # The _best_ place for these logs would be in ${HOME}/ff_agent/logs -- if we can write to it we'll create it
+  # The _best_ place for these logs would be in "${HOME}/ff_agent/logs" -- if we can write to it we'll create it
   POTENTIAL_LOG_DIRECTORIES=( "${FF_AGENT_HOME}/logs" /var/log/ff_agent /tmp/ff_agent/logs /tmp/ff_agent.$$/logs )
 
   LOG_DIRECTORY=""
