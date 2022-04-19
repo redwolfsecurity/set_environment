@@ -2366,8 +2366,7 @@ export -f ff_uuid
 #   - on failure: return code 1
 #
 # Usage example:
-#    FF_AGENT_URI=$( get_best_ff_agent_uri )
-#    [ $? -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_agent_uri"; return 1; }
+#    FF_AGENT_URI=$( get_best_ff_agent_uri ) || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_agent_uri"; return 1; }
 #
 function get_best_ff_agent_uri {
   set_state "${FUNCNAME[0]}" 'started'
@@ -2445,7 +2444,7 @@ function get_best_ff_host {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Try to get FF_HOST from environment or by get_secret()
-  discover_optional_environment_variable "FF_HOST" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_host";   return 1; } # Note: FF_HOST: FF_HOST will be set to legacy control hostname if this is a control.
+  discover_optional_environment_variable "FF_HOST" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_host"; return 1; } # Note: FF_HOST: FF_HOST will be set to legacy control hostname if this is a control.
 
   # Check if variable already set. If not try to get it's value by command 'hostname'
   [ -z "${FF_HOST}" ] && { FF_HOST="$( hostname )"; }
@@ -2482,8 +2481,8 @@ export -f get_best_ff_host
 function get_best_ff_host {
   set_state "${FUNCNAME[0]}" 'started'
 
-  # Try to get FF_HOST from environment or by get_secret()
-  discover_optional_environment_variable "FF_HOST" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_host";   return 1; } # Note: FF_HOST: FF_HOST will be set to legacy control hostname if this is a control.
+  # Try to get value from environment or by get_secret()
+  discover_optional_environment_variable "FF_HOST" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_host"; return 1; } # Note: FF_HOST: FF_HOST will be set to legacy control hostname if this is a control.
 
   # Check if variable already set. If not try to get it's value by command 'hostname'
   [ -z "${FF_HOST}" ] && { FF_HOST="$( hostname )"; }
@@ -2497,6 +2496,48 @@ function get_best_ff_host {
   return 0
 }
 export -f get_best_ff_host
+
+###############################################################################
+#
+function get_best_namespace {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Try to get value from environment or by get_secret()
+  discover_optional_environment_variable "NAMESPACE" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_namespace"; return 1; }
+
+  # Check if variable already set. If not set it to our default "system.local" namespace: '00000000-0000-0000-0000-000000000000'.
+  [ -z "${NAMESPACE}" ] && { NAMESPACE='00000000-0000-0000-0000-000000000000'; }
+
+  # Make sure the variable is now not empty or error out.
+  ensure_variable_not_empty 'NAMESPACE' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_namespace"; return 1; }
+
+  # Print result to standard output, set state to 'success' and return success code.
+  echo "${NAMESPACE}"
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f get_best_namespace
+
+###############################################################################
+#
+function get_best_organization {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Try to get value from environment or by get_secret()
+  discover_optional_environment_variable "ORGANIZATION" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_organization"; return 1; }
+
+  # Check if variable already set. If not set it to our default organization "system.local"
+  [ -z "${ORGANIZATION}" ] && { ORGANIZATION='system.local'; }
+
+  # Make sure the variable is now not empty or error out.
+  ensure_variable_not_empty 'ORGANIZATION' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_organization"; return 1; }
+
+  # Print result to standard output, set state to 'success' and return success code.
+  echo "${ORGANIZATION}"
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f get_best_organization
 
 ###############################################################################
 #
@@ -2526,6 +2567,18 @@ function discover_environment {
   # We need to choose_ff_agent_home before we can set/get secrets.
   # This sets some of environment variables: FF_AGENT_USERNAME, FF_AGENT_HOME.
   # Also creates FF_AGENT_HOME directory.
+  # Baseline installer must set the following environment variables:
+  #  [x] FF_AGENT_USERNAME  (see choose_ff_agent_home())
+  #  [x] FF_AGENT_USER_HOME (see choose_ff_agent_home())
+  #  [x] FF_AGENT_HOME      (see choose_ff_agent_home())
+  #  [x] FF_AGENT_URI (see get_best_ff_agent_uri())
+  #  [x] FF_HOST (see get_best_ff_host())
+  #  [x] FF_CONTENT_URL (see get_best_ff_content_url())
+  #  [ ] NAMESPACE
+  #  [x] N_PREFIX (see install_n())
+  #  [ ] ORGANIZATION
+  #  [x] TERM  (see terminal_initialize())
+  #
   choose_ff_agent_home || { abort "failed_to_choose_ff_agent_home"; }
   ensure_ff_agent_home_exists || { abort "failed_to_ensure_ff_agent_home_exists"; }
 
@@ -2534,6 +2587,17 @@ function discover_environment {
   set_secret ff_content_url "${FF_CONTENT_URL}"
   export FF_CONTENT_URL
 
+  # Similarly for best NAMESPACE
+  NAMESPACE=$( get_best_namespace ) || { abort "failed_to_get_best_namespace"; }
+  set_secret namespace "${NAMESPACE}"
+  export NAMESPACE
+
+  # Similarly for best ORGANIZATION
+  ORGANIZATION=$( get_best_organization ) || { abort "failed_to_get_best_organization"; }
+  set_secret organization "${ORGANIZATION}"
+  export ORGANIZATION
+
+  # Similarly for FF_AGENT_URI
   FF_AGENT_URI=$( get_best_ff_agent_uri )     || { abort "failed_to_get_best_ff_agent_uri"; }
   set_secret ff_agent_uri "${FF_AGENT_URI}"
   export FF_AGENT_URI
@@ -3074,12 +3138,13 @@ function choose_ff_agent_home {
     FF_AGENT_USERNAME=$( get_ff_agent_username ) || { error "terminal_error_failed_to_choose_user"; return 1; }
     export FF_AGENT_USERNAME
 
-    # Even if this function run by some other/not-chosen" user, the FF_AGENT_HOME_DIR would point to the "right/choosen" home. Example: /home/ubuntu
-    # Only when we run as ritgh/choosen user the FF_AGENT_HOME_DIR and HOME have the same values.
-    local FF_AGENT_HOME_DIR=$( get_home_directory_for_user "${FF_AGENT_USERNAME}" ) || { error "terminal_error_failed_to_get_home_directory_for_choosen_user"; return 1; }
-
+    # Even if this function run by some other/not-chosen" user, the FF_AGENT_USER_HOME would point to the "right/choosen" home. Example: /home/ubuntu
+    # Only when we run as ritgh/choosen user the FF_AGENT_USER_HOME and HOME have the same values.
+    FF_AGENT_USER_HOME=$( get_home_directory_for_user "${FF_AGENT_USERNAME}" ) || { error "terminal_error_failed_to_get_agent_user_home"; return 1; }
+    export FF_AGENT_USER_HOME
+          
     local AGENT_DIR_NAME="ff_agent"
-    export FF_AGENT_HOME="${FF_AGENT_HOME_DIR}/${AGENT_DIR_NAME}"
+    export FF_AGENT_HOME="${FF_AGENT_USER_HOME}/${AGENT_DIR_NAME}"
 }
 export -f choose_ff_agent_home
 
@@ -3143,7 +3208,7 @@ export -f ensure_ff_agent_home_exists
 #
 function ff_api_get {
     CALL="${1}"
-    
+
     [ ! -z "${CALL}" ] || { return 1; }
     [ ! -z "${FF_API_USERNAME}" ] || { return 1; }
     [ ! -z "${FF_API_PASSWORD}" ] || { return 1; }
