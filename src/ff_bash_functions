@@ -44,8 +44,10 @@
 #    - file_contains_pattern
 #    - find_file_owner_in_all_packages
 #    - find_file_owner_in_installed_packages
+#    - get_by_url
 #    - glob_matches
 #    - inject_into_file
+#    - is_writable
 #    - remove_all_lines_by_regexp
 #    - replace_all_lines_by_regexp
 #    - s
@@ -858,6 +860,42 @@ export -f find_file_owner_in_installed_packages
 
 ###############################################################################
 # Category: file
+# Utility function - Read remote file served by web server by given URL.
+#
+# If remote server response had HTTP_CODE 200, then function produce result into standard output and return code 0.
+# In any other case function return code is 1 and no output produced.
+#
+function get_by_url {
+  local URL="$1"
+
+  [ ! -z "${URL}" ] || { return 1; }
+  local OUTPUT=$( curl \
+      --silent    \
+      --retry 5    \
+      --location    \
+      --max-time 55  \
+      --retry-delay 1 \
+      --retry-max-time 60 \
+      --connect-timeout 12 \
+      -w "\n%{http_code}" \
+      "${URL}" ) || { return 1; }
+
+  # Extract HTTP_CODE (last injected line)
+  HTTP_CODE=$( echo "${OUTPUT}" | tail -1 )
+  
+  # Check HTTP_CODE is 200
+  [ "${HTTP_CODE}" -eq 200 ] || { return 1; }
+    
+  # Print everything except last line, which we injected http_code
+  # Note: we use:
+  #    | head -n -1    - to get all the lines except the last one
+  #    | head -c -1    - to get rid of last byte of the last line, which was "new line" injected by us before http_code
+  echo -n "${OUTPUT}" | head -n -1 | head -c -1 
+}
+export -f get_by_url
+
+###############################################################################
+# Category: file
 # Utility function - Easy way to check if a glob matches.
 # This is a bash builtin wrapper. e.g. glob_matches '/tmp/abc*' will return 0 or 1
 function glob_matches {
@@ -952,6 +990,29 @@ function inject_into_file {
   return 0
 }
 export -f inject_into_file
+
+###############################################################################
+# Category: file
+# Utility function - checks if given file or directory is writable by the current user.
+#
+# Function return code:
+#  0 - if file/directory writable
+#  1 - otherwise
+#
+function is_writable {
+  # Get argument
+  local TARGET="$1"
+
+  # Check argument is not blank
+  [ ! -z "${TARGET}" ] || { return 1; }
+  
+  # If file/directory is writable, then return 0
+  [ -w "${TARGET}" ] && { return 0; }
+
+  # The target is not writable. Return 1
+  return 1
+}
+export -f is_writable
 
 ###############################################################################
 # Category: file
@@ -1668,18 +1729,6 @@ export -f is_container_running
 # Utility function - Restart docker containers
 function restart_containers {
 
-    # THIS CHECK FAILS:
-    # + return 0
-    # + CONTAINERS=(control_backend service_metric_proxy control_proxy real_browser service_provisioning delivery_discover)
-    # + restart_containers control_backend service_metric_proxy control_proxy real_browser service_provisioning delivery_discover
-    # + '[' -z control_backend service_metric_proxy control_proxy real_browser service_provisioning delivery_discover ']'
-    # /home/ubuntu/ff_agent/bin/hotpatch: line 434: [: too many arguments
-    # + CONTAINERS=(${@})
-    # + CONTAINERS_TO_RESTART=()
-    # + for CONTAINER in "${CONTAINERS[@]}"
-    # + container_name_exists control_backend
-    # ... and it keep working normally
-
     # if [ -z "${@}" ]; then
     #     error "error_no_container_names_specified"
     #     return 2
@@ -1849,9 +1898,10 @@ function get_secret {
           return
       fi
 
-      # Special case for "control_api_user" and "control_api_password" - these 2 values
+      # Special case for "ff_api_username" and "ff_api_password" - these 2 values
       # are nexted few levels deep in "agent/configuration"
-      if [ "${KEY}" == "control_api_user" ] || [ "${KEY}" == "CONTROL_API_USER" ]; then
+      if [ "${KEY}" == "ff_api_username" ] || [ "${KEY}" == "FF_API_USERNAME" ]; then
+        # TODO: here we rely on provisioning JSON on agent to have "control_api_user", which is incorrectly named and must be redesigned completely.
         VALUE=$( sudo cat /var/lib/cloud/instance/user-data.txt | jq -r '.[] | select(.mime_type == "agent/configuration") | .roles[] | select(.role_name == "AgentRole") | .services[] | select(.service_name == "ActionManager") | .control_api_user' )
         if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
             echo ${VALUE}
@@ -1859,7 +1909,8 @@ function get_secret {
             return
         fi
       fi
-      if [ "${KEY}" == "control_api_password" ] || [ "${KEY}" == "CONTROL_API_PASSWORD" ]; then
+      if [ "${KEY}" == "ff_api_password" ] || [ "${KEY}" == "FF_API_PASSWORD" ]; then
+        # TODO: here we rely on provisioning JSON on agent to have "control_api_password", which is incorrectly named and must be redesigned completely.
         VALUE=$( sudo cat /var/lib/cloud/instance/user-data.txt | jq -r '.[] | select(.mime_type == "agent/configuration") | .roles[] | select(.role_name == "AgentRole") | .services[] | select(.service_name == "ActionManager") | .control_api_password' )
         if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
             echo ${VALUE}
@@ -1915,7 +1966,7 @@ function get_secret {
     fi
   fi
 
-  # Case: We are on a legacy control server in Amazon
+  # Case: We are on a legacy portal server in Amazon
   for environment in production staging development
   do
       ENVPATH="${HOME}/.control/environment/${environment}"
@@ -2463,7 +2514,7 @@ function get_best_ff_host {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Try to get FF_HOST from environment or by get_secret()
-  discover_optional_environment_variable "FF_HOST" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_host"; return 1; } # Note: FF_HOST: FF_HOST will be set to legacy control hostname if this is a control.
+  discover_optional_environment_variable "FF_HOST" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_host"; return 1; } # Note: FF_HOST: FF_HOST will be set to legacy portal hostname if this is a portal.
 
   # Check if variable already set. If not try to get it's value by command 'hostname'
   [ -z "${FF_HOST}" ] && { FF_HOST="$( hostname )"; }
@@ -2501,7 +2552,7 @@ function get_best_ff_host {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Try to get value from environment or by get_secret()
-  discover_optional_environment_variable "FF_HOST" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_host"; return 1; } # Note: FF_HOST: FF_HOST will be set to legacy control hostname if this is a control.
+  discover_optional_environment_variable "FF_HOST" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_host"; return 1; } # Note: FF_HOST: FF_HOST will be set to legacy portal hostname if this is a portal.
 
   # Check if variable already set. If not try to get it's value by command 'hostname'
   [ -z "${FF_HOST}" ] && { FF_HOST="$( hostname )"; }
@@ -3402,18 +3453,18 @@ function publish_message {
     INPUT_JSON=`cat`
 
     # Check inputs
-    local CONTROL_API_USER=$( get_secret control_api_user )
-    if [ "${CONTROL_API_USER}" == "" ]; then
+    local FF_API_USERNAME=$( get_secret ff_api_username )
+    if [ "${FF_API_USERNAME}" == "" ]; then
       [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
-      # error: CONTROL_API_USER is missing
+      # error: FF_API_USERNAME is missing
       # can't use set_state here otherwize will fall into recursive loop
       return 1
     fi
 
-    local CONTROL_API_PASSWORD=$( get_secret control_api_password )
-    if [ "${CONTROL_API_PASSWORD}" == "" ]; then
+    local FF_API_PASSWORD=$( get_secret ff_api_password )
+    if [ "${FF_API_PASSWORD}" == "" ]; then
       [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
-      # error: CONTROL_API_PASSWORD is missing
+      # error: FF_API_PASSWORD is missing
       # can't use set_state here otherwize will fall into recursive loop
       return 1
     fi
@@ -3485,7 +3536,7 @@ EOF
         --request POST \
         --header "Content-Type: application/json" \
         --data "${MESSAGE}" \
-        --user "${CONTROL_API_USER}:${CONTROL_API_PASSWORD}" \
+        --user "${FF_API_USERNAME}:${FF_API_PASSWORD}" \
         https://${FF_HOST}/
     )
     STATUS=${?}

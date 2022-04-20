@@ -687,64 +687,33 @@ export -f install_ff_agent_bashrc
 function install_go {
   set_state "${FUNCNAME[0]}" 'started'
 
-  # Define required variables
-  local REQUIRED_VARIABLES=(
-    FF_CONTENT_URL
-  )
-
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-      return 1
-    }
-  done
-
-  # TODO - The latest GO version is 1.18
-  # TODO - This URL requires us to maintain it on the CDN vs. download it from go.dev/dl which is preferred, or at least a backup.
-  # TODO - This assumes amd64 vs. and does not use arm64 if we are running on arm
-  # The installation archives (size ~123MB) are located in the CDN by URL:
-  # https://${FF_CONTENT_URL}/ff/ff_agent/hotpatch/hotpatch_files/go1.16.2.linux-amd64.tar.gz
-  # https://${FF_CONTENT_URL}/ff/ff_agent/hotpatch/hotpatch_files/go1.17.1.linux-amd64.tar.gz
-
-  EXPECTED_VERSION="1.17.1"  # Updated go version on 09-Sep-2021
-  EXPECTED_COMMAND="go"
-
-  # ------------------------ don't edit below this line -------------------------
-
-  # Define command to get version
-  GET_VERSION_COMMAND="go version"
+  # Get the latest available version number.
+  local EXPECTED_VERSION=$( get_by_url 'https://go.dev/VERSION?m=text' )
+  [ ! -z "${EXPECTED_VERSION}" ] || { set_state "${FUNCNAME[0]}" 'failed_to_get_latest_version_number'; return 1; }
 
   # Define expected output of version command
   # TODO - Note amd64 should be dynamic, as should linux ideally to make it somewhat flexible.
   GET_VERSION_EXPECTED_OUTPUT="go version go${EXPECTED_VERSION} linux/amd64"
 
-  # Check if go is installed and is in the PATH
-  IS_INSTALLED="$( command_exists go )"
-
   # Check if go is already installed and has expected vesrion
-  if [ "${IS_INSTALLED}" != "" ]; then
-      # Yes, is installed. Check if installed 'go' version matches expected one.
-      GET_VERSION_OUTPUT="$( ${GET_VERSION_COMMAND} )"
+  if command_exists go >/dev/null; then
+      # Yes, 'go' is installed. Check if installed version matches expected one.
+      GET_VERSION_OUTPUT="$( go version )"
 
       # Compare to expected version
       if [ "${GET_VERSION_OUTPUT}" == "${GET_VERSION_EXPECTED_OUTPUT}" ]; then
         # Match. Version is up to date, nothing to do.
+        set_state "${FUNCNAME[0]}" 'success'
         return 0
       fi
   fi
 
-  # TODO - Refactor all this to a function to make a test directory that tests you can write into it
   # Create temporary folder
   TEMP_DIR="$( mktemp --directory )"
 
   # Check temporary folder created and we can write to it
-  TEMP_TEST_FILE="${TEMP_DIR}/test_file"
-  touch "${TEMP_TEST_FILE}"
-  TEMP_TEST_FILE_STATUS_CODE=$?
-  if [ ${TEMP_TEST_FILE_STATUS_CODE} -ne 0 ]; then
-      error "Failed to create test file in the temporary folder: '${TEMP_TEST_FILE}'"
+  if ! is_writable "${TEMP_DIR}"; then
+      set_state "${FUNCNAME[0]}" "error_temp_dir_isnt_writable"
       return 1
   fi
 
@@ -754,14 +723,15 @@ function install_go {
   # Download tarball (by curl with retries)
   URL="${FF_CONTENT_URL}/ff/ff_agent/hotpatch/hotpatch_files/${TARBALL_FILENAME}"
   curl \
-        -sL \
-        --retry 5 \
-        --retry-delay 1 \
-        --retry-max-time 60 \
-        --max-time 55 \
-        --connect-timeout 12 \
-        -o "${TEMP_DIR}/${TARBALL_FILENAME}" \
-        "${URL}"
+      --silent    \
+      --retry 5    \
+      --location    \
+      --retry-delay 1 \
+      --retry-max-time 60 \
+      --max-time 55 \
+      --connect-timeout 12 \
+      -o "${TEMP_DIR}/${TARBALL_FILENAME}" \
+      "${URL}"
 
   # Check if download succeed
   STATUS_CODE=$?
@@ -838,8 +808,8 @@ EOT
     export PATH=$PATH:/usr/local/go/bin
   fi
 
-  # Check by running "go version"
-  GET_VERSION_OUTPUT="$( $GET_VERSION_COMMAND )"
+  # Check version
+  GET_VERSION_OUTPUT="$( go version )"
 
   # Compare to expected version
   if [ "${GET_VERSION_OUTPUT}" != "${GET_VERSION_EXPECTED_OUTPUT}" ]; then
@@ -907,8 +877,9 @@ function install_n {
   SAVE_AS='n'
   URL="${FF_CONTENT_URL}/ff/ff_agent/hotpatch/hotpatch_files/${SAVE_AS}"
   curl \
-    -sL \
-    --retry 5 \
+    --silent    \
+    --retry 5    \
+    --location    \
     --retry-delay 1 \
     --retry-max-time 60 \
     --max-time 55 \
@@ -923,8 +894,9 @@ function install_n {
       # Attempt 2: download 'n' from from github
       URL="https://raw.githubusercontent.com/tj/n/master/bin/n"
       curl \
-        -sL \
-        --retry 5 \
+        --silent    \
+        --retry 5    \
+        --location    \
         --retry-delay 1 \
         --retry-max-time 60 \
         --max-time 55 \
