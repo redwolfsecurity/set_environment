@@ -687,11 +687,24 @@ export -f install_ff_agent_bashrc
 function install_go {
   set_state "${FUNCNAME[0]}" 'started'
 
+  # Define required variables
+  local REQUIRED_VARIABLES=(
+    FF_AGENT_HOME
+  )
+
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || {
+      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
+      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      return 1
+    }
+  done
+
   # Get the latest available version number.
   local EXPECTED_VERSION=$( get_by_url 'https://go.dev/VERSION?m=text' )
   [ ! -z "${EXPECTED_VERSION}" ] || { set_state "${FUNCNAME[0]}" 'failed_to_get_latest_version_number'; return 1; }
 
-  # Define expected output of version command
   # TODO - Note amd64 should be dynamic, as should linux ideally to make it somewhat flexible.
   GET_VERSION_EXPECTED_OUTPUT="go version go${EXPECTED_VERSION} linux/amd64"
 
@@ -713,99 +726,72 @@ function install_go {
 
   # Check temporary folder created and we can write to it
   if ! is_writable "${TEMP_DIR}"; then
-      set_state "${FUNCNAME[0]}" "error_temp_dir_isnt_writable"
-      return 1
+    set_state "${FUNCNAME[0]}" "error_temp_dir_isnt_writable"
+    return 1
   fi
 
   # Define tarball name by given expected version
-  TARBALL_FILENAME="go${EXPECTED_VERSION}.linux-amd64.tar.gz"
+  TARBALL_FILENAME="${EXPECTED_VERSION}.linux-amd64.tar.gz"
 
   # Download tarball (by curl with retries)
-  URL="${FF_CONTENT_URL}/ff/ff_agent/hotpatch/hotpatch_files/${TARBALL_FILENAME}"
+  URL="https://go.dev/dl/${TARBALL_FILENAME}"
   curl \
-      --silent    \
-      --retry 5    \
-      --location    \
-      --retry-delay 1 \
-      --retry-max-time 60 \
-      --max-time 55 \
-      --connect-timeout 12 \
-      -o "${TEMP_DIR}/${TARBALL_FILENAME}" \
-      "${URL}"
+    --silent    \
+    --retry 5    \
+    --location    \
+    --retry-delay 1 \
+    --retry-max-time 60 \
+    --max-time 185 \
+    --connect-timeout 12 \
+    -o "${TEMP_DIR}/${TARBALL_FILENAME}" \
+    "${URL}" || { set_state "${FUNCNAME[0]}" "failed_to_download_archive"; return 1; }
 
-  # Check if download succeed
-  STATUS_CODE=$?
-  if [ ${STATUS_CODE} -ne 0 ]; then
-      # TODO - Remove the echo. Set state instead. This violates the pattern.
-      echo "error: failed to download tarball by URL: '${URL}'" >&2
-      exit 1
-  fi
+  # Check if file downloaded (in case of "404 not found" curl return code 0 and will not create "-o file")
+  [ -f "${TEMP_DIR}/${TARBALL_FILENAME}" ] || { set_state "${FUNCNAME[0]}" "failed_to_download_archive"; return 1; }
 
   # Install 'go'
 
-  # Remove old 'go'
-  # TODO - This is not installing go locally in the proper place.
-  # TODO - It also violates the rule that we modify global system variables.
-  sudo rm -fr /usr/local/go
-  # To cleanup old "bad installations" of "go" let's do 3 things:
-  # delete 2 symlinks and then delete few old directories before installing new 'go':
-  #    1) rm -f  /usr/bin/go
-  #    2) rm -f  /usr/lib/go
-  #    3) rm -fr /usr/lib/go-*
-  sudo rm -f  /usr/bin/go
-  sudo rm -f  /usr/lib/go
-  sudo rm -fr /usr/lib/go-*
-
-  # Unzip downloaded archive
-  sudo tar -C /usr/local -xzf "${TEMP_DIR}/${TARBALL_FILENAME}"
-  if [ $? -ne 0 ]; then
-      error "Failed to install tarball by command: sudo tar -C /usr/local -xzf ${TARBALL_FILENAME}  Current working directory: '$( pwd )'"
-      return 1
-  fi
+  # Unzip downloaded archive (the "bin" folder of the golang will be available here: ${FF_AGENT_HOME}/go/bin/ )
+  tar -C ${FF_AGENT_HOME} -xzf "${TEMP_DIR}/${TARBALL_FILENAME}" || { set_state "${FUNCNAME[0]}" "failed_to_extract_archive"; return 1; }
 
   # Remove temporary folder
-  # TODO - This should be a 'warning' not a terminal error
-  rm -fr "${TEMP_DIR}" || { error "Failed to remove temporary folder: '${TEMP_DIR}'"; return 1; }
+  rm -fr "${TEMP_DIR}" || { error "Warning: failed to remove temporary folder: '${TEMP_DIR}'"; }
 
   # Inject path to 'go' into ff_agent/.profile
-  # TODO - fix comment /etc/profile
-  TARGET_FILES=( "${FF_AGENT_HOME}/.profile" )  # /etc/profile - excluded for now. User's profile is good enough.
+  TARGET_FILE="${FF_AGENT_HOME}/.profile"
 
-  # Iterate target files
-  for TARGET_FILE in "${TARGET_FILES[@]}"; do
-    # Create TARGET_FILE if missing
-    # TODO - This does more than create a file if missing. This creates a file, and puts things into it.
-    if [ ! -f "${TARGET_FILE}" ]; then
-      (
-        cat <<EOT
+  # Create TARGET_FILE if missing and add a comment (who/when creaeted it)
+  if [ ! -f "${TARGET_FILE}" ]; then
+    (
+      cat <<EOT
 # File ${TARGET_FILE} created by set_environment ${FUNCNAME[0]}() on $(date --utc).
 EOT
-      ) > "${TARGET_FILE}" || { set_state "${FUNCNAME[0]}" "failed_to_create_file"; return 1; }
-    fi
+    ) > "${TARGET_FILE}" || { set_state "${FUNCNAME[0]}" "failed_to_create_file"; return 1; }
+  fi
 
-    # TODO - This pattern is too specific. Also it specifies /usr/local/go/bin vs. installing go in the right place.
-    PATTERN='^export PATH=.PATH:/usr/local/go/bin' # note: we don't want to expand variables in this string, thus single quites used.
-    INJECT_CONTENT=$(
-      cat <<EOT
+  # Check if expected line was already injected into the profile.
+  # Note: it is not too specific, it is exactly the line that must be present in the ff_agent custom profille file.
+  PATTERN="^export PATH=.PATH:${FF_AGENT_HOME}/go/bin"
+  INJECT_CONTENT=$(
+    cat <<EOT
 # The path to 'go' inserted by $( pwd )/$( basename $0 ) on $( date --utc ) for 'go' version: 'go${EXPECTED_VERSION}'
-export PATH=\$PATH:/usr/local/go/bin
+export PATH=\$PATH:${FF_AGENT_HOME}/go/bin
 EOT
-    )
-    ERROR_CODE='error_injecting_source_custom_profile'
+  )
+  ERROR_CODE='error_injecting_source_custom_profile'
 
-    # Do injection and check result
-    inject_into_file  \
-      "${TARGET_FILE}" \
-      "${PATTERN}" \
-      "${INJECT_CONTENT}" || { set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; return 1; }
-  done
+  # Inject and check result code
+  inject_into_file  \
+    "${TARGET_FILE}" \
+    "${PATTERN}" \
+    "${INJECT_CONTENT}" || { set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; return 1; }
 
   # Also inject path to 'go' into current PATH (if missing in PATH)
   # do the export, so we don't have to relogin in order to call "go version"
-  echo ${PATH} | grep -q /usr/local/go/bin
+  echo ${PATH} | grep -q ${FF_AGENT_HOME}/go/bin
   if [ $? -ne 0 ]; then
     # Path to 'go' is missing from PATH environment variable. Inject it:
-    export PATH=$PATH:/usr/local/go/bin
+    export PATH=$PATH:${FF_AGENT_HOME}/go/bin
   fi
 
   # Check version
@@ -831,7 +817,6 @@ export -f install_go
 #
 #
 # Require environment variables set:
-#   - FF_AGENT_PROFILE_FILE
 #   - FF_AGENT_HOME
 #
 # Official n github page:
@@ -841,12 +826,8 @@ export -f install_go
 function install_n {
   set_state "${FUNCNAME[0]}" "state"
 
-  # Define path to ff_agent .profile
-  FF_AGENT_PROFILE_FILE="${FF_AGENT_HOME}/.profile"    # example: /home/ubuntu/ff_agent/.profile  (Note: FF_AGENT_PROFILE_FILE is not local, but shell environment used in other install functions)
-
   # Define required variables
   local REQUIRED_VARIABLES=(
-    FF_AGENT_PROFILE_FILE
     FF_AGENT_HOME
   )
 
@@ -858,6 +839,9 @@ function install_n {
       return 1
     }
   done
+
+  # Define path to ff_agent .profile
+  FF_AGENT_PROFILE_FILE="${FF_AGENT_HOME}/.profile"    # example: /home/ubuntu/ff_agent/.profile  (Note: FF_AGENT_PROFILE_FILE is not local, but shell environment used in other install functions)
 
   # Check custom .profile file exists
   if [ ! -f "${FF_AGENT_PROFILE_FILE}" ]; then
