@@ -2061,7 +2061,7 @@ function set_state {
   
   # Make sure "${FF_AGENT_HOME}" is not empty
   if [ -z "${FF_AGENT_HOME}" ]; then
-      error "Can not set state. FF_AGENT_HOME variable not defined. State would have been set to ${STATE_NAME}=${STATE_VALUE}"
+      error "Can not set state. FF_AGENT_HOME variable not set. State would have been set to ${STATE_NAME}=${STATE_VALUE}"
       return 1
   fi
 
@@ -2080,7 +2080,7 @@ function set_state {
   local STATE_FILE="${STATE_DIR}/${STATE_NAME}"
 
   # Write value into the file
-  echo "${STATE_VALUE}" >"${STATE_FILE}" || { error "${FUNCNAME[0]}: failed_to_write_state"; return 1; }
+  echo "${STATE_VALUE}" >"${STATE_FILE}" || { error "${FUNCNAME[0]}: failed_to_write_state. State would have been set to ${STATE_NAME}=${STATE_VALUE}"; return 1; }
 
   # ------------------ Build JSON object "state/change" and send to FF_HOST
 
@@ -2095,10 +2095,7 @@ function set_state {
   local TIMESTAMP_EPOCH_MS="$( get_epoch_ms )"
   
   # Check if we actually got non-empty string?
-  [ ! -z "${TIMESTAMP_EPOCH_MS}" ] || {
-    error "${FUNCNAME[0]}: failed_to_write_state"
-    return 1
-  }
+  [ ! -z "${TIMESTAMP_EPOCH_MS}" ] || { error "${FUNCNAME[0]}: failed_to_get_epoch_ms"; return 1; }
   
   # If state value contains: success|running, then: "is_success": true
   # else
@@ -2115,8 +2112,8 @@ function set_state {
   fi
 
   # Get previous "old" state value
-  PREVIOUS_STATE_JSON=""
-  PREVIOUS_STATE_VALUE="$( cat ${STATE_FILE} )"
+  local PREVIOUS_STATE_JSON=""
+  local PREVIOUS_STATE_VALUE="$( cat ${STATE_FILE} )"
   # Only include "old_state" property if it is not-empty string
   if [ "${PREVIOUS_STATE_VALUE}" != "" ]; then
     PREVIOUS_STATE_JSON="\"previous_state\": \"${PREVIOUS_STATE_VALUE}\","
@@ -2124,19 +2121,42 @@ function set_state {
 
   # Compose "state/chate" JSON and pipe it to publish_message()
   # Note: we POST "state/change" JSON to ff_host. (from portal to self, from 'traffic generator' to portal, from 'inside docker' to (agent?)).
-  TMP_UUID="$( uuidgen )"
+  local UUID="$( ff_uuid )" || { error "${FUNCNAME[0]}" 'failed_generate_uuid'; return 1; }
 
-# TODO: check all the environment used in JSON are actually set!
-# TODO: check uuid is installed (and ALL OTHER commands we run - do not assume their existance)
+  # Check: all the environment variables used in JSON are actually set.
+  local ALL_EXPECTED_ENVRIONMENT_VARIABLES=(
+    FF_AGENT_URI
+    FF_AGENT_USERNAME
+    FF_HOST
+    HOSTNAME
+    IS_SUCCESS_OR_IS_ERROR
+    MIME_TYPE
+    NAMESPACE
+    ORGANIZATION
+    STATE_NAME
+    STATE_VALUE
+    TIMESTAMP_EPOCH_MS
+    UUID
+  )
+  for VARIABLE_NAME in "${ALL_EXPECTED_ENVRIONMENT_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || {
+      local ERROR_CODE=$( echo "error_check_environment_variables_are_set_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )
+      error "${FUNCNAME[0]}: ${ERROR_CODE}"
+      return 1
+    }
+  done
 
+  # Define mime_type
   MIME_TYPE="state/change"
+
+  # Commpose JSON and publish it
   (
     cat <<- EOF
 {
   "mime_type": "${MIME_TYPE}",
   "uri_template": "/set_environment/[mime_type]/id/[id]/[uuid]",
-  "uri": "${NAMESPACE}::/set_environment/${MIME_TYPE}/id/${STATE_NAME}/${TMP_UUID}",
-  "uuid": "${TMP_UUID}",
+  "uri": "${NAMESPACE}::/set_environment/${MIME_TYPE}/id/${STATE_NAME}/${UUID}",
+  "uuid": "${UUID}",
   "id": "${STATE_NAME}",
   "state": "${STATE_VALUE}",
   ${PREVIOUS_STATE_JSON}
@@ -2377,9 +2397,8 @@ function get_best_ff_agent_uri {
   # Check if variable already set. If not set - generate new uuid
   if [ -z "${FF_AGENT_URI}" ]; then
       # Generate new uuid, check errors, export new value
-      local NEW_UUID="$( ff_uuid )"
-      [ $? -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_generate_new_uuid"; return 1; }
-      FF_AGENT_URI="/agent/agent_guid/${NEW_UUID}"
+      local UUID="$( ff_uuid )" || { set_state "${FUNCNAME[0]}" "failed_to_generate_new_uuid"; return 1; }
+      FF_AGENT_URI="/agent/agent_guid/${UUID}"
   fi
 
   # At this point we must have not empty FF_AGENT_URI value.
@@ -2551,7 +2570,6 @@ export -f get_best_organization
 #
 # Dependencies:
 #    - FF_CONTENT_URL variable must be set either by "set_secrets" or in environment variable
-#    - uuidgen must be installed (used to generate FF_AGENT_URI)
 #
 # Function return code:
 #   0 - on success
@@ -2574,9 +2592,9 @@ function discover_environment {
   #  [x] FF_AGENT_URI (see get_best_ff_agent_uri())
   #  [x] FF_HOST (see get_best_ff_host())
   #  [x] FF_CONTENT_URL (see get_best_ff_content_url())
-  #  [ ] NAMESPACE
+  #  [x] NAMESPACE (see get_best_namespace())
   #  [x] N_PREFIX (see install_n())
-  #  [ ] ORGANIZATION
+  #  [x] ORGANIZATION (see get_best_organization())
   #  [x] TERM  (see terminal_initialize())
   #
   choose_ff_agent_home || { abort "failed_to_choose_ff_agent_home"; }
@@ -2847,7 +2865,7 @@ function check_environment_variables_are_set {
     return 1
   fi
 
-  # Define list of expected non-empty variables
+  # Define list of required environment variables (must be not empty)
   local ALL_EXPECTED_ENVRIONMENT_VARIABLES=(
     FF_AGENT_USERNAME
     FF_AGENT_HOME
@@ -2981,26 +2999,11 @@ export -f check_nodejs_installation
 #
 function check_set_get_secret {
   set_state "${FUNCNAME[0]}" 'started'
-
-  # Check uuidgen is installed
-  if ! command_exists uuidgen >/dev/null; then
-    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_uuidgen'
-    return 1
-  fi
   
   SECRET_NAME="check_set_get_secret"
-  SECRET_VALUE=$( uuidgen )
+  SECRET_VALUE=$( ff_uuid ) || { set_state "${FUNCNAME[0]}" 'failed_generate_uuid'; return 1; }
 
-  # Check SECRET_VALUE is not empty
-  if [ "${SECRET_VALUE}" == "" ]; then
-    set_state "${FUNCNAME[0]}" 'failed_generate_random_uuid'
-    return 1
-  fi
-
-  set_secret "${SECRET_NAME}" "${SECRET_VALUE}" || {
-    set_state "${FUNCNAME[0]}" 'failed_set_secret'
-    return 1
-  }
+  set_secret "${SECRET_NAME}" "${SECRET_VALUE}" || { set_state "${FUNCNAME[0]}" 'failed_set_secret'; return 1; }
 
   local RETRIEVED_VALUE=$( get_secret "${SECRET_NAME}" ) || {
     set_state "${FUNCNAME[0]}" 'failed_retrieve_secret'
@@ -3031,12 +3034,6 @@ export -f check_set_get_secret
 function check_set_get_state {
   set_state "${FUNCNAME[0]}" 'started'
 
-  # Check uuidgen is installed
-  if ! command_exists uuidgen >/dev/null; then
-    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_uuidgen'
-    return 1
-  fi
-
   # Check tr is installed
   if ! command_exists tr >/dev/null; then
     set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
@@ -3044,10 +3041,10 @@ function check_set_get_state {
   fi
 
   STATE_NAME="check_set_get_state"
-  STATE_VALUE=$( uuidgen | tr -d '-' )
+  STATE_VALUE=$( ff_uuid | tr -d '-' )
 
   # Check generated STATE_VALUE is not empty
-  [ ! -z "${STATE_VALUE}" ] || { set_state "${FUNCNAME[0]}" 'failed_generate_random_uuid'; return 1; }
+  [ ! -z "${STATE_VALUE}" ] || { set_state "${FUNCNAME[0]}" 'failed_generate_random_state_value'; return 1; }
 
   # Set state and try to retrieve value
   set_state "${STATE_NAME}" "${STATE_VALUE}" || { return 1; }
@@ -3405,7 +3402,7 @@ function publish_message {
     INPUT_JSON=`cat`
 
     # Check inputs
-    CONTROL_API_USER=$( get_secret control_api_user )
+    local CONTROL_API_USER=$( get_secret control_api_user )
     if [ "${CONTROL_API_USER}" == "" ]; then
       [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
       # error: CONTROL_API_USER is missing
@@ -3413,7 +3410,7 @@ function publish_message {
       return 1
     fi
 
-    CONTROL_API_PASSWORD=$( get_secret control_api_password )
+    local CONTROL_API_PASSWORD=$( get_secret control_api_password )
     if [ "${CONTROL_API_PASSWORD}" == "" ]; then
       [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
       # error: CONTROL_API_PASSWORD is missing
@@ -3433,14 +3430,14 @@ function publish_message {
       return 1
     fi
 
-    MESSAGE_UUID="$( uuidgen )"
-    if [ "${MESSAGE_UUID}" == "" ]; then
+    local UUID="$( ff_uuid )"
+    if [ "${UUID}" == "" ]; then
       [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
-      # error: failed to generate MESSAGE_UUID
+      # error: failed to generate UUID
       return 1
     fi
 
-    TRANSACTION_ID="$( uuidgen )"
+    local TRANSACTION_ID="$( ff_uuid )"
     if [ "${TRANSACTION_ID}" == "" ]; then
       [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
       # error: failed to generate TRANSACTION_ID
@@ -3453,11 +3450,11 @@ function publish_message {
     fi
 
     # Wrap input JSON into the MESSAGE
-    MESSAGE=$(
+    local MESSAGE=$(
       # Part 1/3: headers and start of payload
       cat <<- EOF
      {
-        "uri": "/organization/${ORGANIZATION}/delivery/message/${MESSAGE_UUID}",
+        "uri": "/organization/${ORGANIZATION}/delivery/message/${UUID}",
         "mime_type": "delivery/message",
         "header": {
           "mime_type": "delivery/request_header",
@@ -3481,7 +3478,7 @@ EOF
     )
 
     # Run command, capture server response as ${RESULT} and curl exit code as ${STATUS}
-    RESULT=$(
+    local RESULT=$(
       curl \
         --silent   \
         --retry 5    \
