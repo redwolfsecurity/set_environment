@@ -1865,17 +1865,22 @@ function get_secret {
   [ ! -z "${KEY}" ] || { error "get_secret(): blank KEY argument"; return 1; }
 
   # Check if KEY contains any prohibited symbols, then error out.
-  [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { error "get_secret(): illigal characters in the KEY argument: '${BASH_REMATCH[1]}'"; return 1; }
+  [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { 
+    set_state "${FUNCNAME[0]}" 'error_bad_argument_illigal_charaacters_in_key'
+    return 1
+  }
 
   # Check if FF_AGENT_HOME is not empty
   if [ "${FF_AGENT_HOME}" == "" ]; then
     [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+    set_state "${FUNCNAME[0]}" 'error_ff_agent_home_not_set'
     return 1
   fi
 
   # Check if key is not empty
   if [ "${KEY}" == "" ]; then
     [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+    set_state "${FUNCNAME[0]}" 'error_empty_key'
     return 1
   fi
 
@@ -1892,6 +1897,7 @@ function get_secret {
   if [ -e "${FF_AGENT_HOME}/secrets/${KEY}" ]; then
       cat "${FF_AGENT_HOME}/secrets/${KEY}"
       [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+      set_state "${FUNCNAME[0]}" 'success'
       return
   fi
 
@@ -1905,6 +1911,7 @@ function get_secret {
       if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
           echo ${VALUE}
           [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+          set_state "${FUNCNAME[0]}" 'success'
           return
       fi
 
@@ -1916,6 +1923,7 @@ function get_secret {
         if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
             echo ${VALUE}
             [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+            set_state "${FUNCNAME[0]}" 'success'
             return
         fi
       fi
@@ -1925,6 +1933,7 @@ function get_secret {
         if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
             echo ${VALUE}
             [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+            set_state "${FUNCNAME[0]}" 'success'
             return
         fi
       fi
@@ -1938,6 +1947,7 @@ function get_secret {
       if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
           echo ${VALUE}
           [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+          set_state "${FUNCNAME[0]}" 'success'
           return
       fi
   fi
@@ -1949,6 +1959,7 @@ function get_secret {
       if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
           [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
           echo ${VALUE}
+          set_state "${FUNCNAME[0]}" 'success'
           return
       fi
   fi
@@ -1959,6 +1970,7 @@ function get_secret {
       if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
           [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
           echo ${VALUE}
+          set_state "${FUNCNAME[0]}" 'success'
           return
       fi
   fi
@@ -1972,6 +1984,7 @@ function get_secret {
     if [ ! -z "${FF_AGENT_URI}" ]; then
       set_secret ff_agent_uri "${FF_AGENT_URI}"
       echo "${FF_AGENT_URI}"
+      set_state "${FUNCNAME[0]}" 'success'
       return
     fi
   fi
@@ -1985,12 +1998,14 @@ function get_secret {
           if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
               echo ${VALUE}
               [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+              set_state "${FUNCNAME[0]}" 'success'
               return
           fi
       fi
   done
 
   [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+  set_state "${FUNCNAME[0]}" 'failed_to_find_secret_value'
   return 1
 }
 export -f get_secret
@@ -2056,6 +2071,8 @@ function set_secret {
 
   set +x # Disble xtrace to avoid priting secrets
 
+  set_state "${FUNCNAME[0]}" 'started'
+
   # Get arguments
   local URI="${1}"
   local SECRET="${2}"
@@ -2063,21 +2080,21 @@ function set_secret {
   # Check URI is not blank
   [ ! -z "${URI}" ] || {
     [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
-    error "set_secret(): blank URI argument"
+    set_state "${FUNCNAME[0]}" 'error_blank_uri_argument'
     return 1
   }
 
   # Check if URI contains any prohibited symbols, then error out.
   [[ ! "${URI}" =~ ([^a-z0-9_]+) ]] || {
     [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
-    error "set_secret(): illigal characters in the URI argument: '${BASH_REMATCH[1]}'"
+    set_state "${FUNCNAME[0]}" 'error_illigal_characters_in_uri_argument'
     return 1
   }
 
   # Check SECRET is not empty
   if [ -z "${SECRET}" ]; then
       [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
-      error "${FUNCNAME[0]}: error_bad_argument_secret"
+      set_state "${FUNCNAME[0]}" 'error_bad_argument_secret'
       return 1
   fi
 
@@ -2085,15 +2102,19 @@ function set_secret {
   local SECRET_DIRECTORY="${FF_AGENT_HOME}/secrets"
   mkdir -p "${SECRET_DIRECTORY}" || {
     [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
-    error "failed_to_create_secrets_directory";
-    return 1;
+    set_state "${FUNCNAME[0]}" 'failed_to_create_secrets_directory'
+    return 1
   }
 
   # Store secret
-  echo "${SECRET}" >"${SECRET_DIRECTORY}/${URI}" || { error "${FUNCNAME[0]}: failed_to_write_secret"; return 1; }
+  echo "${SECRET}" >"${SECRET_DIRECTORY}/${URI}" || { 
+    set_state "${FUNCNAME[0]}" 'failed_to_write_secret'
+    return 1
+  }
 
   [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
 
+  set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
 export -f set_secret
