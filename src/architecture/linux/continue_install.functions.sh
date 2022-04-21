@@ -719,7 +719,7 @@ function install_go {
   fi
 
   # Create temporary folder (for downloading 'go' archive)
-  local TEMP_DIR="$( mktemp --directory )"
+  local TEMP_DIR="$( mktemp --directory )" || { set_state "${FUNCNAME[0]}" 'failed_to_create_temp_dir'; return 1; }
 
   # Check temporary folder created and we can write to it
   if ! is_writable "${TEMP_DIR}"; then
