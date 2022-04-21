@@ -2890,6 +2890,20 @@ export -f get_lsb_id
 
 ###############################################################################
 # Category: environment
+# Utility function - Get LSB ID - e.g. ubuntu
+function get_lsb_id_downcase {
+  # Dependency check: 'tr' is installed
+  if ! command_exists tr >/dev/null; then
+    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
+    return 1
+  fi
+
+  lsb_release --short --id | tr '[:upper:]' '[:lower:]'
+}
+export -f get_lsb_id_downcase
+
+###############################################################################
+# Category: environment
 # Utility function - Get release - e.g. 16.04, 18.04, 20.04
 function get_lsb_release {
     lsb_release --short --release

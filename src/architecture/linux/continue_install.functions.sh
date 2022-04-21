@@ -429,16 +429,16 @@ function install_docker {
   # OK We install since we don't have the minimum version, or docker is not installed
 
   # Get ID, RELEASE and DISTRO and verify the values are actually set
-  LSB_ID=$( get_lsb_id ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
+  local LSB_ID=$( get_lsb_id ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
   [ "${LSB_ID}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
 
-  RELEASE=$( get_lsb_release ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }  # 18.04, 20.04, ...
+  local RELEASE=$( get_lsb_release ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }  # 18.04, 20.04, ...
   [ "${RELEASE}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }
 
-  DISTRO=$( get_lsb_codename ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; }  # bionic, focal, ...
+  local DISTRO=$( get_lsb_codename ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; }  # bionic, focal, ...
   [ "${DISTRO}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; }
 
-  ARCHITECTURE=$( get_hardware_architecture ) || { set_state "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
+  local ARCHITECTURE=$( get_hardware_architecture ) || { set_state "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
 
   # Only Ubuntu for now
   if [ "${LSB_ID}" != "Ubuntu" ]; then
@@ -719,7 +719,7 @@ function install_go {
   fi
 
   # Create temporary folder (for downloading 'go' archive)
-  TEMP_DIR="$( mktemp --directory )"
+  local TEMP_DIR="$( mktemp --directory )"
 
   # Check temporary folder created and we can write to it
   if ! is_writable "${TEMP_DIR}"; then
@@ -729,8 +729,8 @@ function install_go {
 
   # Define archive name by given expected version
   # TODO - Note amd64 should be dynamic, as should linux ideally to make it somewhat flexible.
-  OS="linux"
-  ARCHITECTURE="amd64"
+  local OS="$( get_lsb_id_downcase )" || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id_downcase"; return 1; }
+  local ARCHITECTURE="$( get_hardware_architecture )" || { set_state "${FUNCNAME[0]}" "failed_to_get_hardware_architecture"; return 1; }
   TARBALL_FILENAME="${EXPECTED_VERSION}.linux-amd64.tar.gz"
 
   # Download archive
