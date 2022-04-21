@@ -727,11 +727,16 @@ function install_go {
     return 1
   fi
 
-  # Define archive name by given expected version
-  # TODO - Note amd64 should be dynamic, as should linux ideally to make it somewhat flexible.
+  # Get OS
   local OS="$( get_lsb_id_downcase )" || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id_downcase"; return 1; }
+  [ ! -z "${OS}" ] || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id_downcase"; return 1; }
+
+  # Get ARCHITECTURE
   local ARCHITECTURE="$( get_hardware_architecture )" || { set_state "${FUNCNAME[0]}" "failed_to_get_hardware_architecture"; return 1; }
-  TARBALL_FILENAME="${EXPECTED_VERSION}.linux-amd64.tar.gz"
+  [ ! -z "${OS}" ] || { set_state "${FUNCNAME[0]}" "failed_to_get_hardware_architecture"; return 1; }
+
+  # Define archive filename
+  TARBALL_FILENAME="${EXPECTED_VERSION}.${OS}-${ARCHITECTURE}.tar.gz"
 
   # Download archive
   URL="https://go.dev/dl/${TARBALL_FILENAME}"
@@ -749,7 +754,7 @@ function install_go {
   # Check if file downloaded (in case of "404 not found" curl return code 0 and will not create "-o file")
   [ -f "${TEMP_DIR}/${TARBALL_FILENAME}" ] || { set_state "${FUNCNAME[0]}" "failed_to_download_archive"; return 1; }
 
-  # Remove pverious version of 'go' if exists
+  # Remove pverious local version of 'go' if exists
   if [ -d "${FF_AGENT_HOME}/go" ]; then
     rm -fr "${FF_AGENT_HOME}/go" || { set_state "${FUNCNAME[0]}" "failed_to_remove_existing_go"; return 1; }
   fi
@@ -762,10 +767,10 @@ function install_go {
   # Remove temporary folder
   rm -fr "${TEMP_DIR}" || { error "Warning: failed to remove temporary folder: '${TEMP_DIR}'"; }
 
-  # Inject path to 'go' into ff_agent/.profile
+  # Define the path to ff_agent profile file (we need to add a path to 'go' into ff_agent/.profile if missing)
   TARGET_FILE="${FF_AGENT_HOME}/.profile"
 
-  # Create TARGET_FILE if missing and add a comment (who/when creaeted it)
+  # Create TARGET_FILE if does not exist and add a comment (who/when creaeted it)
   if [ ! -f "${TARGET_FILE}" ]; then
     (
       cat <<EOT
@@ -799,10 +804,10 @@ EOT
     export PATH=$PATH:${FF_AGENT_HOME}/go/bin
   fi
 
-  # Check version
+  # Check installed 'go' version
   GET_VERSION_OUTPUT="$( go version )" || { set_state "${FUNCNAME[0]}" 'failed_to_get_installed_version_number'; return 1; }
 
-  # Compare to expected version
+  # Compare to the expected version
   if [[ "${GET_VERSION_OUTPUT}" =~ ${EXPECTED_VERSION} ]]; then
     # Good - expected version installed.
     set_state "${FUNCNAME[0]}" 'success'
