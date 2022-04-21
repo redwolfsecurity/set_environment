@@ -62,6 +62,10 @@
 #    - warning 
 ## END UTILITY FUNCTIONS: LOGGING / PROCESS CONTROl
 ## BEGIN UTILITY FUNCTIONS: TERMINAL / SHELL
+#    - set_bash_echo_on 
+#    - set_bash_echo_off 
+#    - get_bash_echo_setting 
+#    - set_bash_echo_setting 
 #    - ensure_variable_defined 
 #    - ensure_variable_not_empty 
 #    - is_shell_attribute_set 
@@ -1456,7 +1460,71 @@ export -f warning
 ### BEGIN UTILITY FUNCTIONS: TERMINAL / SHELL
 
 ###############################################################################
+# Category: UTILITY FUNCTIONS: TERMINAL / SHELL
+# Function enables verbose bash echo (all executed lines got printed before execution).
+# This is convenient way to debug bash scritps.
+function set_bash_echo_on {
+  set -x
+}
+export -f set_bash_echo_on
+
+###############################################################################
+# Category: UTILITY FUNCTIONS: TERMINAL / SHELL
+# Function disables verbose bash echo (all executed lines got printed before execution).
+function set_bash_echo_off {
+  set +x
+}
+export -f set_bash_echo_off
+
+###############################################################################
+# Category: UTILITY FUNCTIONS: TERMINAL / SHELL
+# Function get_bash_echo_setting() allows to preserve current bash echo settings, so
+# one can restore it later using set_bash_echo_setting().
 #
+# Usage Example:
+#
+# # Preserve current bash echo settings and enable bash echo setting
+# BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_bash_echo_settings'; return 1; }
+# set_bash_echo_on
+#
+# # ...do some work...
+#
+# # Restore bash echo settings
+# set_bash_echo_setting "${BASH_ECHO_SETTINGS}"
+#
+function get_bash_echo_setting {
+  # Preserve current xtrace state
+  if is_shell_attribute_set x; then
+    echo -n " XTRACE_ENABLED "
+  fi
+}
+export -f get_bash_echo_setting
+
+###############################################################################
+# Category: UTILITY FUNCTIONS: TERMINAL / SHELL
+# Functions set_bash_echo_setting() allows to restore/set bash echo settings according to
+# the provided argument -- settings string. The settings string can be obtained using get_bash_echo_setting().
+#
+# See function get_bash_echo_setting() description for details.
+#
+function set_bash_echo_setting {
+  # Get all provided arguments (it supports multiple arguments)
+  local BASH_ECHO_SETTINGS="$@"
+
+  # Check if arguments have XTRACE_ENABLED
+  if [[ "${BASH_ECHO_SETTINGS}" =~ XTRACE_ENABLED ]]; then
+    # Enable bash tracing
+    set_bash_echo_on
+  else
+    # Disable bash tracing
+    set_bash_echo_off
+  fi
+}
+export -f set_bash_echo_setting
+
+
+###############################################################################
+# Category: UTILITY FUNCTIONS: TERMINAL / SHELL
 # Function checks if variable given by name is defined.
 # Function takes the only argument: variable name.
 # Return:
@@ -1485,7 +1553,7 @@ function ensure_variable_defined {
 export -f ensure_variable_defined
 
 ###############################################################################
-#
+# Category: UTILITY FUNCTIONS: TERMINAL / SHELL
 # Function ensure_variable_not_empty checks if the variable by given is defined and has non-empty value.
 # Function takes the only argument: variable name.
 # Return:
@@ -1513,6 +1581,7 @@ function ensure_variable_not_empty {
 export -f ensure_variable_not_empty
 
 ###############################################################################
+# Category: UTILITY FUNCTIONS: TERMINAL / SHELL
 # Utility is_shell_attribute_set function
 # See discussion: https://stackoverflow.com/a/34709224/7022062
 # Usage example:
@@ -1538,6 +1607,7 @@ function is_shell_attribute_set {
 export -f is_shell_attribute_set
 
 ###############################################################################
+# Category: UTILITY FUNCTIONS: TERMINAL / SHELL
 # Utility is_shell_attribute_set function
 # See discussion: https://stackoverflow.com/a/34709224/7022062
 # Usage example:
@@ -1556,6 +1626,7 @@ function is_shell_option_set {
 export -f is_shell_option_set
 
 ###############################################################################
+# Category: UTILITY FUNCTIONS: TERMINAL / SHELL
 # Initialize the terminal
 # Ensures that TERM is set
 # Ensures we set up colours only if TERM is set, else empty strings
@@ -1589,6 +1660,7 @@ function terminal_initialize {
 export -f terminal_initialize
 
 ###############################################################################
+# Category: UTILITY FUNCTIONS: TERMINAL / SHELL
 # Check if terminal is interactive
 # This is useful in cases where we might wish to ask a question
 # If you run this script from ssh, it will return 255 (e.g. ssh hostname "terminal_is_interactive" )
@@ -1599,6 +1671,7 @@ function terminal_is_interactive {
 export -f terminal_is_interactive
 
 ###############################################################################
+# Category: UTILITY FUNCTIONS: TERMINAL / SHELL
 # Check if this terminal is a TTY
 function terminal_is_tty {
     [ -t 0 ] && return 0 || return 1
@@ -1606,6 +1679,7 @@ function terminal_is_tty {
 export -f terminal_is_tty
 
 ###############################################################################
+# Category: UTILITY FUNCTIONS: TERMINAL / SHELL
 # Reset terminal state - sometimes useful if a command messes up terminal state
 function terminal_reset {
   terminal_is_tty && command_exists tput && tput reset && tput sane
@@ -1618,7 +1692,7 @@ export -f terminal_reset
 ### BEGIN UTILITY FUNCTIONS: PROCESS
 
 ###############################################################################
-# Category: process
+# Category: UTILITY FUNCTIONS: PROCESS
 # checks if a process is running as current user or effectively as current user.
 # Note we are checking for the pattern at the beginning of the command by default
 function is_process_running_as_me {
@@ -1850,10 +1924,8 @@ function get_secret {
     return 1
   fi
 
-  # Preserve current xtrace state
-  if is_shell_attribute_set x; then
-    XTRACE_WAS_ENABLED=true
-  fi
+  # Preserve current bash echo settings and enable bash echo setting
+  BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_bash_echo_settings'; return 1; }
 
   set_state "${FUNCNAME[0]}" 'started'
 
@@ -1872,14 +1944,14 @@ function get_secret {
 
   # Check if FF_AGENT_HOME is not empty
   if [ "${FF_AGENT_HOME}" == "" ]; then
-    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     set_state "${FUNCNAME[0]}" 'error_ff_agent_home_not_set'
     return 1
   fi
 
   # Check if key is not empty
   if [ "${KEY}" == "" ]; then
-    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     set_state "${FUNCNAME[0]}" 'error_empty_key'
     return 1
   fi
@@ -1896,7 +1968,7 @@ function get_secret {
   # Case: requested key already exists in ff_agent "secrets/" folder
   if [ -e "${FF_AGENT_HOME}/secrets/${KEY}" ]; then
       cat "${FF_AGENT_HOME}/secrets/${KEY}"
-      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+      set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
       set_state "${FUNCNAME[0]}" 'success'
       return
   fi
@@ -1910,7 +1982,7 @@ function get_secret {
       #       -n - true if the length of string is nonzero
       if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
           echo ${VALUE}
-          [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+          set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
           set_state "${FUNCNAME[0]}" 'success'
           return
       fi
@@ -1922,7 +1994,7 @@ function get_secret {
         VALUE=$( sudo cat /var/lib/cloud/instance/user-data.txt | jq -r '.[] | select(.mime_type == "agent/configuration") | .roles[] | select(.role_name == "AgentRole") | .services[] | select(.service_name == "ActionManager") | .control_api_user' )
         if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
             echo ${VALUE}
-            [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+            set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
             set_state "${FUNCNAME[0]}" 'success'
             return
         fi
@@ -1932,7 +2004,7 @@ function get_secret {
         VALUE=$( sudo cat /var/lib/cloud/instance/user-data.txt | jq -r '.[] | select(.mime_type == "agent/configuration") | .roles[] | select(.role_name == "AgentRole") | .services[] | select(.service_name == "ActionManager") | .control_api_password' )
         if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
             echo ${VALUE}
-            [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+            set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
             set_state "${FUNCNAME[0]}" 'success'
             return
         fi
@@ -1946,7 +2018,7 @@ function get_secret {
       #       -n - true if the length of string is nonzero
       if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
           echo ${VALUE}
-          [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+          set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
           set_state "${FUNCNAME[0]}" 'success'
           return
       fi
@@ -1957,7 +2029,7 @@ function get_secret {
   if [ -e "${USER_DATA}" ]; then
     VALUE=$( cat "${USER_DATA}" | jq ".${KEY}" | cut -d'"' -f2 )
       if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
-          [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+          set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
           echo ${VALUE}
           set_state "${FUNCNAME[0]}" 'success'
           return
@@ -1968,7 +2040,7 @@ function get_secret {
   if [ -f /etc/ff/configuration/user_data.json ]; then
       VALUE=$( sudo cat /etc/ff/configuration/user_data.json | jq '.[] | select(.mime_type=="agent/configuration")' | jq -r ".${KEY}" | grep -v -e '^null$' )
       if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
-          [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+          set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
           echo ${VALUE}
           set_state "${FUNCNAME[0]}" 'success'
           return
@@ -1983,6 +2055,7 @@ function get_secret {
     # Store "agent" to proper unified place for secrets, so we don't have to look for it in random places again next time.
     if [ ! -z "${FF_AGENT_URI}" ]; then
       set_secret ff_agent_uri "${FF_AGENT_URI}"
+      set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
       echo "${FF_AGENT_URI}"
       set_state "${FUNCNAME[0]}" 'success'
       return
@@ -1997,14 +2070,14 @@ function get_secret {
           VALUE=$( grep -i "^${KEY}=" ${ENVPATH}/* | cut -d= -f2 | head -1 )
           if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
               echo ${VALUE}
-              [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+              set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
               set_state "${FUNCNAME[0]}" 'success'
               return
           fi
       fi
   done
 
-  [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+  set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
   set_state "${FUNCNAME[0]}" 'failed_to_find_secret_value'
   return 1
 }
@@ -2017,10 +2090,9 @@ export -f get_secret
 #   - if state not found, print nothing into standard output and return code 1
 #
 function get_state {
-  # Preserve current xtrace state
-  if is_shell_attribute_set x; then
-    XTRACE_WAS_ENABLED=true
-  fi
+
+  # Preserve current bash echo settings and enable bash echo setting
+  BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_bash_echo_settings'; return 1; }
 
   set +x # Disble xtrace to avoid priting secrets
 
@@ -2036,7 +2108,7 @@ function get_state {
   # Make sure "${FF_AGENT_HOME}" is not empty
   if [ -z "${FF_AGENT_HOME}" ]; then
       error "Can not set state. FF_AGENT_HOME variable not defined. State would have been set to ${STATE_NAME}=${VALUE}"
-      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+      set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
       return 1
   fi
 
@@ -2051,11 +2123,11 @@ function get_state {
     EXIT_CODE=$?
     # Print value to standard output
     echo -n "${VALUE}"
-    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     return $EXIT_CODE
   else
     # Error: state file not found. Restore xtrace and eturn code 1
-    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     return 1
   fi
 }
@@ -2064,10 +2136,9 @@ export -f get_state
 ###############################################################################
 # Utility function
 function set_secret {
-  # Preserve current xtrace state
-  if is_shell_attribute_set x; then
-    XTRACE_WAS_ENABLED=true
-  fi
+
+  # Preserve current bash echo settings and enable bash echo setting
+  BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_bash_echo_settings'; return 1; }
 
   set +x # Disble xtrace to avoid priting secrets
 
@@ -2079,21 +2150,21 @@ function set_secret {
 
   # Check URI is not blank
   [ ! -z "${URI}" ] || {
-    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     set_state "${FUNCNAME[0]}" 'error_blank_uri_argument'
     return 1
   }
 
   # Check if URI contains any prohibited symbols, then error out.
   [[ ! "${URI}" =~ ([^a-z0-9_]+) ]] || {
-    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     set_state "${FUNCNAME[0]}" 'error_illigal_characters_in_uri_argument'
     return 1
   }
 
   # Check SECRET is not empty
   if [ -z "${SECRET}" ]; then
-      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+      set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
       set_state "${FUNCNAME[0]}" 'error_bad_argument_secret'
       return 1
   fi
@@ -2101,7 +2172,7 @@ function set_secret {
   # Create secrets directory
   local SECRET_DIRECTORY="${FF_AGENT_HOME}/secrets"
   mkdir -p "${SECRET_DIRECTORY}" || {
-    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     set_state "${FUNCNAME[0]}" 'failed_to_create_secrets_directory'
     return 1
   }
@@ -2112,8 +2183,7 @@ function set_secret {
     return 1
   }
 
-  [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
-
+  set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
@@ -2711,9 +2781,6 @@ function discover_environment {
   # # Discover set of "ff environment" variables
   # discover_ff_environment || { set_state "${FUNCNAME[0]}" "failed_to_discover_ff_environment"; return 1; }
 
-  [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
-
-  # Note: we need explicitly return zero code here since the previous test for XTRACE_WAS_ENABLED might return false then f-n return 1
   return 0
 }
 export -f discover_environment
@@ -3488,123 +3555,120 @@ export -f is_set_environment_working
 #
 function publish_message {
 
-    # Preserve current xtrace state
-    if is_shell_attribute_set x; then
-      XTRACE_WAS_ENABLED=true
-    fi
+  # Preserve current bash echo settings and enable bash echo setting
+  BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_bash_echo_settings'; return 1; }
 
-    set +x # Disble xtrace to avoid priting secrets
+  set +x # Disble xtrace to avoid priting secrets
 
-    # Read piped json
-    INPUT_JSON=`cat`
+  # Read piped json
+  INPUT_JSON=`cat`
 
-    # Check inputs
-    local FF_API_USERNAME=$( get_secret ff_api_username )
-    if [ "${FF_API_USERNAME}" == "" ]; then
-      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
-      # error: FF_API_USERNAME is missing
-      # can't use set_state here otherwize will fall into recursive loop
-      return 1
-    fi
+  # Check inputs
+  local FF_API_USERNAME=$( get_secret ff_api_username )
+  if [ "${FF_API_USERNAME}" == "" ]; then
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    # error: FF_API_USERNAME is missing
+    # can't use set_state here otherwize will fall into recursive loop
+    return 1
+  fi
 
-    local FF_API_PASSWORD=$( get_secret ff_api_password )
-    if [ "${FF_API_PASSWORD}" == "" ]; then
-      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
-      # error: FF_API_PASSWORD is missing
-      # can't use set_state here otherwize will fall into recursive loop
-      return 1
-    fi
+  local FF_API_PASSWORD=$( get_secret ff_api_password )
+  if [ "${FF_API_PASSWORD}" == "" ]; then
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    # error: FF_API_PASSWORD is missing
+    # can't use set_state here otherwize will fall into recursive loop
+    return 1
+  fi
 
-    if [ "${INPUT_JSON}" == "" ]; then
-      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
-      # error: INPUT_JSON is missing
-      return 1
-    fi
+  if [ "${INPUT_JSON}" == "" ]; then
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    # error: INPUT_JSON is missing
+    return 1
+  fi
 
-    if [ "${FF_HOST}" == "" ]; then
-      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
-      # error: FF_HOST is missing
-      return 1
-    fi
+  if [ "${FF_HOST}" == "" ]; then
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    # error: FF_HOST is missing
+    return 1
+  fi
 
-    local UUID="$( ff_uuid )"
-    if [ "${UUID}" == "" ]; then
-      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
-      # error: failed to generate UUID
-      return 1
-    fi
+  local UUID="$( ff_uuid )"
+  if [ "${UUID}" == "" ]; then
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    # error: failed to generate UUID
+    return 1
+  fi
 
-    local TRANSACTION_ID="$( ff_uuid )"
-    if [ "${TRANSACTION_ID}" == "" ]; then
-      [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
-      # error: failed to generate TRANSACTION_ID
-      return 1
-    fi
+  local TRANSACTION_ID="$( ff_uuid )"
+  if [ "${TRANSACTION_ID}" == "" ]; then
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    # error: failed to generate TRANSACTION_ID
+    return 1
+  fi
 
-    if ! command_exists curl >/dev/null; then
-      log "WARNING: curl is not yet isntalled. Skppping publishing JSON: ${INPUT_JSON}"
-      return 0
-    fi
-
-    # Wrap input JSON into the MESSAGE
-    local MESSAGE=$(
-      # Part 1/3: headers and start of payload
-      cat <<- EOF
-     {
-        "uri": "/organization/${ORGANIZATION}/delivery/message/${UUID}",
-        "mime_type": "delivery/message",
-        "header": {
-          "mime_type": "delivery/request_header",
-          "transaction_id": "${TRANSACTION_ID}",
-
-          ${HAS_ERRORS_ELEMENT}
-
-          "from": "/service/set_environment/instance/${UUID}",
-          "to":"/service/storage"
-        },
-        "payload": [
-EOF
-      # Part 2/3: payload
-      echo "${INPUT_JSON}"
-
-      # Part 3/3: footer: closing payload array and message envelop
-      cat <<- EOF
-        ]
-      }
-EOF
-    )
-
-    # Run command, capture server response as ${RESULT} and curl exit code as ${STATUS}
-    local RESULT=$(
-      curl \
-        --silent   \
-        --retry 5    \
-        --request POST \
-        --header "Content-Type: application/json" \
-        --data "${MESSAGE}" \
-        --user "${FF_API_USERNAME}:${FF_API_PASSWORD}" \
-        https://${FF_HOST}/
-    )
-    STATUS=${?}
-
-    [ "${XTRACE_WAS_ENABLED}" == "true" ] && set -x  # Restore xtrace state (only  if it was enabled before)
-
-    # Check result
-    if [ "${STATUS}" != "0" ]; then
-        return ${STATUS}
-    fi
-
-    # Even if curl succeed, check some edge cases, when server replied with some JSON error
-    if [[ ${RESULT} =~ (^Cannot GET) ]]; then
-        return 1
-    fi
-
-    if [[ ${RESULT} =~ (^.*"mime_type".+"rest/error") ]]; then
-        return 1
-    fi
-
-    # Return success
+  if ! command_exists curl >/dev/null; then
+    log "WARNING: curl is not yet isntalled. Skppping publishing JSON: ${INPUT_JSON}"
     return 0
+  fi
+
+  # Wrap input JSON into the MESSAGE
+  local MESSAGE=$(
+    # Part 1/3: headers and start of payload
+    cat <<- EOF
+    {
+      "uri": "/organization/${ORGANIZATION}/delivery/message/${UUID}",
+      "mime_type": "delivery/message",
+      "header": {
+        "mime_type": "delivery/request_header",
+        "transaction_id": "${TRANSACTION_ID}",
+
+        ${HAS_ERRORS_ELEMENT}
+
+        "from": "/service/set_environment/instance/${UUID}",
+        "to":"/service/storage"
+      },
+      "payload": [
+EOF
+    # Part 2/3: payload
+    echo "${INPUT_JSON}"
+
+    # Part 3/3: footer: closing payload array and message envelop
+    cat <<- EOF
+      ]
+    }
+EOF
+  )
+
+  # Run command, capture server response as ${RESULT} and curl exit code as ${STATUS}
+  local RESULT=$(
+    curl \
+      --silent   \
+      --retry 5    \
+      --request POST \
+      --header "Content-Type: application/json" \
+      --data "${MESSAGE}" \
+      --user "${FF_API_USERNAME}:${FF_API_PASSWORD}" \
+      https://${FF_HOST}/
+  ) || {
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    return 1
+  }
+
+  # Even if curl succeed, check some edge cases, when server replied with some JSON error
+  if [[ ${RESULT} =~ (^Cannot GET) ]]; then
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    return 1
+  fi
+
+  # Check if resut has error mime_type (TODO: improve it to rely on actual response http_code, see implemented in get_by_url())
+  if [[ ${RESULT} =~ (^.*"mime_type".+"rest/error") ]]; then
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    return 1
+  fi
+
+  # Return success
+  set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+  return 0
 }
 export -f publish_message
 
