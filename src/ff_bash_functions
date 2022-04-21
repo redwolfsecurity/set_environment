@@ -1463,6 +1463,9 @@ export -f warning
 # Category: UTILITY FUNCTIONS: TERMINAL / SHELL
 # Function enables verbose bash echo (all executed lines got printed before execution).
 # This is convenient way to debug bash scritps.
+#
+# Note: we don't use "set_state()" in set_bash_echo_xxx() functions since it can laed to recurrsion.
+#
 function set_bash_echo_on {
   set -x
 }
@@ -1929,7 +1932,7 @@ function get_secret {
 
   set_state "${FUNCNAME[0]}" 'started'
 
-  set +x # Disble xtrace to avoid priting secrets
+  set_bash_echo_off || { set_state "${FUNCNAME[0]}" 'failed_to_set_bash_echo_off'; return 1; } # Disable xtrace to avoid priting secrets
 
   local KEY="${1}"
 
@@ -2094,7 +2097,7 @@ function get_state {
   # Preserve current bash echo settings and enable bash echo setting
   BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_bash_echo_settings'; return 1; }
 
-  set +x # Disble xtrace to avoid priting secrets
+  set_bash_echo_off || { set_state "${FUNCNAME[0]}" 'failed_to_set_bash_echo_off'; return 1; } # Disable xtrace to avoid priting secrets
 
   # Get 1 argument: state name
   STATE_NAME="${1}"
@@ -2140,9 +2143,9 @@ function set_secret {
   # Preserve current bash echo settings and enable bash echo setting
   BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_bash_echo_settings'; return 1; }
 
-  set +x # Disble xtrace to avoid priting secrets
-
   set_state "${FUNCNAME[0]}" 'started'
+
+  set_bash_echo_off || { set_state "${FUNCNAME[0]}" 'failed_to_set_bash_echo_off'; return 1; } # Disable xtrace to avoid priting secrets
 
   # Get arguments
   local URI="${1}"
@@ -3556,9 +3559,9 @@ export -f is_set_environment_working
 function publish_message {
 
   # Preserve current bash echo settings and enable bash echo setting
-  BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_bash_echo_settings'; return 1; }
+  BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { return 1; } # Note: can't use set_state here otherwize will fall into recursive loop
 
-  set +x # Disble xtrace to avoid priting secrets
+  set_bash_echo_off || { return 1; } # Disable xtrace to avoid priting secrets. Note: can't use set_state here otherwize will fall into recursive loop
 
   # Read piped json
   INPUT_JSON=`cat`
