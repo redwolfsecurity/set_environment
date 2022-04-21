@@ -1302,7 +1302,7 @@ function pm2_configure {
 
     # configure it to rotate logs every hour
     timeout 30 pm2 set pm2-logrotate:rotateInterval '0 0 * * * *'  || { set_state "${FUNCNAME[0]}" "pm2_configure_logrotate_error"; return 1; }
-    timeout 30 pm2 update || { set_state "${FUNCNAME[0]}" "pm2_update_error"; return 1; }
+    timeout 55 pm2 update || { set_state "${FUNCNAME[0]}" "pm2_update_error"; return 1; }
 
     set_state "${FUNCNAME[0]}" 'success'
 }
