@@ -702,26 +702,23 @@ function install_go {
   done
 
   # Get the latest available version number.
-  local EXPECTED_VERSION=$( get_by_url 'https://go.dev/VERSION?m=text' )
+  local EXPECTED_VERSION=$( get_by_url 'https://go.dev/VERSION?m=text' ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_latest_version_number'; return 1; }
   [ ! -z "${EXPECTED_VERSION}" ] || { set_state "${FUNCNAME[0]}" 'failed_to_get_latest_version_number'; return 1; }
-
-  # TODO - Note amd64 should be dynamic, as should linux ideally to make it somewhat flexible.
-  GET_VERSION_EXPECTED_OUTPUT="go version go${EXPECTED_VERSION} linux/amd64"
 
   # Check if go is already installed and has expected vesrion
   if command_exists go >/dev/null; then
       # Yes, 'go' is installed. Check if installed version matches expected one.
-      GET_VERSION_OUTPUT="$( go version )"
+      GET_VERSION_OUTPUT="$( go version )" || { set_state "${FUNCNAME[0]}" 'failed_to_get_existing_version_number'; return 1; }
 
       # Compare to expected version
-      if [ "${GET_VERSION_OUTPUT}" == "${GET_VERSION_EXPECTED_OUTPUT}" ]; then
+      if [[ "${GET_VERSION_OUTPUT}" =~ ${EXPECTED_VERSION} ]]; then
         # Match. Version is up to date, nothing to do.
         set_state "${FUNCNAME[0]}" 'success'
         return 0
       fi
   fi
 
-  # Create temporary folder
+  # Create temporary folder (for downloading 'go' archive)
   TEMP_DIR="$( mktemp --directory )"
 
   # Check temporary folder created and we can write to it
@@ -730,10 +727,13 @@ function install_go {
     return 1
   fi
 
-  # Define tarball name by given expected version
+  # Define archive name by given expected version
+  # TODO - Note amd64 should be dynamic, as should linux ideally to make it somewhat flexible.
+  OS="linux"
+  ARCHITECTURE="amd64"
   TARBALL_FILENAME="${EXPECTED_VERSION}.linux-amd64.tar.gz"
 
-  # Download tarball (by curl with retries)
+  # Download archive
   URL="https://go.dev/dl/${TARBALL_FILENAME}"
   curl \
     --silent    \
@@ -749,10 +749,15 @@ function install_go {
   # Check if file downloaded (in case of "404 not found" curl return code 0 and will not create "-o file")
   [ -f "${TEMP_DIR}/${TARBALL_FILENAME}" ] || { set_state "${FUNCNAME[0]}" "failed_to_download_archive"; return 1; }
 
+  # Remove pverious version of 'go' if exists
+  if [ -d "${FF_AGENT_HOME}/go" ]; then
+    rm -fr "${FF_AGENT_HOME}/go" || { set_state "${FUNCNAME[0]}" "failed_to_remove_existing_go"; return 1; }
+  fi
+
   # Install 'go'
 
   # Unzip downloaded archive (the "bin" folder of the golang will be available here: ${FF_AGENT_HOME}/go/bin/ )
-  tar -C ${FF_AGENT_HOME} -xzf "${TEMP_DIR}/${TARBALL_FILENAME}" || { set_state "${FUNCNAME[0]}" "failed_to_extract_archive"; return 1; }
+  tar -C "${FF_AGENT_HOME}" -xzf "${TEMP_DIR}/${TARBALL_FILENAME}" || { set_state "${FUNCNAME[0]}" "failed_to_extract_archive"; return 1; }
 
   # Remove temporary folder
   rm -fr "${TEMP_DIR}" || { error "Warning: failed to remove temporary folder: '${TEMP_DIR}'"; }
@@ -764,7 +769,7 @@ function install_go {
   if [ ! -f "${TARGET_FILE}" ]; then
     (
       cat <<EOT
-# File ${TARGET_FILE} created by set_environment ${FUNCNAME[0]}() on $(date --utc).
+# File ${TARGET_FILE} created by set_environment ${FUNCNAME[0]}() on $( date --utc ).
 EOT
     ) > "${TARGET_FILE}" || { set_state "${FUNCNAME[0]}" "failed_to_create_file"; return 1; }
   fi
@@ -774,7 +779,7 @@ EOT
   PATTERN="^export PATH=.PATH:${FF_AGENT_HOME}/go/bin"
   INJECT_CONTENT=$(
     cat <<EOT
-# The path to 'go' inserted by $( pwd )/$( basename $0 ) on $( date --utc ) for 'go' version: 'go${EXPECTED_VERSION}'
+# The path to 'go' inserted by $( pwd )/$( basename $0 ) on $( date --utc )'
 export PATH=\$PATH:${FF_AGENT_HOME}/go/bin
 EOT
   )
@@ -795,17 +800,18 @@ EOT
   fi
 
   # Check version
-  GET_VERSION_OUTPUT="$( go version )"
+  GET_VERSION_OUTPUT="$( go version )" || { set_state "${FUNCNAME[0]}" 'failed_to_get_installed_version_number'; return 1; }
 
   # Compare to expected version
-  if [ "${GET_VERSION_OUTPUT}" != "${GET_VERSION_EXPECTED_OUTPUT}" ]; then
-      # Mismatch.
-      error "Failed to get expected version output after installation. Expected output was '${GET_VERSION_EXPECTED_OUTPUT}', but instead we got '${GET_VERSION_OUTPUT}'."
-      return 1
+  if [[ "${GET_VERSION_OUTPUT}" =~ ${EXPECTED_VERSION} ]]; then
+    # Good - expected version installed.
+    set_state "${FUNCNAME[0]}" 'success'
+    return 0
+  else
+    # Mismatch.
+    set_state "${FUNCNAME[0]}" 'failed_to_match_expected_vs_installed_version'
+    return 1
   fi
-
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f install_go
 
