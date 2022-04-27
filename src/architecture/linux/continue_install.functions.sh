@@ -469,12 +469,15 @@ function install_docker {
 
   # We might not have sudo, so we should request command to be run.
   # Check if user is in this group. If not, add them
-  if [ ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}" ]; then
+  if ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}"; then
     # Not in group
     sudo usermod -aG "${GROUP}" "${FF_AGENT_USERNAME}"
     if [ $? -ne 0 ]; then set_state "${FUNCNAME[0]}" "failed_to_modify_docker_user_group"; return 1; fi
     # Now check that we actually are in the group. This will work in current shell because it reads the groups file directly
-    [ ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}" ] || { set_state "${FUNCNAME[0]}" "failed_postcondition_user_in_group"; return 1; }
+    if ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}"; then
+      set_state "${FUNCNAME[0]}" "failed_postcondition_user_in_group"
+      return 1
+    fi
   fi
 
   # Postcondition checks

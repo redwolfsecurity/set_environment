@@ -2464,7 +2464,9 @@ export -f get_ppid_cmd
 
 ###############################################################################
 # Utility function - check if user is in a group
-# Usage: is_user_in_group "user" "group"
+# Usage: 
+# if is_user_in_group "user" "group"; then ...
+#
 function is_user_in_group {
   local USERNAME="${1}"
   local GROUP="${2}"
