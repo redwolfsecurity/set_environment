@@ -30,9 +30,10 @@ Set Environment has following goals:
 
 In order to use this environment, you need to download this project from github and run installer by teh following commands:
 ``` 
-git clone https://github.com/redwolfsecurity/set_environment.git
-cd set_environment
-./install
+cd /tmp && \
+git clone https://github.com/redwolfsecurity/set_environment.git && \
+cd set_environment && \
+FF_CONTENT_URL=https://cdn.redwolfsecurity.com/ ./install
 ```
 
 ### Testing
