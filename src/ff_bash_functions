@@ -80,6 +80,7 @@
 ## END UTILITY FUNCTIONS: PROCESS
 ## BEGIN UTILITY FUNCTIONS: CONTAINERS
 #    - container_name_exists 
+#    - docker_cleanup
 #    - get_installed_docker_version 
 #    - is_container_healthy 
 #    - is_container_running 
@@ -1752,6 +1753,34 @@ export -f container_name_exists
 
 ###############################################################################
 # Category: container
+# Utility function - Remove all unused containers, networks, images (both dangling and unreferenced)
+#
+# Function return code 0 on success, 1 on error (example: not enough permissions)
+#
+# Note: function also prints result to the standard output. 
+# Example: 
+#    Total reclaimed space: 0B
+#
+# TODO: And in that new function please add an error check. It is possible the docker system prune --al --force won't always work.
+# On some systems we might need to be root to run that command, so we will need to build out more robust docker functions that
+# might try one way vs. another and properly track what's going on.
+#
+function docker_cleanup {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Cleanup some space
+  # docker system prune: Remove all unused containers, networks, images (both dangling and unreferenced), and optionally, volumes if --volumes used.
+  # Note: adding --volumes might be risky since it will erase DATA from stopped containers.
+  # More details: https://docs.docker.com/engine/reference/commandline/system_prune/
+  docker system prune --all --force || { set_state "${FUNCNAME[0]}" 'failed_to_docker_cleanup'; return 1; }
+
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f docker_cleanup
+
+###############################################################################
+# Category: container
 # Utility function - Get Docker Version
 function get_installed_docker_version {
     DOCKER_PATH=$( command -v docker )
@@ -1844,7 +1873,7 @@ export -f restart_containers
 # Function gets container name (case sensitive) (can be partial) as the only input argument and
 # tries to find all matching containers (even if they're in stopped state). Then for every found
 # container it will "docker stop" and "docker remove" them.
-# Runction return code 0 on success
+# Function return code 0 on success
 #
 function stop_and_remove_container_by_name {
   set_state "${FUNCNAME[0]}" 'started'
@@ -1893,8 +1922,6 @@ function stop_and_remove_container_by_name {
       fi
     done
 
-    # Cleanup some space
-    docker system prune -a -f || { set_state "${FUNCNAME[0]}" 'failed_to_docker_system_prune'; return 1; }
   fi
 
   set_state "${FUNCNAME[0]}" 'success'
