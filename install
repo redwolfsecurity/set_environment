@@ -36,7 +36,7 @@ function install_set_environment {
     terminal_initialize || { set_state "${FUNCNAME[0]}" "terminal_error_initialize_terminal"; abort; }
 
     # Continue by calling OS-specific installer
-    source "src/architecture/$( discover_os )/continue_install.sh" "$@" || { set_state "${FUNCNAME[0]}" "terminal_error_continue_install"; abort; }
+    source "src/architecture/$( discover_os )/continue_install.sh" "${@}" || { set_state "${FUNCNAME[0]}" "terminal_error_continue_install"; abort; }
 
     # Last step: run a selfcheck
     is_set_environment_working || { set_state "${FUNCNAME[0]}" "terminal_error_selfcheck_failed"; abort; }

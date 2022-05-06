@@ -447,10 +447,10 @@ function install_docker {
   fi
 
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-  [ $? -ne 0 ] && { set_state "${FUNCNAME[0]}" "failed_to_add_gpg_key"; return 1; }
+  [ ${?} -ne 0 ] && { set_state "${FUNCNAME[0]}" "failed_to_add_gpg_key"; return 1; }
 
   sudo add-apt-repository "deb [arch=${ARCHITECTURE}] https://download.docker.com/linux/ubuntu ${DISTRO} stable"
-  [ $? -ne 0 ] && { set_state "${FUNCNAME[0]}" "failed_to_add_repository"; return 1; }
+  [ ${?} -ne 0 ] && { set_state "${FUNCNAME[0]}" "failed_to_add_repository"; return 1; }
 
   apt_update
 
@@ -472,7 +472,7 @@ function install_docker {
   if ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}"; then
     # Not in group
     sudo usermod -aG "${GROUP}" "${FF_AGENT_USERNAME}"
-    if [ $? -ne 0 ]; then set_state "${FUNCNAME[0]}" "failed_to_modify_docker_user_group"; return 1; fi
+    if [ ${?} -ne 0 ]; then set_state "${FUNCNAME[0]}" "failed_to_modify_docker_user_group"; return 1; fi
     # Now check that we actually are in the group. This will work in current shell because it reads the groups file directly
     if ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}"; then
       set_state "${FUNCNAME[0]}" "failed_postcondition_user_in_group"
@@ -787,8 +787,8 @@ EOT
   PATTERN="^export PATH=.PATH:${FF_AGENT_HOME}/go/bin"
   INJECT_CONTENT=$(
     cat <<EOT
-# The path to 'go' inserted by $( pwd )/$( basename $0 ) on $( date --utc )'
-export PATH=\$PATH:${FF_AGENT_HOME}/go/bin
+# The path to 'go' inserted by $( pwd )/$( basename ${0} ) on $( date --utc )'
+export PATH=\${PATH}:${FF_AGENT_HOME}/go/bin
 EOT
   )
   ERROR_CODE='error_injecting_source_custom_profile'
@@ -802,9 +802,9 @@ EOT
   # Also inject path to 'go' into current PATH (if missing in PATH)
   # do the export, so we don't have to relogin in order to call "go version"
   echo ${PATH} | grep -q ${FF_AGENT_HOME}/go/bin
-  if [ $? -ne 0 ]; then
+  if [ ${?} -ne 0 ]; then
     # Path to 'go' is missing from PATH environment variable. Inject it:
-    export PATH=$PATH:${FF_AGENT_HOME}/go/bin
+    export PATH=${PATH}:${FF_AGENT_HOME}/go/bin
   fi
 
   # Check installed 'go' version
@@ -1121,7 +1121,7 @@ function is_pm2_installed {
 
     # If it not installed, set STATUS=1
     ${NPM} list "${PACKAGE}" --global >/dev/null
-    STATUS=$?
+    STATUS=${?}
 
     set_state "${FUNCNAME[0]}" 'success'
     return ${STATUS}
@@ -1245,19 +1245,19 @@ export -f is_pm2_installed
 
 #     # Enble NTP (this will make it to autostart on reboot)
 #     sudo systemctl enable ntp
-#     if [ $? -ne 0 ]; then
+#     if [ ${?} -ne 0 ]; then
 #         set_state "${FUNCNAME[0]}" 'failed_to_enable_ntp'
 #     fi
 
 #     # Start NTP (note: it is safe to try to start in case it is already running - this might happen if ntp was not installed and was just added 1st time by apt)
 #     sudo systemctl start ntp
-#     if [ $? -ne 0 ]; then
+#     if [ ${?} -ne 0 ]; then
 #         set_state "${FUNCNAME[0]}" 'failed_to_start_ntp'
 #     fi
 
 #     # Last status check: query local ntpd
 #     LOCAL_NTP_QUERY_STATUS=$( ntpq -pn )
-#     LOCAL_NTP_QUERY_STATUS_EXIT_CODE=$?
+#     LOCAL_NTP_QUERY_STATUS_EXIT_CODE=${?}
 
 #     if [ ${LOCAL_NTP_QUERY_STATUS_EXIT_CODE} -ne 0 ]; then
 #         set_state "${FUNCNAME[0]}" 'failed_to_query_ntp'
@@ -1279,7 +1279,7 @@ function is_pm2_running_as_me {
 
     # Check if process is running as local user.
     is_process_running_as_me "${PATTERN}"
-    STATUS=$?
+    STATUS=${?}
 
     set_state "${FUNCNAME[0]}" 'success'
 
@@ -1321,7 +1321,7 @@ function pm2_ensure {
 
     # If pm2 is running, then we ensure it is properly configured. It might have been running already, but not properly configured.
     is_pm2_running_as_me
-    if [ $? == 0 ]; then
+    if [ ${?} == 0 ]; then
         pm2_configure || { set_state "${FUNCNAME[0]}" 'error_configuring_pm2'; abort 'error_configuring_pm2'; }
         set_state "${FUNCNAME[0]}" 'success'
         return 0
@@ -1390,7 +1390,7 @@ function pm2_start {
 
     local PM2=$( command_exists pm2 )
     [ -z "${PM2}" ] && { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_pm2_command'; return 1; }
-    $PM2 start
+    ${PM2} start
 
     # Check if it is running. If it is, we're happy.
     # Note: pm2 can start and still return non-zero (i.e. it started but there was no ecosystem.config.js
@@ -1417,7 +1417,7 @@ function pm2_stop {
 
     # Try and kill pm2
     # Todo: do this with timeout - sometimes pm2 hangs. We ask it to kill itself, but sometimes the cat comes back :)
-    $PM2 kill || { set_state "${FUNCNAME[0]}" 'error_pm2_kill_failed'; return 1; }
+    ${PM2} kill || { set_state "${FUNCNAME[0]}" 'error_pm2_kill_failed'; return 1; }
 
     # Verify that it is actually stopped. If it is still running after we killed it, it is a problem.
     is_pm2_running_as_me || { set_state "${FUNCNAME[0]}" 'error_unable_to_validate_pm2_daemon_gone_postcondition_pm2_still_running'; return 1; }
@@ -1461,7 +1461,7 @@ function preserve_sources {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Get passed parameters (path to currently installed project folder)
-  PROJECT_ROOT_DIR="$1"
+  PROJECT_ROOT_DIR="${1}"
   [ -d "${PROJECT_ROOT_DIR}" ] || { set_state "${FUNCNAME[0]}" 'failed_to_preserve_sources'; return 1; }
 
   # As a preparation to preserve project source files (used during this installation), let's change directory to the project root directory.
@@ -1547,7 +1547,7 @@ function set_script_logging {
       TIMESTAMP_EPOCH_MS="$( get_epoch_ms )"
       LOG_FILE="set_environment.${TIMESTAMP_EPOCH_MS}.log"
       export LOG_PATH="${LOG_DIRECTORY}/${LOG_FILE}"
-      # PREVIOUSLY THIS WAS exec &> >(tee -a "$LOG_PATH")
+      # PREVIOUSLY THIS WAS exec &> >(tee -a "${LOG_PATH}")
       exec &> >(tee >(tee -a "${LOG_PATH}" | logger -t set_environment ))
   fi
 

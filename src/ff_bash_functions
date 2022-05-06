@@ -232,7 +232,7 @@ function command_exists {
   hash -d $(command -v "${COMMAND}" ) >/dev/null 2>/dev/null
 
   local COMMAND_RESOLVED=$(command -v "${COMMAND}" )
-  local STATUS=$?
+  local STATUS=${?}
 
   # Command will return non-zero if command not found
   if [ "${STATUS}" != "0" ]; then
@@ -385,7 +385,7 @@ function apt_list {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Check inputs:
-  local PACKAGE_NAME="$1"
+  local PACKAGE_NAME="${1}"
   if [ "${PACKAGE_NAME}" == "" ]; then
     set_state "${FUNCNAME[0]}" "bad_arguments_missing_package_name"
     return 1
@@ -401,7 +401,7 @@ function apt_list {
   )
 
   # Check errors
-  if [ $? -ne 0 ]; then
+  if [ ${?} -ne 0 ]; then
     set_state "${FUNCNAME[0]}" "failed_to_find_package_uris"
     return 1
   fi
@@ -507,7 +507,7 @@ export -f apt_upgrade
 # @param ${1} mixed  Needle
 # @param ${2} array  Haystack
 # @return  Success (0) if value exists, Failure (1) otherwise
-# Usage: in_array "$needle" "${haystack[@]}"
+# Usage: in_array "${needle}" "${haystack[@]}"
 # See: http://fvue.nl/wiki/Bash:_Check_if_array_element_exists
 #
 function in_array {
@@ -553,7 +553,7 @@ export -f index_of
 # Usage examples:
 #   URL="git://github.com/some-user/my-repo.git"
 #   OWNER=$( parse_github_repository_url "${URL}" "OWNER" )
-#   if [ $? -eq 0 ]; then
+#   if [ ${?} -eq 0 ]; then
 #      echo "The ownder of the url '${URL}' is '${OWNER}'."
 #   else
 #      echo "Error: failed to parse url: '${URL}'." >&2
@@ -578,8 +578,8 @@ export -f index_of
 # done
 #
 function parse_github_repository_url {
-  local URL="$1"
-  local KEY="$2"
+  local URL="${1}"
+  local KEY="${2}"
 
   # Check inputs aren't empty
   [ ! -z "${URL}" ] || { return 1; }
@@ -589,7 +589,7 @@ function parse_github_repository_url {
   re="^(https|git)(:\/\/|@)([^\/:]+)[\/:]([^\/:]+)\/(.+)(.git)*$"
 
   # Parse github repository url
-  if [[ ${URL} =~ $re ]]; then
+  if [[ ${URL} =~ ${re} ]]; then
     PROTOCOL=${BASH_REMATCH[1]}
     # SEPARATOR=${BASH_REMATCH[2]}
     HOST=${BASH_REMATCH[3]}
@@ -634,7 +634,7 @@ export -f parse_github_repository_url
 #
 # Some test cases:
 #
-#   $ trim_slash "http://acme.com/a/b/c/" "http://acme.com///" "http://acme.com/" "/" "///" "a/" "b/b/" "c/c////"
+#   trim_slash "http://acme.com/a/b/c/" "http://acme.com///" "http://acme.com/" "/" "///" "a/" "b/b/" "c/c////"
 #
 # Expected output:
 #       http://acme.com/a/b/c
@@ -730,8 +730,8 @@ export -f does_file_have_eol_at_the_end
 ###############################################################################
 # Utility function f
 # Search recursively from current location for files or directories starting with a prefix prefix, case insensitive
-# @param $1 string package name
-# @param $2 array  package list to append
+# @param ${1} string package name
+# @param ${2} array  package list to append
 # @return  Success if value exists, Failure otherwise
 # Usage: f prefix
 # Example: f index  # Will show all files or directories starting with 'index'
@@ -739,7 +739,7 @@ function f {
     FILE_PREFIX="${1}"
     if [ "${FILE_PREFIX}" != "" ]; then
         find . -iname "${FILE_PREFIX}*"
-        return $?
+        return ${?}
     else
         echo "Find files with prefix, starting from current working directory down recursively." 1>&2
         echo "Usage: f index" 1>&2
@@ -879,7 +879,7 @@ export -f find_file_owner_in_installed_packages
 # In any other case function return code is 1 and no output produced.
 #
 function get_by_url {
-  local URL="$1"
+  local URL="${1}"
 
   [ ! -z "${URL}" ] || { return 1; }
   local OUTPUT=$( curl \
@@ -952,7 +952,7 @@ export -f glob_matches
 #     )
 #
 #   inject_into_file "${TARGET_FILE}" "${PATTERN}" "${INJECT_CONTENT}"
-#   if [ $? -ne 0 ]; then
+#   if [ ${?} -ne 0 ]; then
 #     echo "Error: failed to inject into the file: '${TARGET_FILE}'"
 #   else
 #     echo "Successfully injected text into the file: '${TARGET_FILE}'"
@@ -1014,7 +1014,7 @@ export -f inject_into_file
 #
 function is_writable {
   # Get argument
-  local TARGET="$1"
+  local TARGET="${1}"
 
   # Check argument is not blank
   [ ! -z "${TARGET}" ] || { return 1; }
@@ -1262,7 +1262,7 @@ export -f replace_all_lines_by_regexp
 # Utility function s
 # Search from current directory for files containing keyword (case insensitive)
 # Ignores node_modules directory
-# @param $1 pattern
+# @param ${1} pattern
 # @return  Success if keyword exists, Failure otherwise
 # Usage: s pattern
 function s {
@@ -1271,7 +1271,7 @@ function s {
     PATTERN="${1}"
     if [ "${PATTERN}" != "" ]; then
         find . -name "*" -type f -not -path "*node_modules*" -exec grep -i --text --line-number -H "${PATTERN}" {} \;
-        return $?
+        return ${?}
     else
         echo "Search files in a subtree for a regex. Case insensitive." 1>&2
         echo "Usage: s pattern" 1>&2
@@ -1416,7 +1416,7 @@ export -f error
 #
 function log {
 
-  # Check if optional environment $SERVICE is defined, then use it as a tag for logger
+  # Check if optional environment SERVICE is defined, then use it as a tag for logger
   if [ "${SERVICE}" != "" ]; then
     local LOGGER_TAG="--tag '${SERVICE}'"
     local SERVICE_PREFIX="${SERVICE}: "
@@ -1513,7 +1513,7 @@ export -f get_bash_echo_setting
 #
 function set_bash_echo_setting {
   # Get all provided arguments (it supports multiple arguments)
-  local BASH_ECHO_SETTINGS="$@"
+  local BASH_ECHO_SETTINGS="${@}"
 
   # Check if arguments have XTRACE_ENABLED
   if [[ "${BASH_ECHO_SETTINGS}" =~ XTRACE_ENABLED ]]; then
@@ -1543,7 +1543,7 @@ function ensure_variable_defined {
     return 1
   fi
 
-  local NAME="$1"
+  local NAME="${1}"
   [[ -z "${NAME}" ]] && { error "error_ensure_variable_defined_no_arguments"; return 1; }  # Check: NAME is not blank
   [[ -v "${NAME}" ]] && { return 0; }  # Check: variable by NAME is defined
 
@@ -1571,7 +1571,7 @@ export -f ensure_variable_defined
 #     }
 #
 function ensure_variable_not_empty {
-  local NAME="$1"
+  local NAME="${1}"
   [[ -z "${NAME}" ]] && { error "error_ensure_variable_not_empty_no_arguments"; return 1; }  # Check: NAME itself is not blank
   [[ -v "${NAME}" ]] && [[ ! -z "${!NAME}" ]] && { return 0; }  # Check: variable by NAME is defined and isn't empty
 
@@ -1712,7 +1712,7 @@ function is_process_running_as_me {
     CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
 
     ${PS} -u "${CURRENT_USER}" -U "${CURRENT_USER}" o command | ${GREP} --silent -e "^${COMMAND_PATTERN}"
-    STATUS=$?
+    STATUS=${?}
     set_state "${FUNCNAME[0]}" 'success'
     return ${STATUS}
 }
@@ -2150,11 +2150,11 @@ function get_state {
   if [ -f "${STATE_FILE}" ]; then
     # State file found, try to print it's content and preserve result code
     VALUE="$( cat "${STATE_FILE}" )"
-    EXIT_CODE=$?
+    EXIT_CODE=${?}
     # Print value to standard output
     echo -n "${VALUE}"
     set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    return $EXIT_CODE
+    return ${EXIT_CODE}
   else
     # Error: state file not found. Restore xtrace and eturn code 1
     set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
@@ -2538,7 +2538,7 @@ export -f user_exists
 #
 # Usage example:
 #    NEW_UUID=$( ff_uuid )
-#    [ $? -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_ff_uuid"; return 1; }
+#    [ ${?} -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_ff_uuid"; return 1; }
 #
 function ff_uuid {
 
@@ -2607,7 +2607,7 @@ export -f get_best_ff_agent_uri
 #
 # Usage example:
 #  FF_CONTENT_URL=$( get_best_ff_content_url )
-#  [ $? -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_content_url"; return 1; }
+#  [ ${?} -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_content_url"; return 1; }
 #
 function get_best_ff_content_url {
   set_state "${FUNCNAME[0]}" 'started'
@@ -2641,7 +2641,7 @@ export -f get_best_ff_content_url
 #
 # Usage example:
 #  UPLOAD_TO=$( get_best_ff_host )
-#  [ $? -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_host"; return 1; }
+#  [ ${?} -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_host"; return 1; }
 #
 function get_best_ff_host {
   set_state "${FUNCNAME[0]}" 'started'
@@ -2879,8 +2879,8 @@ export -f discover_environment
 # Dependency: tr
 #
 function discover_optional_environment_variable {
-  local NAME="$1"
-  local DEFAULT_VALUE="$2"
+  local NAME="${1}"
+  local DEFAULT_VALUE="${2}"
 
   # Check inputs: NAME can be empty
   [ -z "${NAME}" ] && { return 1; }
@@ -2963,8 +2963,8 @@ export -f discover_os
 # to discover variable it checks if the value was actually found/set and if not, then error out.
 #
 function discover_required_environment_variable {
-  local NAME="$1"
-  local DEFAULT_VALUE="$2"
+  local NAME="${1}"
+  local DEFAULT_VALUE="${2}"
 
   # Check inputs: NAME can be empty
   [ -z "${NAME}" ] && { return 1; }
