@@ -2178,6 +2178,13 @@ function set_secret {
   local URI="${1}"
   local SECRET="${2}"
 
+  # Check FF_AGENT_HOME is set
+  [ ! -z "${FF_AGENT_HOME}" ] || {
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    set_state "${FUNCNAME[0]}" 'error_envirnment_not_set_ff_agent_home'
+    return 1
+  }
+
   # Check URI is not blank
   [ ! -z "${URI}" ] || {
     set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
