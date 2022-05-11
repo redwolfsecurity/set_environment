@@ -1305,7 +1305,13 @@ function pm2_configure {
 
     # configure it to rotate logs every hour
     timeout 30 pm2 set pm2-logrotate:rotateInterval '0 0 * * * *'  || { set_state "${FUNCNAME[0]}" "pm2_configure_logrotate_error"; return 1; }
-    timeout 55 pm2 update || { set_state "${FUNCNAME[0]}" "pm2_update_error"; return 1; }
+    
+    # pm2 update sometimes fail on 1st attempt, but then works on the 2nd. Let's add 3 attempts to make sure.
+    local IS_PM2_UPDATED=false MAX_ATTEMPTS=3 ATTEMPT
+    for ATTEMPT in $( seq 1 ${MAX_ATTEMPTS} ); do
+      timeout 55 pm2 update && { IS_PM2_UPDATED=true; break; }
+    done
+    [ "${IS_PM2_UPDATED}" == "true" ] || { set_state "${FUNCNAME[0]}" "pm2_update_error"; return 1; } # "Error: failed to update pm2 after ${ATTEMPT} attempts"
 
     set_state "${FUNCNAME[0]}" 'success'
 }
