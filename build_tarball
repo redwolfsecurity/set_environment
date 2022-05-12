@@ -58,7 +58,7 @@ function build_tarball {
     command_exists tar >/dev/null || { echo "Error: dependency check failed: tar not found">&2; exit 1; }
 
     # Define location of temporary folder and tarball filename
-    local TARBALL_FILENAME="set_environment-dev.tgz"
+    local TARBALL_FILENAME="set_environment.tgz"
     
     #TEMPORARY_DIR="$( mktemp -d )"
     local TEMPORARY_DIR="/tmp"
