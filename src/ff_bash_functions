@@ -1389,6 +1389,37 @@ function assert_clean_exit {
 export -f assert_clean_exit
 
 ###############################################################################
+# Auxilary function to produce human-readable output in standard output describing
+# the current process (start time, ownership, hostname, os, etc.)
+function banner {
+cat <<EOT
+    ================================================================================
+    BUILD SCRIPT: ${@}
+         STARTED: $( date )
+              AS: $( id )
+             PWD: $( pwd )
+            HOST: $( hostname )
+              OS: $( uname -a )
+    ================================================================================
+
+EOT
+}
+
+###############################################################################
+# Auxilary function to produce human-readable output in standard output describing
+# currently executed "step". Function takes arbitrary number of arguments.
+# 
+function step {
+cat <<EOT
+
+  --------------------------------------------------------------------------------
+  STEP: ${@}
+  --------------------------------------------------------------------------------
+
+EOT
+}
+
+###############################################################################
 # Utility error logging function. For now simply forwar it to log, which reports
 # given string to both:
 #    - standard error stream
