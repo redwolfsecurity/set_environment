@@ -3047,6 +3047,21 @@ export -f get_hardware_architecture
 
 ###############################################################################
 # Category: environment
+# Utility function - Get os name - e.g. linux
+function get_os_name {
+  local OS_NAME="$( basename $( uname --operating-system ) | tr '[:upper:]' '[:lower:]' )"
+  if [ -z "${OS_NAME}" ]; then
+    # Error, got empty string
+    return 1
+  fi
+
+  echo "${OS_NAME}"
+  return 0
+}
+export -f get_os_name
+
+###############################################################################
+# Category: environment
 # Utility function - Get codename - e.g. breezy, focal, ..
 function get_lsb_codename {
     lsb_release --short --codename
