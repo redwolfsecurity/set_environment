@@ -731,8 +731,8 @@ function install_go {
   fi
 
   # Get OS
-  local OS="$( get_lsb_id_downcase )" || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id_downcase"; return 1; }
-  [ ! -z "${OS}" ] || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id_downcase"; return 1; }
+  local OS="$( get_os_name )" || { set_state "${FUNCNAME[0]}" "failed_to_get_os_name"; return 1; }
+  [ ! -z "${OS}" ] || { set_state "${FUNCNAME[0]}" "failed_to_get_os_name"; return 1; }
 
   # Get ARCHITECTURE
   local ARCHITECTURE="$( get_hardware_architecture )" || { set_state "${FUNCNAME[0]}" "failed_to_get_hardware_architecture"; return 1; }
