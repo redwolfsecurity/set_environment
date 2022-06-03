@@ -2587,11 +2587,11 @@ function ff_uuid {
   # Check dependency: "uuidgen" we need to make sure it is installed ('uuidgen' is part of 'uuid-runtime' package)
   if ! command_exists uuidgen >/dev/null; then
     # Try to install missing dependency
-    assert_clean_exit apt_update
-    assert_clean_exit apt_install uuid-runtime
+    assert_clean_exit apt_update >/dev/null
+    assert_clean_exit apt_install uuid-runtime >/dev/null  # Note: we mute output of apt-install otherwise it will be mixed into the ff_uuid() function result!
 
     # Check again
-    if ! command_exists uuidgen; then
+    if ! command_exists uuidgen >/dev/null; then
       # Still failing to find
       return 1
     fi
