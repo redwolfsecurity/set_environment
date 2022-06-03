@@ -784,7 +784,7 @@ EOT
 
   # Check if expected line was already injected into the profile.
   # Note: it is not too specific, it is exactly the line that must be present in the ff_agent custom profille file.
-  PATTERN="^export PATH=.PATH:${FF_AGENT_HOME}/go/bin"
+  PATTERN="^export PATH=\${PATH}:${FF_AGENT_HOME}/go/bin"
   INJECT_CONTENT=$(
     cat <<EOT
 # The path to 'go' inserted by $( pwd )/$( basename ${0} ) on $( date --utc )'
