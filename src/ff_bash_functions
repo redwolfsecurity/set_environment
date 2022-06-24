@@ -1994,12 +1994,20 @@ function get_secret {
 
   set_state "${FUNCNAME[0]}" 'started'
 
-  set_bash_echo_off || { set_state "${FUNCNAME[0]}" 'failed_to_set_bash_echo_off'; return 1; } # Disable xtrace to avoid priting secrets
+  # Disable xtrace to avoid priting secrets
+  set_bash_echo_off || { 
+    set_state "${FUNCNAME[0]}" 'failed_to_set_bash_echo_off'
+    return 1
+  }
 
   local KEY="${1}"
 
   # Check KEY is not blank
-  [ ! -z "${KEY}" ] || { error "get_secret(): blank KEY argument"; return 1; }
+  [ ! -z "${KEY}" ] || {
+    error "get_secret(): blank KEY argument"
+    set_state "${FUNCNAME[0]}" 'error_bad_argument_key';
+    return 1
+  }
 
   # Check if KEY contains any prohibited symbols, then error out.
   [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { 
@@ -2306,21 +2314,8 @@ function set_state {
   # Write value into the file
   echo "${STATE_VALUE}" >"${STATE_FILE}" || { error "${FUNCNAME[0]}: failed_to_write_state. State would have been set to ${STATE_NAME}=${STATE_VALUE}"; return 1; }
 
-  # ------------------ Build JSON object "state/change" and send to FF_HOST
+  # ------------------ If we have ff_metric command handy try to sent the metric
 
-  # Check if framework API is defined
-  if [ "$( is_framework_api_defined )" != "true" ]; then
-    # No, the framework API is not defined. Simply return, we're done.
-    # Return with success code 0
-    return 0
-  fi
-
-  # Get current epoch time
-  local TIMESTAMP_EPOCH_MS="$( get_epoch_ms )"
-  
-  # Check if we actually got non-empty string?
-  [ ! -z "${TIMESTAMP_EPOCH_MS}" ] || { error "${FUNCNAME[0]}: failed_to_get_epoch_ms"; return 1; }
-  
   # If state value contains: success|running, then: "is_success": true
   # else
   #   if state value contains: error|fail|'', then "is_error": true
@@ -2337,6 +2332,37 @@ function set_state {
     fi
   fi
 
+  # If "ff_metrics" command is available, then send the state metric
+  if command_exists ff_metric > /dev/null; then
+    # Report metric: start:1    tags: service:ipsec_tunnel  (+public_ip, organization)
+    ff_metric --metric-name="${STATE_NAME}" --metric-value=1 --tag=state:"${STATE_VALUE}" --tag=is_error:"${IS_ERROR}"
+  fi
+
+  # ------------------ Build JSON object "state/change" and send to FF_HOST
+
+
+
+  # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  # DISABLING THE REST OF THE FUNCTION DUE TO THE FOLLOWING RECURSIVE CALLS:
+  # get_secret -> set_state -> is_framework_api_defined -> get_secret ff_api_username/password
+  #                                     publish_message -> curl POST json get_secret ff_api_username/password
+  return 0
+
+
+
+  # Check if framework API is defined
+  if [ "$( is_framework_api_defined )" != "true" ]; then
+    # No, the framework API is not defined. Simply return, we're done.
+    # Return with success code 0
+    return 0
+  fi
+
+  # Get current epoch time
+  local TIMESTAMP_EPOCH_MS="$( get_epoch_ms )"
+  
+  # Check if we actually got non-empty string?
+  [ ! -z "${TIMESTAMP_EPOCH_MS}" ] || { error "${FUNCNAME[0]}: failed_to_get_epoch_ms"; return 1; }
+  
   # Get previous "old" state value
   local PREVIOUS_STATE_JSON=""
   local PREVIOUS_STATE_VALUE="$( cat ${STATE_FILE} )"
@@ -2416,12 +2442,6 @@ function set_state {
 }
 EOF
 ) | publish_message
-
-  # If we have ff_metric command handy try to sent the metric
-  if command_exists ff_metric > /dev/null; then
-    # Report metric: start:1    tags: service:ipsec_tunnel  (+public_ip, organization)
-    ff_metric --metric-name="${STATE_NAME}" --metric-value=1 --tag=state:"${STATE_VALUE}" --tag=is_error:"${IS_ERROR}"
-  fi
 
   # Return with success code 0
   return 0
