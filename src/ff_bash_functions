@@ -2326,12 +2326,14 @@ function set_state {
   #   if state value contains: error|fail|'', then "is_error": true
   # else
   #   don't include neither "is_success" nor "is_error".
-  local IS_SUCCESS_OR_IS_ERROR=''
+  local IS_SUCCESS_OR_IS_ERROR_JSON=''
+  local IS_ERROR=false
   if [[ "${STATE_VALUE}" =~ success|running ]]; then
-    IS_SUCCESS_OR_IS_ERROR='"is_success": true,'
+    IS_SUCCESS_OR_IS_ERROR_JSON='"is_success": true,'
   else
     if [[ "${STATE_VALUE}" == '' || "${STATE_VALUE}" =~ error|fail ]]; then
-      IS_SUCCESS_OR_IS_ERROR='"is_error": true,'
+      IS_SUCCESS_OR_IS_ERROR_JSON='"is_error": true,'
+      IS_ERROR=true
     fi
   fi
 
@@ -2353,7 +2355,7 @@ function set_state {
     FF_AGENT_USERNAME
     FF_HOST
     HOSTNAME
-    IS_SUCCESS_OR_IS_ERROR
+    IS_SUCCESS_OR_IS_ERROR_JSON
     MIME_TYPE
     NAMESPACE
     ORGANIZATION
@@ -2384,7 +2386,7 @@ function set_state {
   "id": "${STATE_NAME}",
   "state": "${STATE_VALUE}",
   ${PREVIOUS_STATE_JSON}
-  ${IS_SUCCESS_OR_IS_ERROR}
+  ${IS_SUCCESS_OR_IS_ERROR_JSON}
   "timestamp_epoch_ms": ${TIMESTAMP_EPOCH_MS},
   "ff_agent_uri": "${FF_AGENT_URI}",
 
@@ -2414,6 +2416,12 @@ function set_state {
 }
 EOF
 ) | publish_message
+
+  # If we have ff_metric command handy try to sent the metric
+  if command_exists ff_metric > /dev/null; then
+    # Report metric: start:1    tags: service:ipsec_tunnel  (+public_ip, organization)
+    ff_metric --metric-name="${STATE_NAME}" --metric-value=1 --tag=state:"${STATE_VALUE}" --tag=is_error:"${IS_ERROR}"
+  fi
 
   # Return with success code 0
   return 0

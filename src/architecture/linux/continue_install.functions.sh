@@ -838,7 +838,7 @@ export -f install_go
 #   https://github.com/tj/n#installation
 #
 function install_n {
-  set_state "${FUNCNAME[0]}" "state"
+  set_state "${FUNCNAME[0]}" "start"
 
   # Define required variables
   local REQUIRED_VARIABLES=(
