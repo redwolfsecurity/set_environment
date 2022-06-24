@@ -2882,8 +2882,10 @@ export -f discover_environment
 #     OPTIONAL_VARIABLES[FF_HOST]=''
 #     OPTIONAL_VARIABLES[FF_PORT]='443'
 #     OPTIONAL_VARIABLES[FF_PROTOCOL]='https'
-#     OPTIONAL_VARIABLES[FF_API_USERNAME]=''
+
+#     OPTIONAL_VARIABLES[FF_API_USERNAME]=''    update: both ff_api_username and ff_api_password are no longer in environment (use get_secret for those)
 #     OPTIONAL_VARIABLES[FF_API_PASSWORD]=''
+
 #     OPTIONAL_VARIABLES[FF_API_TOKEN]=''
 #     OPTIONAL_VARIABLES[FF_PROXY_HOST]=''
 #     OPTIONAL_VARIABLES[FF_PROXY_PORT]=''
@@ -3468,12 +3470,12 @@ function ff_api_get {
     CALL="${1}"
 
     [ ! -z "${CALL}" ] || { return 1; }
-    [ ! -z "${FF_API_USERNAME}" ] || { return 1; }
-    [ ! -z "${FF_API_PASSWORD}" ] || { return 1; }
+    [ ! -z "$( get_secret ff_api_username )" ] || { return 1; }
+    [ ! -z "$( get_secret ff_api_password )" ] || { return 1; }
     [ ! -z "${FF_HOST}" ] || { return 1; }
 
     # Run command, capture server response as ${RESULT} and curl exit code as ${STATUS}
-    RESULT=$( curl -s --retry 5 -u "${FF_API_USERNAME}:${FF_API_PASSWORD}" https://${FF_HOST}${CALL} )
+    RESULT=$( curl -s --retry 5 -u "$( get_secret ff_api_username ):$( get_secret ff_api_password )" https://${FF_HOST}${CALL} )
     STATUS=${?}
 
     if [ "${STATUS}" != "0" ]; then
@@ -3557,7 +3559,7 @@ export -f get_ff_agent_username
 #
 # Function checks if we have framework API defined by checking if all of the following is set:
 #    - FF_HOST
-#    - ( FF_API_USERNAME and FF_API_PASSWORDS ) OR ( FF_API_TOKEN )
+#    - ( get_secret ff_api_username and get_secret ff_api_password ) OR ( FF_API_TOKEN )
 #
 # As a result: functions prints "true" or "false" into std output stream.
 # Usage example:
@@ -3569,8 +3571,8 @@ function is_framework_api_defined {
   # Print 'false' if FF_HOST not set
   [ -z "${FF_HOST}" ] && { echo 'false'; return; }
 
-  # Print 'true' if both FF_API_USERNAME and FF_API_PASSWORDS are set
-  [ ! -z "${FF_API_USERNAME}" ] && [ ! -z "${FF_API_PASSWORDS}" ] && { echo 'true'; return; }
+  # Print 'true' if both ff_api_username and ff_api_password secrets are set
+  [ ! -z "$( get_secret ff_api_username )" ] && [ ! -z "$( get_secret ff_api_password )" ] && { echo 'true'; return; }
 
   # Print 'true' if FF_API_TOKEN is set
   [ ! -z "${FF_API_TOKEN}" ] && { echo 'true'; return; }
@@ -3661,18 +3663,16 @@ function publish_message {
   INPUT_JSON=`cat`
 
   # Check inputs
-  local FF_API_USERNAME=$( get_secret ff_api_username )
-  if [ "${FF_API_USERNAME}" == "" ]; then
+  if [ "$( get_secret ff_api_username )" == "" ]; then
     set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    # error: FF_API_USERNAME is missing
+    # error: get_secret ff_api_username is missing
     # can't use set_state here otherwize will fall into recursive loop
     return 1
   fi
 
-  local FF_API_PASSWORD=$( get_secret ff_api_password )
-  if [ "${FF_API_PASSWORD}" == "" ]; then
+  if [ "$( get_secret ff_api_password )" == "" ]; then
     set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    # error: FF_API_PASSWORD is missing
+    # error: get_secret ff_api_password is missing
     # can't use set_state here otherwize will fall into recursive loop
     return 1
   fi
@@ -3744,7 +3744,7 @@ EOF
       --request POST \
       --header "Content-Type: application/json" \
       --data "${MESSAGE}" \
-      --user "${FF_API_USERNAME}:${FF_API_PASSWORD}" \
+      --user "$( get_secret ff_api_username ):$( get_secret ff_api_password )" \
       https://${FF_HOST}/
   ) || {
     set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
