@@ -106,6 +106,10 @@ function apt_install_basic_packages {
       apt-utils # apt-utils required to avoid error: debconf: delaying package configuration, since apt-utils is not installed
       apt-transport-https # APT transport for downloading via the HTTP Secure protocol (HTTPS)
       software-properties-common # Part of "apt": manage the repositories that you install software from 3rd party repos (i.e. add their repo + gpg key)
+      
+      # The GNU Core Utilities are the basic file, shell and text manipulation utilities of the GNU operating system.
+      # These are the core utilities which are expected to exist on every operating system.
+      coreutils
 
       # Curl must exist for this script and many others
       curl
@@ -375,7 +379,7 @@ function ensure_set_environment_install_exists {
       ln -s "${TARGET_FILE}" "${SYMLINK}" || { set_state "${FUNCNAME[0]}" 'failed_to_create_symlink'; return 1; }
   }
 
-  # Check the target file is presend (symlink is not broken)
+  # Check the target file is present (symlink is not broken)
   [ -f "${TARGET_FILE}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_missing'; return 1; }
 
   # Check the target file is executable. Note: extra "-f" check added here since "-x" can say "yes, executable", but target points to directory.

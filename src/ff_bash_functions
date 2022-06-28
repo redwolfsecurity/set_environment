@@ -752,6 +752,16 @@ export -f f
 
 ###############################################################################
 # Category: file
+# Utility function - Convenience methoud wrapping "realpath" call (realpath is a part of coreutils apt package, which we install as a baseline)
+# Takes a path argument and returns it as an absolute path. 
+#
+function path_to_absolute_path {
+  local TARGET="$1"
+  realpath --canonicalize-missing "${TARGET}"
+}
+
+###############################################################################
+# Category: file
 # Utility function - Easy way to check if a file contains a pattern
 function file_contains_pattern {
     FILE="${1}"
