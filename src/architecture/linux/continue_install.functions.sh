@@ -391,6 +391,24 @@ export -f ensure_set_environment_install_exists
 
 ###############################################################################
 #
+# Function installs docker. 
+function install_build_tools {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  GIT_URL="git@github.com:redwolfsecurity/build_tools.git"
+
+  cd /tmp                 || { set_state "${FUNCNAME[0]}" 'failed_to_change_directory_to_temporary_folder'; return 1; }
+  rm -fr /tmp/build_tools || { set_state "${FUNCNAME[0]}" 'failed_to_cleanup_old_project_temporary_folder'; return 1; }
+  git clone "${GIT_URL}"  || { set_state "${FUNCNAME[0]}" 'failed_to_git_clone_project'; return 1; }
+  cd build_tools          || { set_state "${FUNCNAME[0]}" 'failed_to_change_directory_to_project_folder'; return 1; }
+  ./install               || { set_state "${FUNCNAME[0]}" 'failed_to_install'; return 1; }
+
+  set_state "${FUNCNAME[0]}" 'success'
+}
+export -f install_build_tools
+
+###############################################################################
+#
 # Function installs docker. It takes 1 argement "minimum version", if not provided,
 # then by default version 19 will be used.
 #
@@ -1505,7 +1523,7 @@ function preserve_sources {
     # PWD is not set, try to set it by "pwd" call
     PWD="$( pwd )" || { set_state "${FUNCNAME[0]}" 'failed_to_get_pwd'; return 1; }
   fi
-  
+
   # Check if installer running from unexpected folder
   # TODO: check if folder from which we're running installation contains spaces (e.g.: "/tmp/some folder with spaces/" )
   if [ "${PWD}" != "${PRESERVED_PROJECT_DIR}" ]; then
