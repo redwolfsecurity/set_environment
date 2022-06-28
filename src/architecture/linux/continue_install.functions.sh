@@ -1500,8 +1500,13 @@ function preserve_sources {
     mkdir -p "${PRESERVED_PROJECT_DIR}" || { set_state "${FUNCNAME[0]}" 'failed_to_create_folder_for_code_preservation'; return 1; }
   fi
 
+  # Check PWD is set or try to use $(pwd) or error out
+  if [ -z "${PWD}" ]; then
+    # PWD is not set, try to set it by "pwd" call
+    PWD="$( pwd )" || { set_state "${FUNCNAME[0]}" 'failed_to_get_pwd'; return 1; }
+  fi
+  
   # Check if installer running from unexpected folder
-  # TODO: check PWD is set or try to use $(pwd) or error out
   # TODO: check if folder from which we're running installation contains spaces (e.g.: "/tmp/some folder with spaces/" )
   if [ "${PWD}" != "${PRESERVED_PROJECT_DIR}" ]; then
       # Current installer run from unexpected place (like some temporary folder) - need to preserve installed project source folder.
