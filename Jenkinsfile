@@ -25,21 +25,23 @@ pipeline {
         FF_CONTENT_URL = credentials('production_content_url')
       }
       steps {
-        // Debugging
-        sh 'whoami'
-        sh 'pwd'
-        sh 'ls -la'
-        sh 'echo ${FF_AGENT_HOME}'
+        // PRESERVING DEBUGGING COMMANDS + OUTPUT FOR FUTURE
+        // // Debugging
+        // sh 'whoami'                                     // ff_agent (with NO environment set - bad)
+        // sh 'pwd'
+        // sh 'ls -la'
+        // sh 'echo ${FF_AGENT_HOME}'                      // empty (with environment set - good)
 
-        sh 'bash --login -c "whoami"'
-        sh 'bash --login -c "pwd"'
-        sh 'bash --login -c "ls -la"'
-        sh 'bash --login -c "echo ${FF_AGENT_HOME}"'
-        sh 'bash --login -c "echo \${FF_AGENT_HOME}"'
-        sh 'bash --login -c "echo \\${FF_AGENT_HOME}"'
+        // sh 'bash --login -c "whoami"'                   // ff_agent
+        // sh 'bash --login -c "pwd"'
+        // sh 'bash --login -c "ls -la"'
+        // sh 'bash --login -c "echo ${FF_AGENT_HOME}"'    // empty
+        // sh 'bash --login -c "echo \${FF_AGENT_HOME}"'   // empty
+        // sh 'bash --login -c "echo \\${FF_AGENT_HOME}"'  // this yields: /home/ff_agent/ff_agent
 
         // Let's run few basic checks by calling is_set_environment_working()
-        sh 'is_set_environment_working'
+        // sh 'is_set_environment_working'                 // this fails: is_set_environment_working: not found
+        sh 'bash --login -c "is_set_environment_working"'
       }
     }
 
