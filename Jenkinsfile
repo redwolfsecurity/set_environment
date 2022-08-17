@@ -2,8 +2,10 @@
 pipeline {
   agent {
       docker {
-          image 'dockerregistry.production.redwolfsecurity.com/redoki_base_ubuntu:latest'
-          args '--user=ff_agent'  // This enforces docker started by Jenknis to use proper "ubuntu" user with all the expected groups (i.e. "docker")
+          alwaysPull true
+          image '209512847919.dkr.ecr.us-east-1.amazonaws.com/redoki_base_ubuntu_builder:latest'
+          registryCredentialsId 'ecr:us-east-1:aws_credentials_jenkins_redwolf'
+          registryUrl 'https://209512847919.dkr.ecr.us-east-1.amazonaws.com'
       }
   }
 
