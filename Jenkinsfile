@@ -2,27 +2,36 @@
 pipeline {
   agent {
       docker {
-          image 'dockerregistry.production.redwolfsecurity.com/redoki_base_ubuntu:latest' 
+          image 'dockerregistry.production.redwolfsecurity.com/redoki_base_ubuntu:latest'
           args '--user=ff_agent'  // This enforces docker started by Jenknis to use proper "ubuntu" user with all the expected groups (i.e. "docker")
       }
   }
-  
+
   stages {
-    
     stage('Install') {
-			environment {
+      environment {
         FF_CONTENT_URL = credentials('production_content_url')
       }
       steps {
         // For now the 'install' contains the tests.
-				sh './install'
-			}
-		}
+        sh './install'
+      }
+    }
+
+    stage('Test') {
+      environment {
+        FF_CONTENT_URL = credentials('production_content_url')
+      }
+      steps {
+        // For now the 'install' contains the tests.
+        sh 'is_set_environment_working'
+      }
+    }
 
     stage('Upload to CDN') {
       when {
         anyOf {
-          branch 'master';
+          branch 'master'
         }
       }
       environment {
