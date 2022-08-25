@@ -3509,7 +3509,7 @@ export -f ff_api_get
 # Function prints into standard output the expected version of nodejs.
 # We use it during installation and to check installed "set environment" project.
 function get_expected_nodejs_version {
-  echo 'v16.13.0'
+  echo 'v18.4.0'
 }
 export -f get_expected_nodejs_version
 

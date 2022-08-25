@@ -1029,11 +1029,11 @@ EOT
   # ------------------ Inject "ff_agent/.n/bin" into PATH and inject that export into FF_AGENT_PROFILE_FILE (end) ----------------
 
 
-  # Install 'npm' using dowloaded into TMPDIR 'n' ('npm' will be installed into ff_agent/.n)
+  # Install 'n_lts' using dowloaded into TMPDIR 'n' ('n_lts' will be installed into ff_agent/.n)
   bash n lts || {
     # Error: clean up tmp folder, report an error and return error code 1
     popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
-    set_state "${FUNCNAME[0]}" 'error_installing_npm'; return 1;
+    set_state "${FUNCNAME[0]}" 'error_installing_n_lts'; return 1;
   }
 
   # Install 'n' into ff_agent/.n  (yes, we have downloaded 'n' into TMPDIR,
