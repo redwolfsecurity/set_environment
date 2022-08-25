@@ -528,9 +528,13 @@ function install_ff_agent {
   # Define the version of ff_agent npm package to install from CDN
   VERSION='latest'
 
+  local ARCHITECTURE=$( get_hardware_architecture ) || { set_state "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
+  # Seems the ${ARCHITECTURE} value has some unexpected value on Jenkins box, thus it fails to install libcurl4-openssl-dev and build-essential. Debugging:
+  echo "${ARCHITECTURE}" > /dev/null
+
   # If we are on arm64, we likely need to install some extra packages
   # This is done as a case, just in case we have other such architectural changes for other architectures.
-  case $( get_hardware_architecture ) in
+  case "${ARCHITECTURE}" in
     arm64)
       PACKAGES_TO_INSTALL=(
         libcurl4-openssl-dev
