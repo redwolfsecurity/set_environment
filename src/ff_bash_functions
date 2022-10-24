@@ -84,6 +84,7 @@
 ## BEGIN UTILITY FUNCTIONS: CONTAINERS
 #    - container_name_exists 
 #    - docker_cleanup
+#    - docker_volumes_to_containers_list
 #    - get_installed_docker_version 
 #    - is_container_healthy 
 #    - is_container_running 
@@ -1825,6 +1826,23 @@ function docker_cleanup {
   return 0
 }
 export -f docker_cleanup
+
+###############################################################################
+# Category: container
+# Utility function - Get list of volumes and print list of containers, which use them.
+#
+# TODO: improve it to also show the size of each volume by combining output from "docker system df --verbose"
+#
+function docker_volumes_to_containers_list {
+  volumes=$(docker volume ls  --format '{{.Name}}')
+
+  for volume in $volumes
+  do
+    echo $volume
+    docker ps -a --filter volume="$volume"  --format '{{.Names}}' | sed 's/^/  /'
+  done
+}
+export -f docker_volumes_to_containers_list
 
 ###############################################################################
 # Category: container
