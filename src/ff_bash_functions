@@ -1834,13 +1834,21 @@ export -f docker_cleanup
 # TODO: improve it to also show the size of each volume by combining output from "docker system df --verbose"
 #
 function docker_volumes_to_containers_list {
-  volumes=$(docker volume ls  --format '{{.Name}}')
+  set_state "${FUNCNAME[0]}" 'started'
 
-  for volume in $volumes
-  do
-    echo $volume
-    docker ps -a --filter volume="$volume"  --format '{{.Names}}' | sed 's/^/  /'
+  VOLUMES=$(docker volume ls  --format '{{.Name}}') || { set_state "${FUNCNAME[0]}" 'failed_to_list_docker_volumes'; return 1; }
+
+  # Iterate all volumes
+  for VOLUME in ${VOLUMES}; do
+    
+    # Simply print volume identifier
+    echo "${VOLUME}"
+
+    # Note: the following command will print associated container names prefixed with 2 spaces
+    docker ps -a --filter volume="${VOLUME}"  --format '{{.Names}}' | sed 's/^/  /'
   done
+
+  set_state "${FUNCNAME[0]}" 'success'
 }
 export -f docker_volumes_to_containers_list
 
