@@ -1836,9 +1836,10 @@ export -f docker_cleanup
 function docker_volumes_to_containers_list {
   set_state "${FUNCNAME[0]}" 'started'
 
+  # Get list of all docker volumes names
   VOLUMES=$(docker volume ls  --format '{{.Name}}') || { set_state "${FUNCNAME[0]}" 'failed_to_list_docker_volumes'; return 1; }
 
-  # Iterate all volumes
+  # Iterate all volumes and check if i-th volume is used by any container (even if container is stopped)
   for VOLUME in ${VOLUMES}; do
     
     # Simply print volume identifier
