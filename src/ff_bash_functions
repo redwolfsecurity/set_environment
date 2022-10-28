@@ -221,7 +221,7 @@ export -f ask_for_yn
 #      if command_exists tput >/dev/null; then echo "yes, command exists"; fi
 #
 #   Use with other commands "chained" by &&
-#      command_exists tty && tty -s && return 0 || return 1
+#      command_exists tty >/dev/null && tty -s && return 0 || return 1
 #
 #   Check if return not empty string
 #     PM2=$( command_exists pm2 )
@@ -828,7 +828,7 @@ function find_file_owner_in_all_packages {
     fi
 
     # Check if "apt-file" is installed
-    if ! command_exists apt-file; then
+    if ! command_exists apt-file >/dev/null; then
       error "apt-file is not installed. Please install it first (e.g. sudo install apt-file) and try again."
       return 1
     fi
@@ -1697,7 +1697,7 @@ function terminal_initialize {
 
   if terminal_is_tty ; then
 
-    if command_exists tput ; then
+    if command_exists tput >/dev/null ; then
         # If this is a TTY, These set of "FONT_STYLE_*" variables allows us to decorate the output with some style (colour, boldness)
         FONT_STYLE_BOLD="$(tput bold)"
         FONT_STYLE_GREEN="$(tput setaf 2)"
@@ -1717,7 +1717,7 @@ export -f terminal_initialize
 # This is useful in cases where we might wish to ask a question
 # If you run this script from ssh, it will return 255 (e.g. ssh hostname "terminal_is_interactive" )
 function terminal_is_interactive {
-  command_exists tty && tty -s && return 0 || return 1
+  command_exists tty >/dev/null && tty -s && return 0 || return 1
   return 1 # Default, it isn't.
 }
 export -f terminal_is_interactive
@@ -1734,7 +1734,7 @@ export -f terminal_is_tty
 # Category: UTILITY FUNCTIONS: TERMINAL / SHELL
 # Reset terminal state - sometimes useful if a command messes up terminal state
 function terminal_reset {
-  terminal_is_tty && command_exists tput && tput reset && tput sane
+  terminal_is_tty && command_exists tput >/dev/null && tput reset && tput sane
 }
 export -f terminal_reset
 
@@ -1753,7 +1753,7 @@ function is_process_running_as_me {
     [ ! -z "${COMMAND_PATTERN}" ] || { set_state "${FUNCNAME[0]}" 'error_require_pattern_to_search_for'; return 1; }
 
     # We require PS and GREP commands
-    local PS=$(command_exists ps) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_ps_command'; return 1; }
+    local PS=$( command_exists ps ) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_ps_command'; return 1; }
     local GREP=$( command_exists grep ) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_grep_command'; return 1; }
 
     # Get current user. Note: the ${USER} environment is NOT set when running as 'root' in docker, we must use f-n get_current_user() instead.
@@ -2457,7 +2457,7 @@ EOF
 ) | publish_message
 
   # If we have ff_metric command handy try to sent the metric
-  if command_exists ff_metric > /dev/null; then
+  if command_exists ff_metric >/dev/null; then
     # Report metric: start:1    tags: service:ipsec_tunnel  (+public_ip, organization)
     ff_metric --metric-name="${STATE_NAME}" --metric-value=1 --tag=state:"${STATE_VALUE}" --tag=is_error:"${IS_ERROR}"
   fi
