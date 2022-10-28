@@ -33,7 +33,7 @@ In order to use this environment, you need to download this project from github 
 cd /tmp && \
 git clone https://github.com/redwolfsecurity/set_environment.git && \
 cd set_environment && \
-FF_CONTENT_URL=https://cdn.redwolfsecurity.com/ ./install
+FF_CONTENT_URL=https://cdn.redwolfsecurity.com/ ./install 2>&1 | tee ./install.log
 ```
 
 ### Testing
