@@ -2671,7 +2671,7 @@ function get_best_ff_agent_uri {
   if [ -z "${FF_AGENT_URI}" ]; then
       # Generate new uuid, check errors, export new value
       local UUID="$( ff_uuid )" || { set_state "${FUNCNAME[0]}" "failed_to_generate_new_uuid"; return 1; }
-      FF_AGENT_URI="/agent/agent_guid/${UUID}"
+      FF_AGENT_URI="/agent/agent_uuid/${UUID}"
   fi
 
   # At this point we must have not empty FF_AGENT_URI value.
