@@ -729,7 +729,7 @@ function install_go {
   done
 
   # Get the latest available version number.
-  local EXPECTED_VERSION=$( get_by_url 'https://go.dev/VERSION?m=text' ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_latest_version_number'; return 1; }
+  local EXPECTED_VERSION=$( get_by_url 'https://go.dev/VERSION?m=text' '-' ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_latest_version_number'; return 1; }
   [ ! -z "${EXPECTED_VERSION}" ] || { set_state "${FUNCNAME[0]}" 'failed_to_get_latest_version_number'; return 1; }
 
   # Check if go is already installed and has expected vesrion

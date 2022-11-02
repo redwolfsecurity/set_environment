@@ -879,35 +879,109 @@ export -f find_file_owner_in_installed_packages
 # Category: file
 # Utility function - Read remote file served by web server by given URL.
 #
-# If remote server response had HTTP_CODE 200, then function produce result into standard output and return code 0.
-# In any other case function return code is 1 and no output produced.
+# Function downloads file by given URL into desired FILEPATH (or standard output).
+# Function sets state to indicate success or error code.
+# Possible error codes are:
+#   - error_wrong_number_of_arguments
+#   - error_bad_argument_blank_url
+#   - error_bad_argument_blank_filepath
+#   - error_generating_tmp_filepath
+#   - error_downloading_file
+#   - error_bad_http_code_404
+#   - error_bad_http_code_000
+#   - error_printing_file
+#   - error_moving_file
+#   - error_removing_file
+#
+# Return values:
+#   0 - success
+#   1 - error
+#
+# Usage:
+#   download_file_to_location "${URL}" "${FILEPATH}" 
+#
+# Usage examples:
+#    get_by_url "https://testtarget.redwolfsecurity.com/test/processor.php?a=1&b=2" "~/processor_output.txt"
+#    GO_VERSION=$( get_by_url "https://go.dev/VERSION?m=text" "-" )
+#
+# Treat 2nd argument value "-" as "output to stdout"
+#   1) Function always creates a temporary file
+#   2) Fully download into that temporary file (never stream until completion)
+#   3) Copies the result to the desired FILEPATH
+#      or
+#      if FILEPATH value is "-" then prints dowlnoaded file to standard output.
+#
+# Note: target FILEPATH will be overwritten upon successful completion.
 #
 function get_by_url {
-  local URL="${1}"
+  # Indicate: function started
+  set_state "${FUNCNAME[0]}" 'started'
 
-  [ ! -z "${URL}" ] || { return 1; }
-  local OUTPUT=$( curl \
-      --silent    \
-      --retry 5    \
-      --location    \
-      --max-time 55  \
-      --retry-delay 1 \
-      --retry-max-time 60 \
-      --connect-timeout 12 \
-      -w "\n%{http_code}" \
-      "${URL}" ) || { return 1; }
+  # Check number of arguments: it must be exactly 2
+  [ $# -ne 2 ] && { set_state "${FUNCNAME[0]}" "error_wrong_number_of_arguments"; return 1; }
 
-  # Extract HTTP_CODE (last injected line)
-  HTTP_CODE=$( echo "${OUTPUT}" | tail -1 )
-  
-  # Check HTTP_CODE is 200
-  [ "${HTTP_CODE}" -eq 200 ] || { return 1; }
-    
-  # Print everything except last line, which we injected http_code
-  # Note: we use:
-  #    | head -n -1    - to get all the lines except the last one
-  #    | head -c -1    - to get rid of last byte of the last line, which was "new line" injected by us before http_code
-  echo -n "${OUTPUT}" | head -n -1 | head -c -1 
+  # Get/check inputs: URL
+  local URL="$1"
+  [ -z "${URL}" ] && { set_state "${FUNCNAME[0]}" "error_bad_argument_blank_url"; return 1; }
+
+  # TODO: discuss if we want to user regexp to check URL is valid:
+  # https://stackoverflow.com/questions/3183444/check-for-valid-link-url
+
+  # Get/check inputs: FILEPATH
+  local FILEPATH="$2"
+  [ -z "${URL}" ] && { set_state "${FUNCNAME[0]}" "error_bad_argument_blank_filepath"; return 1; }
+
+  # Create a temporary file and store it's filepath to TMP_FILEPATH
+  # It will be used to download the file.
+  # Note: we use "-t" to allow "mktemp" to select temporary folder for us.
+  # The "XXX" in the "mktemp" arguments are template - these will be replaced
+  # with random characters.
+  local TMP_FILEPATH=$(mktemp -t ${FUNCNAME[0]}.XXXXXXX) || { set_state "${FUNCNAME[0]}" "error_generating_tmp_filepath"; return 1; }
+
+  # Start actual download
+  local HTTP_CODE=$(curl \
+  --silent    \
+  --retry 5    \
+  --location    \
+  --retry-delay 1 \
+  --retry-max-time 60 \
+  --max-time 55 \
+  --connect-timeout 12 \
+  -o "${TMP_FILEPATH}" \
+  -w "%{http_code}" \
+  ${URL}) \
+  || { set_state "${FUNCNAME[0]}" 'error_downloading_file'; return 1; }
+
+  # Note: curl return code 0 does not mean successful file download.
+  # We must check the HTTP_CODE has value 200 - that is the only necessary
+  # and sufficient condition of successful file download.
+  #
+  # Example HTTP_CODE values and reasons:
+  #    HTTP_CODE: 000 - one of the possible reasons: failed to resolve domain
+  #    HTTP_CODE: 404 - file was not found on the server by the given URL
+  #
+  [ "${HTTP_CODE}" -eq 200 ] || { set_state "${FUNCNAME[0]}" "error_bad_http_code_${HTTP_CODE}"; return 1; }
+
+  # We have file successfully downloaded file into temporary filepath: ${TMP_FILEPATH}
+  # Now there are 2 cases:
+  #   1) Move that file into ${FILEPATH} provided by user as f-n argument
+  #   or
+  #   2) Print that file to standard output if provided ${FILEPATH} is "-"
+  if [ "${FILEPATH}" == "-" ]; then
+      # Print file to standard output
+      cat "${TMP_FILEPATH}" || { set_state "${FUNCNAME[0]}" 'error_printing_file'; return 1; }
+  else
+      # Move file to desired destination
+      mv "${TMP_FILEPATH}" "${FILEPATH}" || { set_state "${FUNCNAME[0]}" 'error_moving_file'; return 1; }
+  fi
+
+  # Clean up: remove temporary file (TODO: in future we might cover "partial download" case if needed)
+  if [ -f "${TMP_FILEPATH}" ]; then
+      rm "${TMP_FILEPATH}" || { set_state "${FUNCNAME[0]}" 'error_removing_file'; return 1; }
+  fi
+
+  # Indicate: function succeed
+  set_state "${FUNCNAME[0]}" 'success'
 }
 export -f get_by_url
 
