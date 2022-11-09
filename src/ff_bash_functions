@@ -881,6 +881,11 @@ export -f find_file_owner_in_installed_packages
 #
 # Function downloads file by given URL into desired FILEPATH (or standard output).
 # Function sets state to indicate success or error code.
+# Note: dowlnoaded file permissions will be "read/write" by owner only (600).
+# If caller wants to meke it readable by all and writeable by owner and group
+# then it is caller responsibility to: 
+#    chmod 664 "${FILEPATH}"
+#
 # Possible error codes are:
 #   - error_wrong_number_of_arguments
 #   - error_bad_argument_blank_url
@@ -944,8 +949,8 @@ function get_by_url {
   --retry 5    \
   --location    \
   --retry-delay 1 \
-  --retry-max-time 60 \
-  --max-time 55 \
+  --retry-max-time 55 \
+  --max-time 60 \
   --connect-timeout 12 \
   -o "${TMP_FILEPATH}" \
   -w "%{http_code}" \
@@ -969,10 +974,11 @@ function get_by_url {
   #   2) Print that file to standard output if provided ${FILEPATH} is "-"
   if [ "${FILEPATH}" == "-" ]; then
       # Print file to standard output
-      cat "${TMP_FILEPATH}" || { set_state "${FUNCNAME[0]}" 'error_printing_file'; return 1; }
+      cat "${TMP_FILEPATH}" || { set_state "${FUNCNAME[0]}" 'error_reading_file'; return 1; }
   else
       # Move file to desired destination
-      mv "${TMP_FILEPATH}" "${FILEPATH}" || { set_state "${FUNCNAME[0]}" 'error_moving_file'; return 1; }
+      # We use -f to make mv to overwrite whenever possible without asking for any confirmations
+      mv -f "${TMP_FILEPATH}" "${FILEPATH}" || { set_state "${FUNCNAME[0]}" 'error_moving_file'; return 1; }
   fi
 
   # Clean up: remove temporary file (TODO: in future we might cover "partial download" case if needed)
