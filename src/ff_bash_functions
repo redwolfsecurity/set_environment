@@ -943,6 +943,9 @@ function get_by_url {
   # with random characters.
   local TMP_FILEPATH=$(mktemp -t ${FUNCNAME[0]}.XXXXXXX) || { set_state "${FUNCNAME[0]}" "error_generating_tmp_filepath"; return 1; }
 
+  # Chmod file from "-rw-------" to default "-rw-rw-r--" 664
+  chmod 664 "${TMP_FILEPATH}" || { set_state "${FUNCNAME[0]}" "error_chmod_tmp_filepath"; return 1; }
+
   # Start actual download
   local HTTP_CODE=$(curl \
   --silent    \
@@ -978,7 +981,18 @@ function get_by_url {
   else
       # Move file to desired destination
       # We use -f to make mv to overwrite whenever possible without asking for any confirmations
-      mv -f "${TMP_FILEPATH}" "${FILEPATH}" || { set_state "${FUNCNAME[0]}" 'error_moving_file'; return 1; }
+      mv -f "${TMP_FILEPATH}" "${FILEPATH}" || {
+        # If failed to move try with sudo
+        CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" 'error_getting_current_user'; return 1; }
+        if can_sudo "${CURRENT_USER}"; then
+          # Have sudo privileges. Try to move using 'sudo'.
+          sudo mv -f "${TMP_FILEPATH}" "${FILEPATH}" || { set_state "${FUNCNAME[0]}" 'error_moving_file_as_root'; return 1; }
+        else
+          # Don't have sudo privileges
+          set_state "${FUNCNAME[0]}" 'error_moving_file_and_no_sudo_privileges'
+          return 1
+        fi 
+      }
   fi
 
   # Clean up: remove temporary file (TODO: in future we might cover "partial download" case if needed)
