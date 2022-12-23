@@ -507,6 +507,7 @@ export -f apt_upgrade
 ### BEGIN UTILITY FUNCTIONS: STRINGS
 
 ###############################################################################
+# Category: strings
 # Check if a value exists in an array
 # @param ${1} mixed  Needle
 # @param ${2} array  Haystack
@@ -525,6 +526,7 @@ function in_array {
 export -f in_array
 
 ###############################################################################
+# Category: strings
 # Return index or needle in haystack, otherwise 255
 # Bash range for return value from fn is (0-255) this is why when I return -1 it's 255
 # @param ${1} mixed  Needle
@@ -544,6 +546,7 @@ function index_of {
 export -f index_of
 
 ###############################################################################
+# Category: strings
 #
 # Function parses github repository url and allows to extract one of the following parts of it:
 #    - protocol
@@ -628,6 +631,8 @@ function parse_github_repository_url {
 export -f parse_github_repository_url
 
 ###############################################################################
+# Category: strings
+#
 # Utility function trim_slash():
 #   - Replaces all repeated slashes //[...] with a single slash /
 #   - Removes trailing slash unless it is also the leading slash (i.e., the root filepath /)

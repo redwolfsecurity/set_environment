@@ -514,6 +514,22 @@ function install_docker {
     return 1
   fi
 
+  # Set up logging by creating file "/etc/docker/daemon.json"
+  FILEPATH="/etc/docker/daemon.json"
+(
+cat <<EOT
+{
+  "log-driver": "syslog",
+  "log-opts": {"tag": "{{.Name}}/{{.ID}}"}
+}
+EOT
+  ) | sudo tee ${FILEPATH} > /dev/null
+
+  if [ "${?}" -ne 0 ]; then
+      set_state "${FUNCNAME[0]}" "failed_to_install_docker_logging_configuration"
+      return 1
+  fi
+
   set_state "${FUNCNAME[0]}" 'success'
 }
 export -f install_docker
