@@ -590,7 +590,7 @@ function docker_restart {
   docker_is_installed || { set_state "${FUNCNAME[0]}" 'error_docker_is_not_installed'; return 1; }
 
   # Restart docker daemon
-  systemctl restart docker || { set_state "${FUNCNAME[0]}" 'failed_to_docker_restart'; return 1; } 
+  sudo systemctl restart docker || { set_state "${FUNCNAME[0]}" 'failed_to_docker_restart'; return 1; } 
 
   set_state "${FUNCNAME[0]}" 'success'
 }
