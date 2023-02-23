@@ -84,13 +84,13 @@ function docker_ensure {
   # Check if docker is already installed
   if ! docker_is_installed; then
     # Docker is not installed. Install it now.
-    install_docker || { set_state "${FUNCNAME[0]}" 'failed_to_install_docker'; return 1; }
+    docker_install || { set_state "${FUNCNAME[0]}" 'failed_to_docker_install'; return 1; }
   fi
   
   # Do the docker_minimal_version_check
   if ! docker_minimal_version_check "${MINIMUM_MAJOR_VERSION}"; then
     # Docker does not have expected version. Install proper version now.
-    install_docker || { set_state "${FUNCNAME[0]}" 'failed_to_install_docker'; return 1; }
+    docker_install || { set_state "${FUNCNAME[0]}" 'failed_to_docker_install'; return 1; }
   fi
   
   # Ensure docker logs sent to syslog
@@ -230,8 +230,8 @@ function docker_install {
 
   apt_update
 
-  apt_install docker-ce || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_ce"; return 1; }
-  apt_install docker-compose || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_compose"; return 1; }
+  apt_install docker-ce || { set_state "${FUNCNAME[0]}" "failed_to_docker_install_ce"; return 1; }
+  apt_install docker-compose || { set_state "${FUNCNAME[0]}" "failed_to_docker_install_compose"; return 1; }
   # containerd is available as a daemon for Linux and Windows. It manages the complete container lifecycle of its host system, from image transfer and storage to container execution and supervision to low-level storage to network attachments and beyond.
   apt_install containerd.io || { set_state "${FUNCNAME[0]}" "failed_to_install_containerd_io"; return 1; }
 
@@ -670,7 +670,7 @@ EOT
   # Check exit code
   # Note: when $? used for piped commands it returns the exit code of the last commain in chain
   if [ "${?}" -ne 0 ]; then
-      set_state "${FUNCNAME[0]}" "failed_to_install_docker_logging_configuration"
+      set_state "${FUNCNAME[0]}" "failed_to_docker_install_logging_configuration"
       return 1
   fi
 

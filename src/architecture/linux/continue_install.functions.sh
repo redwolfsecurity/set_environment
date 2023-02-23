@@ -156,7 +156,7 @@ function assert_baseline_components {
   # assert_clean_exit replace_timesyncd_with_ntpd
 
   # Install docker (not using "apt") - COMMENTED OUT: docker is not part of baseline (it is part of "build" and/or "development", but not "baseline")
-  #assert_clean_exit install_docker
+  #assert_clean_exit docker_install
 
   # Ensure file "ff_agent/.profile" created and sourced from ~/.bashrc (Note: this must be done before install node)
   assert_clean_exit install_ff_agent_bashrc
