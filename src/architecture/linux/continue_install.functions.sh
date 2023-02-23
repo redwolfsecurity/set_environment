@@ -16,7 +16,6 @@
 #    - create_npmrc_credentials
 #    - ensure_ff_agent_bin_exists
 #    - ensure_set_environment_install_exists
-#    - install_docker
 #    - install_ff_agent
 #    - install_ff_agent_bashrc
 #    - install_go
@@ -24,14 +23,14 @@
 #    - install_nodejs
 #    - install_nodejs_suite
 #    - install_set_environment_baseline
-#    - is_pm2_installed ()
-#    - is_pm2_running_as_me ()
-#    - pm2_configure ()
-#    - pm2_ensure ()
-#    - pm2_install ()
-#    - pm2_start ()
-#    - pm2_stop ()
-#    - pm2_uninstall ()
+#    - is_pm2_installed
+#    - is_pm2_running_as_me
+#    - pm2_configure
+#    - pm2_ensure
+#    - pm2_install
+#    - pm2_start
+#    - pm2_stop
+#    - pm2_uninstall
 #    - preserve_sources
 #    - set_script_logging
 #    - setup_logging
@@ -391,7 +390,7 @@ export -f ensure_set_environment_install_exists
 
 ###############################################################################
 #
-# Function installs docker. 
+# Function installs "build_tools" project. 
 function install_build_tools {
   set_state "${FUNCNAME[0]}" 'started'
 
@@ -406,133 +405,6 @@ function install_build_tools {
   set_state "${FUNCNAME[0]}" 'success'
 }
 export -f install_build_tools
-
-###############################################################################
-#
-# Function installs docker. It takes 1 argement "minimum version", if not provided,
-# then by default version 19 will be used.
-#
-# Supports Ubuntu 16.04, 18.04, 20.04
-#
-# Require environment variables set:
-#   - FF_AGENT_USERNAME
-#
-function install_docker {
-
-  set_state "${FUNCNAME[0]}" 'started'
-
-  # Define required variables
-  local REQUIRED_VARIABLES=(
-    FF_AGENT_USERNAME
-  )
-
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-      return 1
-    }
-  done
-
-  # Take MINIMUM_VERSION argument, if empty, then set default value
-  MINIMUM_VERSION="${1}"
-  if [ -z "${MINIMUM_VERSION}" ]; then
-      MINIMUM_VERSION=19
-  fi
-
-  # Check if docker is installed and has version >= minimally required
-  ACTUAL_VERSION="$( get_installed_docker_version )"
-  if [ ! -z "${ACTUAL_VERSION}" ] && [ "${ACTUAL_VERSION}" -ge "${MINIMUM_VERSION}" ]; then
-      set_state "${FUNCNAME[0]}" "no_action_already_installed"
-      return 0
-  fi
-
-  # OK We install since we don't have the minimum version, or docker is not installed
-
-  # Get ID, RELEASE and DISTRO and verify the values are actually set
-  local LSB_ID=$( get_lsb_id ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
-  [ "${LSB_ID}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
-
-  local RELEASE=$( get_lsb_release ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }  # 18.04, 20.04, ...
-  [ "${RELEASE}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }
-
-  local DISTRO=$( get_lsb_codename ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; }  # bionic, focal, ...
-  [ "${DISTRO}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; }
-
-  local ARCHITECTURE=$( get_hardware_architecture ) || { set_state "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
-
-  # Only Ubuntu for now
-  if [ "${LSB_ID}" != "Ubuntu" ]; then
-      set_state "${FUNCNAME[0]}" "error_docker_install_unsupported_operating_system"
-      return 1
-  fi
-
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-  [ ${?} -ne 0 ] && { set_state "${FUNCNAME[0]}" "failed_to_add_gpg_key"; return 1; }
-
-  sudo add-apt-repository "deb [arch=${ARCHITECTURE}] https://download.docker.com/linux/ubuntu ${DISTRO} stable"
-  [ ${?} -ne 0 ] && { set_state "${FUNCNAME[0]}" "failed_to_add_repository"; return 1; }
-
-  apt_update
-
-  apt_install docker-ce || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_ce"; return 1; }
-  apt_install docker-compose || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_compose"; return 1; }
-  # containerd is available as a daemon for Linux and Windows. It manages the complete container lifecycle of its host system, from image transfer and storage to container execution and supervision to low-level storage to network attachments and beyond.
-  apt_install containerd.io || { set_state "${FUNCNAME[0]}" "failed_to_install_containerd_io"; return 1; }
-
-  # Add ourselves as a user to be able to run docker
-  GROUP="docker"
-  # Check the 'docker' group exists.
-  if ! check_group_exists "${GROUP}"; then
-    set_state "${FUNCNAME[0]}" "error_group_docker_does_not_exist"
-    return 1
-  fi
-
-  # We might not have sudo, so we should request command to be run.
-  # Check if user is in this group. If not, add them
-  if ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}"; then
-    # Not in group
-    sudo usermod -aG "${GROUP}" "${FF_AGENT_USERNAME}"
-    if [ ${?} -ne 0 ]; then set_state "${FUNCNAME[0]}" "failed_to_modify_docker_user_group"; return 1; fi
-    # Now check that we actually are in the group. This will work in current shell because it reads the groups file directly
-    if ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}"; then
-      set_state "${FUNCNAME[0]}" "failed_postcondition_user_in_group"
-      return 1
-    fi
-  fi
-
-  # Postcondition checks
-  # Verify docker is properly set up
-  # Note we are running via sudo, and if we added user to the ${GROUP} then it won't be applied in this shell.
-  set_secret docker_release "$( docker --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_to_get_release"; return 1; }
-  set_secret docker_compose_relase "$( docker-compose --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_compose_to_get_release"; return 1; }
-
-  # Check if installed docker version is less than minimally required
-  if [ "$( get_installed_docker_version )" -lt "${MINIMUM_VERSION}" ]; then
-    set_state "${FUNCNAME[0]}" "failed_to_install_did_not_pass_version_check"
-    return 1
-  fi
-
-  # Set up logging by creating file "/etc/docker/daemon.json"
-  FILEPATH="/etc/docker/daemon.json"
-(
-cat <<EOT
-{
-  "log-driver": "syslog",
-  "log-opts": {"tag": "{{.Name}}/{{.ID}}"}
-}
-EOT
-  ) | sudo tee ${FILEPATH} > /dev/null
-
-  if [ "${?}" -ne 0 ]; then
-      set_state "${FUNCNAME[0]}" "failed_to_install_docker_logging_configuration"
-      return 1
-  fi
-
-  set_state "${FUNCNAME[0]}" 'success'
-}
-export -f install_docker
 
 ###############################################################################
 #
@@ -751,10 +623,10 @@ function install_go {
   # Check if go is already installed and has expected vesrion
   if command_exists go >/dev/null; then
       # Yes, 'go' is installed. Check if installed version matches expected one.
-      GET_VERSION_OUTPUT="$( go version )" || { set_state "${FUNCNAME[0]}" 'failed_to_get_existing_version_number'; return 1; }
+      INSTALLED_VERSION="$( go version )" || { set_state "${FUNCNAME[0]}" 'failed_to_get_existing_version_number'; return 1; }
 
       # Compare to expected version
-      if [[ "${GET_VERSION_OUTPUT}" =~ ${EXPECTED_VERSION} ]]; then
+      if [[ "${INSTALLED_VERSION}" =~ ${EXPECTED_VERSION} ]]; then
         # Match. Version is up to date, nothing to do.
         set_state "${FUNCNAME[0]}" 'success'
         return 0
@@ -848,10 +720,10 @@ EOT
   fi
 
   # Check installed 'go' version
-  GET_VERSION_OUTPUT="$( go version )" || { set_state "${FUNCNAME[0]}" 'failed_to_get_installed_version_number'; return 1; }
+  INSTALLED_VERSION="$( go version )" || { set_state "${FUNCNAME[0]}" 'failed_to_get_installed_version_number'; return 1; }
 
   # Compare to the expected version
-  if [[ "${GET_VERSION_OUTPUT}" =~ ${EXPECTED_VERSION} ]]; then
+  if [[ "${INSTALLED_VERSION}" =~ ${EXPECTED_VERSION} ]]; then
     # Good - expected version installed.
     set_state "${FUNCNAME[0]}" 'success'
     return 0
@@ -1155,13 +1027,12 @@ export -f install_set_environment_baseline
 # Returns 0 if it is, 1 if it isn't
 function is_pm2_installed {
     set_state "${FUNCNAME[0]}" 'started'
-    local STATUS=0
     local PACKAGE="pm2"
     local NPM=$( command_exists npm ) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
 
     # If it not installed, set STATUS=1
     ${NPM} list "${PACKAGE}" --global >/dev/null
-    STATUS=${?}
+    local STATUS=${?}
 
     set_state "${FUNCNAME[0]}" 'success'
     return ${STATUS}
@@ -1319,7 +1190,7 @@ function is_pm2_running_as_me {
 
     # Check if process is running as local user.
     is_process_running_as_me "${PATTERN}"
-    STATUS=${?}
+    local STATUS=${?}
 
     set_state "${FUNCNAME[0]}" 'success'
 
