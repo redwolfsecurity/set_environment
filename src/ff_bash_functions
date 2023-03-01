@@ -271,14 +271,14 @@ export -f command_exists
 function file_toc {
 
   # Define path to ff_bash_functions file
-  TARGET_FILE="${1}"
-  [ ! -f "${TARGET_FILE}" ] && {
+  FILEPATH="${1}"
+  [ ! -f "${FILEPATH}" ] && {
     error "error_ff_bash_functions_file_missing"
     return 1
   }
 
   # Parse ff_bash_functions and generate table of contents
-  cat "${TARGET_FILE}" | grep '^### BEGIN\|^### END\|^function' | sed 's/^function /\#    - /g' | sed 's/{//g' | sed 's/###/##/g'
+  cat "${FILEPATH}" | grep '^### BEGIN\|^### END\|^function' | sed 's/^function /\#    - /g' | sed 's/{//g' | sed 's/###/##/g'
 }
 export -f file_toc
 
@@ -305,14 +305,14 @@ function help_toc {
   }
 
   # Define path to ff_bash_functions file
-  TARGET_FILE="${FF_AGENT_HOME}/git/redwolfsecurity/set_environment/src/ff_bash_functions"
-  [ ! -f "${TARGET_FILE}" ] && {
+  FILEPATH="${FF_AGENT_HOME}/git/redwolfsecurity/set_environment/src/ff_bash_functions"
+  [ ! -f "${FILEPATH}" ] && {
     set_state "${FUNCNAME[0]}" "error_ff_bash_functions_file_missing"
     return 1
   }
 
   # Parse ff_bash_functions and generate table of contents
-  cat "${TARGET_FILE}" | grep '^### BEGIN\|^### END\|^function' | sed 's/^function /\#    - /g' | sed 's/{//g' | sed 's/###/##/g'
+  cat "${FILEPATH}" | grep '^### BEGIN\|^### END\|^function' | sed 's/^function /\#    - /g' | sed 's/{//g' | sed 's/###/##/g'
 
   set_state "${FUNCNAME[0]}" 'success'
 }
@@ -662,7 +662,7 @@ function parse_github_repository_url {
   local URL="${1}"
   local KEY="${2}"
 
-  # Check inputs aren't empty
+  # Check arguments are not empty
   [ ! -z "${URL}" ] || { return 1; }
   [ ! -z "${KEY}" ] || { return 1; }
 
@@ -1086,6 +1086,125 @@ export -f get_by_url
 
 ###############################################################################
 # Category: file
+# Utility function - Easy way to check if a sudo prefix needed to read given file.
+# Function prints to standard ouput "sudo" if root privileges required.
+# Return code:
+#   0 - success
+#   1 - error (examples: file does not exist, can not read even with "sudo")
+#
+function get_sudo_read_file_prefix {
+
+  # Take arguments
+  FILEPATH="${1}"
+
+  # Check arguments are not empty
+  [ ! -z "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" "error_target_filepath_is_blank"; return 1; }
+
+  # Check file exists
+  [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 1; }
+  
+  # Check if target file is readable by the current user.
+  # Also set SUDO_READ_FILE_PREFIX="sudo" if file can be read only by "root"
+  local SUDO_READ_FILE_PREFIX=""
+  [ -r "${FILEPATH}" ] || {
+    # The FILEPATH is not readable by the current user, check if current user can_sudo
+    local CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" "failed_to_get_current_user"; return 1; }
+    if can_sudo "${CURRENT_USER}"; then
+      # Yes, current uer can_sudo, try with sudo and if successful, then set SUDO_READ_FILE_PREFIX="sudo"
+      sudo [ -r "${FILEPATH}" ] && SUDO_READ_FILE_PREFIX="sudo" || { set_state "${FUNCNAME[0]}" 'error_target_file_is_not_readable'; return 1; }
+    else
+      set_state "${FUNCNAME[0]}" 'error_target_file_is_not_readable'
+      return 1
+    fi
+  }
+
+  # Print result to standard output
+  echo -n "${SUDO_READ_FILE_PREFIX}"
+
+  # Indicate: function succeed
+  set_state "${FUNCNAME[0]}" 'success'
+}
+
+###############################################################################
+# Category: file
+# Utility function - Easy way to check if a sudo prefix needed to write given file.
+# Function prints to standard ouput "sudo" if root privileges required.
+# Return code:
+#   0 - success
+#   1 - error (examples: file does not exist, can not write even with "sudo")
+#
+function get_sudo_write_file_prefix {
+
+  # Take arguments
+  FILEPATH="${1}"
+
+  # Check arguments are not empty
+  [ ! -z "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" "error_target_filepath_is_blank"; return 1; }
+
+  # Check file exists
+  [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 1; }
+  
+  # Check if target file is writable by the current user
+  # Also set SUDO_WRITE_FILE_PREFIX="sudo" if file can be written only by "root"
+  local SUDO_WRITE_FILE_PREFIX=""
+  [ -w "${FILEPATH}" ] || {
+    # The FILEPATH is not writable by the current user, check if current user can_sudo
+    local CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" "failed_to_get_current_user"; return 1; }
+    if can_sudo "${CURRENT_USER}"; then
+      # Yes, current uer can_sudo, try with sudo and if successful, then set SUDO_WRITE_FILE_PREFIX="sudo"
+      sudo [ -w "${FILEPATH}" ] && SUDO_WRITE_FILE_PREFIX="sudo" || { set_state "${FUNCNAME[0]}" 'error_target_file_is_not_writable'; return 1; }
+    else
+      set_state "${FUNCNAME[0]}" 'error_target_file_is_not_writable'
+      return 1
+    fi
+  }
+
+  # Print result to standard output
+  echo -n "${SUDO_WRITE_FILE_PREFIX}"
+
+  # Indicate: function succeed
+  set_state "${FUNCNAME[0]}" 'success'
+}
+
+###############################################################################
+# Category: file
+# Utility function - Easy way to check if a sudo prefix needed to read-write given file.
+# Function prints to standard ouput "sudo" if root privileges required.
+#
+# Use case example: for inline-editor "sed -i" we must be able to both read and write.
+#
+# Return code:
+#   0 - success
+#   1 - error (examples: file does not exist, can not read-write even with "sudo")
+#
+function get_sudo_readwrite_file_prefix {
+
+  # Take arguments
+  FILEPATH="${1}"
+
+  # Check arguments are not empty
+  [ ! -z "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" "error_target_filepath_is_blank"; return 1; }
+
+  # Check file exists
+  [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 1; }
+  
+  # If we need to use "sudo" for either: read or write, then
+  # let's set SUDO_READWRITE_FILE_PREFIX="sudo"
+  local SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 1; }
+  local SUDO_WRITE_FILE_PREFIX=$(get_sudo_write_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 1; }
+  if [ "${SUDO_READ_FILE_PREFIX}" == "sudo" ] || [ "${SUDO_READ_FILE_PREFIX}" == "sudo" ]; then
+    local SUDO_READWRITE_FILE_PREFIX="sudo"
+  fi
+
+  # Print result to standard output
+  echo -n "${SUDO_READWRITE_FILE_PREFIX}"
+
+  # Indicate: function succeed
+  set_state "${FUNCNAME[0]}" 'success'
+}
+
+###############################################################################
+# Category: file
 # Utility function - Easy way to check if a glob matches.
 # This is a bash builtin wrapper. e.g. glob_matches '/tmp/abc*' will return 0 or 1
 function glob_matches {
@@ -1098,10 +1217,10 @@ export -f glob_matches
 # Category: file
 # Utility function - injects text into the end of existing file.
 #
-# Function serch regular expression PATTERN in the existing file by the given TARGET_FILE and if missing, then
-# the INJECT_CONTENT got injected at the end of the TARGET_FILE.
+# Function serch regular expression PATTERN in the existing file by the given FILEPATH and if missing, then
+# the INJECT_CONTENT got injected at the end of the FILEPATH.
 # Return:
-#  code 0 - succesful injection (or PATTERN already present in the TARGET_FILE)
+#  code 0 - succesful injection (or PATTERN already present in the FILEPATH)
 #  code 1 - failed to inject (not enough permissions, target file does not exist etc.)
 #           In case of error: the error will be reported by error() function (to standard output and into logger)
 #
@@ -1114,8 +1233,8 @@ export -f glob_matches
 #
 # Usage example:
 #
-#   TARGET_FILE="/tmp/some_file.txt"
-#   echo "creating example target file" > "${TARGET_FILE}"
+#   FILEPATH="/tmp/some_file.txt"
+#   echo "creating example target file" > "${FILEPATH}"
 #   PATTERN="source \"${FF_AGENT_PROFILE_FILE}\""
 #
 #   INJECT_CONTENT=$(
@@ -1128,11 +1247,11 @@ export -f glob_matches
 # EOT
 #     )
 #
-#   inject_into_file "${TARGET_FILE}" "${PATTERN}" "${INJECT_CONTENT}"
+#   inject_into_file "${FILEPATH}" "${PATTERN}" "${INJECT_CONTENT}"
 #   if [ ${?} -ne 0 ]; then
-#     echo "Error: failed to inject into the file: '${TARGET_FILE}'"
+#     echo "Error: failed to inject into the file: '${FILEPATH}'"
 #   else
-#     echo "Successfully injected text into the file: '${TARGET_FILE}'"
+#     echo "Successfully injected text into the file: '${FILEPATH}'"
 #   fi
 #
 function inject_into_file {
@@ -1140,39 +1259,39 @@ function inject_into_file {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Take arguments
-  TARGET_FILE="${1}"
+  FILEPATH="${1}"
   PATTERN="${2}"
   INJECT_CONTENT="${3}"
 
-  # Check inputs aren't empty
-  [ ! -z "${TARGET_FILE}" ] || { set_state "${FUNCNAME[0]}" "error_target_file_is_blank"; return 1; }
+  # Check arguments are not empty
+  [ ! -z "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" "error_target_filepath_is_blank"; return 1; }
   [ ! -z "${PATTERN}" ] || { set_state "${FUNCNAME[0]}" "error_pattern_is_blank"; return 1; }
   [ ! -z "${INJECT_CONTENT}" ] || { set_state "${FUNCNAME[0]}" "error_inject_content_is_blank"; return 1; }
 
   # Check the target file exists
-  [ -f "${TARGET_FILE}" ] || { set_state "${FUNCNAME[0]}" "error_target_file_does_not_exist: '${TARGET_FILE}'"; return 1; }
+  [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" "error_target_file_does_not_exist: '${FILEPATH}'"; return 1; }
 
-  # Check if file TARGET_FILE contains the PATTERN
-  if ! file_contains_pattern "${TARGET_FILE}" "${PATTERN}"; then
+  # Check if target file contains the PATTERN
+  if ! file_contains_pattern "${FILEPATH}" "${PATTERN}"; then
     # Expected pattern is missing. Inject text.
 
     # Inject extra EOL if last line of the file missing EOL and file is not empty
-    if ! does_file_have_eol_at_the_end "${TARGET_FILE}"; then
+    if ! does_file_have_eol_at_the_end "${FILEPATH}"; then
       # Add EOL to the end of the file (so our injected line starts from the new line)
-      echo "" >> "${TARGET_FILE}" || {
+      echo "" >> "${FILEPATH}" || {
         set_state "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'
         return 1
       }
     fi
 
-    # Append INJECT_CONTENT to the end of the TARGET_FILE
-    echo "${INJECT_CONTENT}" >> "${TARGET_FILE}" || {
+    # Append INJECT_CONTENT to the end of the target file
+    echo "${INJECT_CONTENT}" >> "${FILEPATH}" || {
       set_state "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'
       return 1
     }
 
     # Post condition: verify that the expected pattern can be found after injection.
-    if ! file_contains_pattern "${TARGET_FILE}" "${PATTERN}"; then
+    if ! file_contains_pattern "${FILEPATH}" "${PATTERN}"; then
       # Expected pattern is still missing. Report an error.
       set_state "${FUNCNAME[0]}" 'failed_postcondition_check_expected_pattern_is_missing_after_injection'
       return 1
@@ -1203,6 +1322,7 @@ export -f path_to_absolute_path
 #  0 - if file/directory writable
 #  1 - otherwise
 #
+# TODO: this must also check if "can_sudo" and if need to escalate privileges.
 function is_writable {
   # Get argument
   local TARGET="${1}"
@@ -1249,28 +1369,28 @@ function remove_all_lines_by_regexp {
   fi
 
   # Get filename argument
-  TARGET_FILE="${2}"
+  FILEPATH="${2}"
 
   # Check filename is not blank
-  if [ "${TARGET_FILE}" == "" ]; then
+  if [ "${FILEPATH}" == "" ]; then
     # Error: missing target filename
     return 2
   fi
 
   # Check file exists
-  if [ ! -f "${TARGET_FILE}" ]; then
+  if [ ! -f "${FILEPATH}" ]; then
     # Error: file does not exist
     return 3
   fi
 
   # Check if target file is readable
-  if [ ! -r "${TARGET_FILE}" ]; then
+  if [ ! -r "${FILEPATH}" ]; then
     # Error: not enough permissions to read target file
     return 4
   fi
 
   # Check if target file is writable
-  if [ ! -w "${TARGET_FILE}" ]; then
+  if [ ! -w "${FILEPATH}" ]; then
     # Error: not enough permissions to write target file
     return 5
   fi
@@ -1279,24 +1399,24 @@ function remove_all_lines_by_regexp {
   # Note: we collect grep output even though "-q" is used: to cover all the error cases and
   # not spill output to stderr/stdout. We might enrich return error with more details later
   # (examaple: bad syntax in the used regex).
-  GREP_OUTPUT=$( grep -q "${REGEX}" "${TARGET_FILE}" 2>&1 )
-  GREP_CODE=${?}
+  GREP_OUTPUT=$( grep -q "${REGEX}" "${FILEPATH}" 2>&1 )
+  EXIT_CODE=${?}
 
   # Check if the pattern is found
-  if [ ${GREP_CODE} -eq 1 ]; then
+  if [ ${EXIT_CODE} -eq 1 ]; then
     # The pattern was not found
     return 6
   fi
-  if [ ${GREP_CODE} -gt 1 ]; then
+  if [ ${EXIT_CODE} -gt 1 ]; then
     # Error: 7 - failed to search by given pattern.
     return 7
   fi
 
   # Take a note on the current number of lines
-  LINE_COUNT_BEFORE_CHANGE="$( cat "${TARGET_FILE}" | wc -l )"
+  LINE_COUNT_BEFORE_CHANGE="$( cat "${FILEPATH}" | wc -l )"
 
   # Found line in the target file. Edit file:
-  EDITOR_OUTPUT=$( sed -i "/${REGEX}/d" "${TARGET_FILE}" 2>&1 )
+  EDITOR_OUTPUT=$( sed -i "/${REGEX}/d" "${FILEPATH}" 2>&1 )
 
   # Check if stream editor error out.
   # Example: bad pattern would return code=1 and error message: sed: -e expression #1, char 8: unterminated address regex
@@ -1308,7 +1428,7 @@ function remove_all_lines_by_regexp {
 
   # Count the number of deleted lines
   # Note: sed always return 0, so it won't let us know how many changes were done
-  LINE_COUNT_AFTER_CHANGE="$( cat "${TARGET_FILE}" | wc -l )"
+  LINE_COUNT_AFTER_CHANGE="$( cat "${FILEPATH}" | wc -l )"
   DELETED_LINES_COUNT=$(( LINE_COUNT_BEFORE_CHANGE - LINE_COUNT_AFTER_CHANGE ))
 
   # Check the number of deleted lines
@@ -1341,7 +1461,7 @@ export -f remove_all_lines_by_regexp
 #   2 - missing target filename
 #   3 - target file does not exist
 #   4 - not enough permissions to read the target file
-#   5 - not enough permissions to writ the target file
+#   5 - not enough permissions to write the target file
 #   6 - the pattern was not found (in some cases this might be 'success' because some line was already changed successfully before (example: call same f-n twice))
 #   7 - failed to search by given pattern (most probably bad regex pattern)
 #   8 - editor return an error (most probably bad regex pattern
@@ -1350,7 +1470,6 @@ export -f remove_all_lines_by_regexp
 #  11 - Failed to copy target file to temporary file
 #  12 - Failed to remove temporary file
 #  13 - Failed to calculate difference after edit
-#  14 - Failed to get current user
 #
 function replace_all_lines_by_regexp {
   # Indicate: function started
@@ -1359,64 +1478,33 @@ function replace_all_lines_by_regexp {
   # Take arguments
   local REGEX="${1}"
   local REPLACE="${2}"
-  local TARGET_FILE="${3}"
+  local FILEPATH="${3}"
 
   # Check if regex is not empty (note: ${REPLACE} can be empty)
   [ ! -z "${REGEX}" ] || { set_state "${FUNCNAME[0]}" 'error_empty_regex_argument'; return 1; }
 
   # Check filename is not blank
-  [ ! -z "${TARGET_FILE}" ] || { set_state "${FUNCNAME[0]}" 'error_empty_regex_argument'; return 2; }
+  [ ! -z "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_empty_regex_argument'; return 2; }
 
   # Check file exists
-  [ -f "${TARGET_FILE}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 3; }
-  
-  # Check if target file is readable by the current user
-  # Also set SUDO_READ_PREFIX="sudo" if file can be read only by "root"
-  local SUDO_READ_PREFIX=""
-  [ -r "${TARGET_FILE}" ] || {
-    # The TARGET_FILE is not readable by the current user, check if current user can_sudo
-    local CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" "failed_to_get_current_user"; return 14; }
-    if can_sudo "${CURRENT_USER}"; then
-      # Yes, current uer can_sudo, try with sudo and if successful, then set SUDO_READ_PREFIX="sudo"
-      sudo [ -r "${TARGET_FILE}" ] && SUDO_READ_PREFIX="sudo" || { set_state "${FUNCNAME[0]}" 'error_target_file_is_not_readable'; return 4; }
-    else
-      set_state "${FUNCNAME[0]}" 'error_target_file_is_not_readable'
-      return 4
-    fi
-  }
+  [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 3; }
 
-  # Check if target file is writable by the current user
-  # Also set SUDO_WRITE_PREFIX="sudo" if file can be written only by "root"
-  local SUDO_WRITE_PREFIX=""
-  [ -w "${TARGET_FILE}" ] || {
-    # The TARGET_FILE is not writable by the current user, check if current user can_sudo
-    local CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" "failed_to_get_current_user"; return 14; }
-    if can_sudo "${CURRENT_USER}"; then
-      # Yes, current uer can_sudo, try with sudo and if successful, then set SUDO_WRITE_PREFIX="sudo"
-      sudo [ -w "${TARGET_FILE}" ] && SUDO_WRITE_PREFIX="sudo" || { set_state "${FUNCNAME[0]}" 'error_target_file_is_not_writable'; return 4; }
-    else
-      set_state "${FUNCNAME[0]}" 'error_target_file_is_not_writable'
-      return 5
-    fi
-  }
-
-  # If we need to use "sudo" for either: read or write, then
-  # let's set SUDO_READWRITE_PREFIX="sudo" for editor command
-  if [ "${SUDO_READ_PREFIX}" == "sudo" ] || [ "${SUDO_READ_PREFIX}" == "sudo" ]; then
-    local SUDO_READWRITE_PREFIX="sudo"
-  fi
+  # Check if we need to use "sudo" prefix to read / write / readwrite given file
+  local SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 4; }
+  local SUDO_WRITE_FILE_PREFIX=$(get_sudo_write_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
+  local SUDO_READWRITE_FILE_PREFIX=$(get_sudo_readwrite_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
 
   # Try to find by given regexp
-  GREP_OUTPUT=$( "${SUDO_READ_PREFIX}" grep -q "${REGEX}" "${TARGET_FILE}" 2>&1 )
-  GREP_CODE=${?}
+  GREP_OUTPUT=$( ${SUDO_READ_FILE_PREFIX} grep -q "${REGEX}" "${FILEPATH}" 2>&1 )
+  EXIT_CODE=${?}
 
   # Check if the pattern is found
-  if [ ${GREP_CODE} -eq 1 ]; then
+  if [ ${EXIT_CODE} -eq 1 ]; then
     # The pattern was not found
     set_state "${FUNCNAME[0]}" 'error_pattern_was_not_found'
     return 6
   fi
-  if [ ${GREP_CODE} -gt 1 ]; then
+  if [ ${EXIT_CODE} -gt 1 ]; then
     # Error: 7 - failed to search by given pattern.
     # Pass grep output through stdout.
     set_state "${FUNCNAME[0]}" 'failed_to_search_by_given_pattern'
@@ -1432,15 +1520,15 @@ function replace_all_lines_by_regexp {
   fi
 
   # Create a temporary copy of the target file before editing it
-  "${SUDO_READ_PREFIX}" cp "${TARGET_FILE}" "${ORIGINAL_FILE_COPY}"
+  ${SUDO_READ_FILE_PREFIX} cp "${FILEPATH}" "${ORIGINAL_FILE_COPY}"
   if [ ${?} -ne 0 ]; then
-    # "failed to copy file ${TARGET_FILE} to temporary file ${ORIGINAL_FILE_COPY}"
+    # "failed to copy file ${FILEPATH} to temporary file ${ORIGINAL_FILE_COPY}"
     set_state "${FUNCNAME[0]}" 'failed_to_copy_target_to_temporary_file'
     return 11
   fi
 
   # We found line(s) in the target file. Edit file:
-  EDITOR_OUTPUT=$( "${SUDO_READWRITE_PREFIX}" sed -i "s/${REGEX}/${REPLACE}/" "${TARGET_FILE}" 2>&1 )
+  EDITOR_OUTPUT=$( ${SUDO_READWRITE_FILE_PREFIX} sed -i "s/${REGEX}/${REPLACE}/g" "${FILEPATH}" 2>&1 )
 
   # Check if stream editor error out.
   # Example: bad pattern would return code=1 and error message: sed: -e expression #1, char 8: unterminated address regex
@@ -1456,7 +1544,7 @@ function replace_all_lines_by_regexp {
 
   # Count the number of modified lines
   # Note: sed always return 0, so it won't let us know how many changes were done unless we count "before" and "after"
-  MODIFIED_LINES_COUNT=$( "${SUDO_READ_PREFIX}" diff "${TARGET_FILE}" "${ORIGINAL_FILE_COPY}" | grep '^<' | wc -l ) || { set_state "${FUNCNAME[0]}" 'failed_to_calculate_difference_after_edit'; return 13; }
+  MODIFIED_LINES_COUNT=$( ${SUDO_READ_FILE_PREFIX} diff "${FILEPATH}" "${ORIGINAL_FILE_COPY}" | grep '^<' | wc -l ) || { set_state "${FUNCNAME[0]}" 'failed_to_calculate_difference_after_edit'; return 13; }
 
   # Remove temporary file
   rm "${ORIGINAL_FILE_COPY}" || { set_state "${FUNCNAME[0]}" 'error_removing_temporary_file'; return 12; }
@@ -1520,37 +1608,37 @@ export -f s
 #
 function truncate_file {
   # Get filename argument
-  TARGET_FILE="${1}"
+  FILEPATH="${1}"
 
   # Check filename is not blank
-  if [ "${TARGET_FILE}" == "" ]; then
+  if [ "${FILEPATH}" == "" ]; then
     # Error: missing target filename
     return 2
   fi
 
   # Check file exists
-  if [ ! -f "${TARGET_FILE}" ]; then
+  if [ ! -f "${FILEPATH}" ]; then
     # Error: file does not exist
     return 3
   fi
 
   # Check if target file is readable
-  if [ ! -r "${TARGET_FILE}" ]; then
+  if [ ! -r "${FILEPATH}" ]; then
     # Error: not enough permissions to read target file
     return 4
   fi
 
   # Check if target file is writable
-  if [ ! -w "${TARGET_FILE}" ]; then
+  if [ ! -w "${FILEPATH}" ]; then
     # Error: not enough permissions to write target file
     return 5
   fi
 
   # Check if file is not empty, then truncate it to zero
-  if [ -s "${TARGET_FILE}" ]; then
+  if [ -s "${FILEPATH}" ]; then
     # File is not empty.
     # Warning: don't "sudo" here, for files with permissions like "-rw-rw-r--" truncate won't have access by root user
-    truncate --size=0 "${TARGET_FILE}" || { set_state "${FUNCNAME[0]}" 'error_trancating_file'; return 1; }
+    truncate --size=0 "${FILEPATH}" || { set_state "${FUNCNAME[0]}" 'error_trancating_file'; return 1; }
   else
     # File is already empty
     return 0
