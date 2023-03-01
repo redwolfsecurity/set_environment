@@ -1136,20 +1136,21 @@ export -f glob_matches
 #   fi
 #
 function inject_into_file {
+  # Indicate: function started
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Take arguments
   TARGET_FILE="${1}"
   PATTERN="${2}"
   INJECT_CONTENT="${3}"
 
   # Check inputs aren't empty
-  [ -z "${TARGET_FILE}" ] && { error "${FUNCNAME[0]}" "error_target_file_is_blank"; return 1; }
-  [ -z "${PATTERN}" ] && { error "${FUNCNAME[0]}" "error_pattern_is_blank"; return 1; }
-  [ -z "${INJECT_CONTENT}" ] && { error "${FUNCNAME[0]}" "error_inject_content_is_blank"; return 1; }
+  [ ! -z "${TARGET_FILE}" ] || { set_state "${FUNCNAME[0]}" "error_target_file_is_blank"; return 1; }
+  [ ! -z "${PATTERN}" ] || { set_state "${FUNCNAME[0]}" "error_pattern_is_blank"; return 1; }
+  [ ! -z "${INJECT_CONTENT}" ] || { set_state "${FUNCNAME[0]}" "error_inject_content_is_blank"; return 1; }
 
   # Check the target file exists
-  if [ ! -f "${TARGET_FILE}" ]; then
-    error "${FUNCNAME[0]}" "error_target_file_does_not_exist: '${TARGET_FILE}'"
-    return 1
-  fi
+  [ -f "${TARGET_FILE}" ] || { set_state "${FUNCNAME[0]}" "error_target_file_does_not_exist: '${TARGET_FILE}'"; return 1; }
 
   # Check if file TARGET_FILE contains the PATTERN
   if ! file_contains_pattern "${TARGET_FILE}" "${PATTERN}"; then
@@ -1157,27 +1158,29 @@ function inject_into_file {
 
     # Inject extra EOL if last line of the file missing EOL and file is not empty
     if ! does_file_have_eol_at_the_end "${TARGET_FILE}"; then
+      # Add EOL to the end of the file (so our injected line starts from the new line)
       echo "" >> "${TARGET_FILE}" || {
-        error "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'
+        set_state "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'
         return 1
       }
     fi
 
     # Append INJECT_CONTENT to the end of the TARGET_FILE
     echo "${INJECT_CONTENT}" >> "${TARGET_FILE}" || {
-      error "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'
+      set_state "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'
       return 1
     }
 
     # Post condition: verify that the expected pattern can be found after injection.
     if ! file_contains_pattern "${TARGET_FILE}" "${PATTERN}"; then
       # Expected pattern is still missing. Report an error.
-      error "${FUNCNAME[0]}" 'failed_postcondition_check_expected_pattern_is_missing_after_injection'
+      set_state "${FUNCNAME[0]}" 'failed_postcondition_check_expected_pattern_is_missing_after_injection'
       return 1
     fi
   fi
 
-  return 0
+  # Indicate: function succeed
+  set_state "${FUNCNAME[0]}" 'success'
 }
 export -f inject_into_file
 
@@ -1321,84 +1324,102 @@ export -f remove_all_lines_by_regexp
 
 ###############################################################################
 # Category: file
-# Utility function - parses given file and replaces all lines containing a match by the given regular expression to other string.
-# replace_all_lines_by_regexp "find pattern" "replacement string" "/path/to/file"
+# Utility function - parses given file and replaces all lines containing a match
+# by the given regular expression to other string.
+#
+# Synopsis:
+#   replace_all_lines_by_regexp "find pattern" "replacement string" "/path/to/file"
 #
 # Usage example:
-#   replace_all_lines_by_regexp "Some line matcher regexp \(.*\)" "New content"  /some/path/to/the/file.txt
+#   LINES_CHANGED_COUNT=$( replace_all_lines_by_regexp "Some line matcher regexp \(.*\)" "New content" "/some/path/to/the/file.txt" )
+#   if [ $? -eq 0 ]; then
+#     echo "Successfully changed ${LINES_CHANGED_COUNT} line(s)"
 #
 # Return codes:
-#   0 - successfully replaced lines
+#   0 - successfully changed lines (and print number of changed lines to the standard output)
 #   1 - missing inputs: regular expression or replacement string is empty
 #   2 - missing target filename
 #   3 - target file does not exist
 #   4 - not enough permissions to read the target file
 #   5 - not enough permissions to writ the target file
-#   6 - the pattern was not found (in some cases this might be 'success' because some line was already replaced successfully before)
+#   6 - the pattern was not found (in some cases this might be 'success' because some line was already changed successfully before (example: call same f-n twice))
 #   7 - failed to search by given pattern (most probably bad regex pattern)
 #   8 - editor return an error (most probably bad regex pattern
-#   9 - zero lines replaced (despite the pattern was found and editor didn't error out and we have all the permissions)
+#   9 - zero lines changed (despite the pattern was found and editor didn't error out and we have all the permissions)
 #  10 - Failed to create temporary file
 #  11 - Failed to copy target file to temporary file
+#  12 - Failed to remove temporary file
+#  13 - Failed to calculate difference after edit
+#  14 - Failed to get current user
 #
 function replace_all_lines_by_regexp {
+  # Indicate: function started
+  set_state "${FUNCNAME[0]}" 'started'
 
-  # Get regexp argument
-  REGEX="${1}"
-  REPLACE="${2}"
+  # Take arguments
+  local REGEX="${1}"
+  local REPLACE="${2}"
+  local TARGET_FILE="${3}"
 
-  # Check if regex is not empty
-  if [ "${REGEX}" == "" ]; then
-    # Error: missing regular expression
-    return 1
-  fi
-
-  # REPLACEMENT STRING CAN BE EMPTY. DISABLING THIS CHECK.
-  # # Check if replacement string is not empty
-  # if [ "${REPLACE}" == "" ]; then
-  #   # Error: missing replacement string
-  #   return 1
-  # fi
-
-  # Get filename argument
-  TARGET_FILE="${3}"
+  # Check if regex is not empty (note: ${REPLACE} can be empty)
+  [ ! -z "${REGEX}" ] || { set_state "${FUNCNAME[0]}" 'error_empty_regex_argument'; return 1; }
 
   # Check filename is not blank
-  if [ "${TARGET_FILE}" == "" ]; then
-    # Error: missing target filename
-    return 2
-  fi
+  [ ! -z "${TARGET_FILE}" ] || { set_state "${FUNCNAME[0]}" 'error_empty_regex_argument'; return 2; }
 
   # Check file exists
-  if [ ! -f "${TARGET_FILE}" ]; then
-    # Error: file does not exist
-    return 3
-  fi
+  [ -f "${TARGET_FILE}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 3; }
+  
+  # Check if target file is readable by the current user
+  # Also set SUDO_READ_PREFIX="sudo" if file can be read only by "root"
+  local SUDO_READ_PREFIX=""
+  [ -r "${TARGET_FILE}" ] || {
+    # The TARGET_FILE is not readable by the current user, check if current user can_sudo
+    local CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" "failed_to_get_current_user"; return 14; }
+    if can_sudo "${CURRENT_USER}"; then
+      # Yes, current uer can_sudo, try with sudo and if successful, then set SUDO_READ_PREFIX="sudo"
+      sudo [ -r "${TARGET_FILE}" ] && SUDO_READ_PREFIX="sudo" || { set_state "${FUNCNAME[0]}" 'error_target_file_is_not_readable'; return 4; }
+    else
+      set_state "${FUNCNAME[0]}" 'error_target_file_is_not_readable'
+      return 4
+    fi
+  }
 
-  # Check if target file is readable
-  if [ ! -r "${TARGET_FILE}" ]; then
-    # Error: not enough permissions to read target file
-    return 4
-  fi
+  # Check if target file is writable by the current user
+  # Also set SUDO_WRITE_PREFIX="sudo" if file can be written only by "root"
+  local SUDO_WRITE_PREFIX=""
+  [ -w "${TARGET_FILE}" ] || {
+    # The TARGET_FILE is not writable by the current user, check if current user can_sudo
+    local CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" "failed_to_get_current_user"; return 14; }
+    if can_sudo "${CURRENT_USER}"; then
+      # Yes, current uer can_sudo, try with sudo and if successful, then set SUDO_WRITE_PREFIX="sudo"
+      sudo [ -w "${TARGET_FILE}" ] && SUDO_WRITE_PREFIX="sudo" || { set_state "${FUNCNAME[0]}" 'error_target_file_is_not_writable'; return 4; }
+    else
+      set_state "${FUNCNAME[0]}" 'error_target_file_is_not_writable'
+      return 5
+    fi
+  }
 
-  # Check if target file is writable
-  if [ ! -w "${TARGET_FILE}" ]; then
-    # Error: not enough permissions to write target file
-    return 5
+  # If we need to use "sudo" for either: read or write, then
+  # let's set SUDO_READWRITE_PREFIX="sudo" for editor command
+  if [ "${SUDO_READ_PREFIX}" == "sudo" ] || [ "${SUDO_READ_PREFIX}" == "sudo" ]; then
+    local SUDO_READWRITE_PREFIX="sudo"
   fi
 
   # Try to find by given regexp
-  GREP_OUTPUT=$( grep -q "${REGEX}" "${TARGET_FILE}" 2>&1 )
+  GREP_OUTPUT=$( "${SUDO_READ_PREFIX}" grep -q "${REGEX}" "${TARGET_FILE}" 2>&1 )
   GREP_CODE=${?}
 
   # Check if the pattern is found
   if [ ${GREP_CODE} -eq 1 ]; then
     # The pattern was not found
+    set_state "${FUNCNAME[0]}" 'error_pattern_was_not_found'
     return 6
   fi
   if [ ${GREP_CODE} -gt 1 ]; then
     # Error: 7 - failed to search by given pattern.
     # Pass grep output through stdout.
+    set_state "${FUNCNAME[0]}" 'failed_to_search_by_given_pattern'
     return 7
   fi
 
@@ -1406,41 +1427,51 @@ function replace_all_lines_by_regexp {
   ORIGINAL_FILE_COPY="$( mktemp 2>&1 )"
   if [ ${?} -ne 0 ] || [ ! -f "${ORIGINAL_FILE_COPY}" ]; then
     # "failed to create temporary file. Details: ${ORIGINAL_FILE_COPY}"
+    set_state "${FUNCNAME[0]}" 'error_failed_to_create_temporary_file'
     return 10
   fi
 
   # Create a temporary copy of the target file before editing it
-  cp "${TARGET_FILE}" "${ORIGINAL_FILE_COPY}"
+  "${SUDO_READ_PREFIX}" cp "${TARGET_FILE}" "${ORIGINAL_FILE_COPY}"
   if [ ${?} -ne 0 ]; then
     # "failed to copy file ${TARGET_FILE} to temporary file ${ORIGINAL_FILE_COPY}"
+    set_state "${FUNCNAME[0]}" 'failed_to_copy_target_to_temporary_file'
     return 11
   fi
 
   # We found line(s) in the target file. Edit file:
-  EDITOR_OUTPUT=$( sudo sed -i "s/${REGEX}/${REPLACE}/" "${TARGET_FILE}" 2>&1 )
+  EDITOR_OUTPUT=$( "${SUDO_READWRITE_PREFIX}" sed -i "s/${REGEX}/${REPLACE}/" "${TARGET_FILE}" 2>&1 )
 
   # Check if stream editor error out.
   # Example: bad pattern would return code=1 and error message: sed: -e expression #1, char 8: unterminated address regex
   EDITOR_CODE=${?}
   if [ ${EDITOR_CODE} -ne 0 ]; then
-    # Error: editor return an error (most probably bad regex pattern)
+    # Error: inline editor return an error (most probably bad regex pattern)
     # Pass editor output (error details) to stdout.
-    rm "${ORIGINAL_FILE_COPY}"
+    set_state "${FUNCNAME[0]}" 'error_inline_editor_returned_bad_code'
+    # Remove temporary file
+    rm "${ORIGINAL_FILE_COPY}" || { set_state "${FUNCNAME[0]}" 'error_removing_temporary_file'; return 12; }
     return 8
   fi
 
   # Count the number of modified lines
   # Note: sed always return 0, so it won't let us know how many changes were done unless we count "before" and "after"
-  MODIFIED_LINES_COUNT=$( diff "${TARGET_FILE}" "${ORIGINAL_FILE_COPY}" | grep '^<' | wc -l )
-  rm "${ORIGINAL_FILE_COPY}"
+  MODIFIED_LINES_COUNT=$( "${SUDO_READ_PREFIX}" diff "${TARGET_FILE}" "${ORIGINAL_FILE_COPY}" | grep '^<' | wc -l ) || { set_state "${FUNCNAME[0]}" 'failed_to_calculate_difference_after_edit'; return 13; }
+
+  # Remove temporary file
+  rm "${ORIGINAL_FILE_COPY}" || { set_state "${FUNCNAME[0]}" 'error_removing_temporary_file'; return 12; }
 
   # Check the number of modified lines is > 0
   if [ ${MODIFIED_LINES_COUNT} -gt 0 ]; then
-    # Success. Pass the number of deleted lines through stdout.
+    # Success. Pass the number of modified lines through stdout.
+    echo "${MODIFIED_LINES_COUNT}"
+    # Indicate: function succeed
+    set_state "${FUNCNAME[0]}" 'success'
     return 0
   else
     # Somehow the number of lines did't change even though we found the pattern (obviously an error).
     # Pass editor output (error details) to stdout.
+    set_state "${FUNCNAME[0]}" 'error_zero_lines_changed'
     return 9
   fi
 }

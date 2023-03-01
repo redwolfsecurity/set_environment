@@ -246,10 +246,27 @@ function docker_install {
 
   apt_update
 
-  apt_install docker-ce || { set_state "${FUNCNAME[0]}" "failed_to_docker_install_ce"; return 1; }
-  apt_install docker-compose || { set_state "${FUNCNAME[0]}" "failed_to_docker_install_compose"; return 1; }
-  # containerd is available as a daemon for Linux and Windows. It manages the complete container lifecycle of its host system, from image transfer and storage to container execution and supervision to low-level storage to network attachments and beyond.
-  apt_install containerd.io || { set_state "${FUNCNAME[0]}" "failed_to_install_containerd_io"; return 1; }
+  # Define required pagage names
+  local PACKAGES=(
+    docker-ce
+    docker-ce-cli
+    docker-compose
+    
+    # The containerd is available as a daemon for Linux and Windows.
+    # It manages the complete container lifecycle of its host system,
+    # from image transfer and storage to container execution and supervision
+    # to low-level storage to network attachments and beyond.
+    containerd.io
+  )
+
+  # Install required packages
+  for PACKAGE in "${PACKAGES[@]}"; do
+    apt_install "${PACKAGE}" || { 
+      local ERROR_CODE="$( echo "failed_to_install_package_${PACKAGE}" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]' )"
+      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      return 1
+    }
+  done
 
   # Add ourselves as a user to be able to run docker
   GROUP="docker"
