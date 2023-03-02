@@ -83,14 +83,14 @@
 #    - is_process_running_as_me 
 ## END UTILITY FUNCTIONS: PROCESS
 ## BEGIN UTILITY FUNCTIONS: CONTAINERS
-#    - docker_container_name_exists 
+#    - container_name_exists 
 #    - docker_cleanup 
 #    - docker_volumes_to_containers_list 
 #    - get_installed_docker_version 
-#    - docker_is_container_healthy 
-#    - docker_is_container_running 
-#    - docker_restart_containers 
-#    - docker_stop_and_remove_container_by_name 
+#    - is_container_healthy 
+#    - is_container_running 
+#    - restart_containers 
+#    - stop_and_remove_container_by_name 
 ## END UTILITY FUNCTIONS: DOCKERS
 ## BEGIN UTILITY FUNCTIONS: STATE/SECRETS
 #    - generate_strong_password 
@@ -145,8 +145,6 @@
 #    - is_set_environment_working 
 #    - publish_message 
 ## END SET ENVIRONMENT FUNCTIONS
-
-### BEGIN USAGE/HELP FUNCTION
 
 ###############################################################################
 # Ask for value and store it in variable
@@ -271,7 +269,7 @@ export -f command_exists
 function file_toc {
 
   # Define path to ff_bash_functions file
-  FILEPATH="${1}"
+  local FILEPATH="${1}"
   [ ! -f "${FILEPATH}" ] && {
     error "error_ff_bash_functions_file_missing"
     return 1
@@ -518,10 +516,17 @@ export -f apt_upgrade
 #   1 - on error
 #
 # Usage examples:
-#   local VERSION="12.34.56"
-#   local MAJOR=$( get_version_component major "${VERSION}" ) || { set_state "${FUNCNAME[0]}" 'falied_to_extract_major_version'; return 1; }
-#   local MINOR=$( get_version_component minor "${VERSION}" ) || { set_state "${FUNCNAME[0]}" 'falied_to_extract_minor_version'; return 1; }
-#   local PATCH=$( get_version_component patch "${VERSION}" ) || { set_state "${FUNCNAME[0]}" 'falied_to_extract_patch_version'; return 1; }
+#   # Note: we can not do "local" call with command evaluation in 1-liner,
+#   # otherwise our error check will fail (will always indicate "success"
+#   # since it will be checking "local" call instead of $(...) expression exit code)
+#   local VERSION
+#   VERSION="12.34.56"
+#   local MAJOR
+#   MAJOR=$( get_version_component major "${VERSION}" ) || { set_state "${FUNCNAME[0]}" 'falied_to_extract_major_version'; return 1; }
+#   local MINOR
+#   MINOR=$( get_version_component minor "${VERSION}" ) || { set_state "${FUNCNAME[0]}" 'falied_to_extract_minor_version'; return 1; }
+#   local PATCH
+#   PATCH=$( get_version_component patch "${VERSION}" ) || { set_state "${FUNCNAME[0]}" 'falied_to_extract_patch_version'; return 1; }
 #
 function get_version_component {
   set_state "${FUNCNAME[0]}" 'started'
@@ -662,7 +667,7 @@ function parse_github_repository_url {
   local URL="${1}"
   local KEY="${2}"
 
-  # Check arguments are not empty
+  # Check required arguments are not empty
   [ ! -z "${URL}" ] || { return 1; }
   [ ! -z "${KEY}" ] || { return 1; }
 
@@ -783,30 +788,50 @@ export -f assert_makedir
 #   - returns value 0 if file has EOL at the end (or file is empty)
 #   - returns nonzero value in case file doesn't have EOL at the end
 #
+# Usage example:
+#   does_file_have_eol_at_the_end /path/to/file.txt
+#
 # Note: function does not check if file exist and does not return errors (return binary outcome: code 0 = yes, EOL is present or empty file, code 1 = EOL is missing in last line)
 #
 # Function is used to avoid concatination of more than one name/vale pairs into configuration files (be it yaml or .env files).
 #
 function does_file_have_eol_at_the_end {
-    FILENAME="${1}"
+  # Indicate: function started
+  set_state "${FUNCNAME[0]}" 'started'
 
-    # Check if file is empty
-    if [ ! -s "${FILENAME}" ]; then
-        # Note: For our needs (to avoid concatination of name/value lines) we consider empty file as having EOL (i.e. safe to append more name/values)
-        # The file is empty.
-        # Note: function does_file_have_eol_at_the_end() got empty file.
-        # For our needs (to avoid concatination of name/value lines)
-        # we consider empty file as having EOL (i.e. safe to append more name/values)
-        return 0
-    # -z - true if the length of string is zero
-    # -n - true if the length of string is nonzero
-    elif [ -z "$(tail -c 1 <"${FILENAME}")" ]; then
-        # The file ends with a newline or with a null byte,
-        return 0
-    else
-        # The file does not end with a newline nor with a null byte.
-        return 1
-    fi
+  # Take arguments
+  FILENAME="${1}"
+
+  # Check required arguments are not empty
+  [ ! -z "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" "error_target_filepath_is_blank"; return 1; }
+
+  # Get "sudo read / write" prefixes
+  # Note: we can not do "local" call with command evaluation in 1-liner,
+  # otherwise our error check will fail (will always indicate "success"
+  # since it will be checking "local" call instead of $(...) expression exit code)
+  local SUDO_READ_FILE_PREFIX
+  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 1; }
+
+  # Check if file is empty
+  if ${SUDO_READ_FILE_PREFIX} [ ! -s "${FILENAME}" ]; then
+      # Note: For our needs (to avoid concatination of name/value lines) we consider empty file as having EOL (i.e. safe to append more name/values)
+      # The file is empty.
+      # Note: function does_file_have_eol_at_the_end() got empty file.
+      # For our needs (to avoid concatination of name/value lines)
+      # we consider empty file as having EOL (i.e. safe to append more name/values)
+      set_state "${FUNCNAME[0]}" 'success'
+      return 0
+  # -z - true if the length of string is zero
+  # -n - true if the length of string is nonzero
+  elif [ -z "$(${SUDO_READ_FILE_PREFIX} cat "${FILENAME}" | tail -c 1)" ]; then
+      # The file ends with a newline or with a null byte,
+      set_state "${FUNCNAME[0]}" 'success'
+      return 0
+  else
+      # The file does not end with a newline nor with a null byte.
+      set_state "${FUNCNAME[0]}" 'success'
+      return 1
+  fi
 }
 export -f does_file_have_eol_at_the_end
 
@@ -834,17 +859,79 @@ export -f f
 ###############################################################################
 # Category: file
 # Utility function - Easy way to check if a file contains a pattern
+# Function takes 2 arguments:
+#   - filepath to the target file
+#   - regex pattern to use to search match in the file
+#
+# Note: function will use "sudo" to read the file if needed to escalate privileges 
+#
+# Return code:
+#   0 - success (file exist, pattern found)
+#   1 - error or pattern not found (file does not exist, bad arguments, pattern not found)
+#
+# Usage example:
+#   file_contains_pattern /path/to/file.txt 'regex patt.rn'
+#
+# ----------------------------------------------------------------------------
+# Note: When pattern is not found f-n return code 1 along with set_state "success" - this is strange.
+# TODO: (all) f-ns must be able to indicate success/error separately from result found/not found.
+# One way to solve this would be to use exit code for signaling errors, but return search result
+# via standard output, then the caller will have both $? and output to check them separately.
+#
+# Another alternative to use >2 return codes (example: 0=found, 1=not found, 2..N=error(s))
+#
+# More general question: how do we return error from boolean "is_xxx()" functions?
+# ----------------------------------------------------------------------------
+#
 function file_contains_pattern {
-    FILE="${1}"
-    PATTERN="${2}"
+  # Indicate: function started
+  set_state "${FUNCNAME[0]}" 'started'
 
-    if [ ! -e "${FILE}" ]; then
-        return 1
-    fi
-    if [  -z "${PATTERN}" ]; then
-        return 1
-    fi
-    grep --quiet --text "${PATTERN}" "${FILE}"
+  # Take arguments
+  local FILEPATH="${1}"
+  local PATTERN="${2}"
+
+  # Define list of required environment variables (must be not empty)
+  local ALL_EXPECTED_ENVRIONMENT_VARIABLES=(
+    FILEPATH
+    PATTERN
+  )
+
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${ALL_EXPECTED_ENVRIONMENT_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || {
+      local ERROR_CODE=$( echo "error_argument_not_set_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )
+      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      return 1
+    }
+  done
+
+  # Check if we need to use "sudo" prefix to read / write / readwrite (or check file existence) given file
+  # Note: we can not do "local" call with command evaluation in 1-liner,
+  # otherwise our error check will fail (will always indicate "success"
+  # since it will be checking "local" call instead of $(...) expression exit code)
+  local SUDO_READ_FILE_PREFIX
+  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 1; }
+
+  # Check the target file exists
+  if ${SUDO_READ_FILE_PREFIX} [ ! -e "${FILEPATH}" ]; then
+    set_state "${FUNCNAME[0]}" 'error_file_does_not_exist'
+    return 1
+  fi
+
+  # Search pattern in the file
+  ${SUDO_READ_FILE_PREFIX} grep --quiet --text "${PATTERN}" "${FILEPATH}"
+
+  # Analyze search exit code
+  if [ $? -eq 0 ]; then
+    # Pattern found
+    set_state "${FUNCNAME[0]}" 'success'
+    return 0
+  else
+    # Pattern not found
+    set_state "${FUNCNAME[0]}" 'success'  # "bad" code along with "success" - this is strange. TODO: (all) f-ns must be able to indicate success/error separately from result found/not found.
+    return 1
+  fi
 }
 export -f file_contains_pattern
 
@@ -1020,13 +1107,22 @@ function get_by_url {
   # Note: we use "-t" to allow "mktemp" to select temporary folder for us.
   # The "XXX" in the "mktemp" arguments are template - these will be replaced
   # with random characters.
-  local TMP_FILEPATH=$(mktemp -t ${FUNCNAME[0]}.XXXXXXX) || { set_state "${FUNCNAME[0]}" "error_generating_tmp_filepath"; return 1; }
+
+  # Note: we can not do "local" call with command evaluation in 1-liner,
+  # otherwise our error check will fail (will always indicate "success"
+  # since it will be checking "local" call instead of $(...) expression exit code)
+  local TMP_FILEPATH
+  TMP_FILEPATH=$(mktemp -t ${FUNCNAME[0]}.XXXXXXX) || { set_state "${FUNCNAME[0]}" "error_generating_tmp_filepath"; return 1; }
 
   # Chmod file from "-rw-------" to default "-rw-rw-r--" 664
   chmod 664 "${TMP_FILEPATH}" || { set_state "${FUNCNAME[0]}" "error_chmod_tmp_filepath"; return 1; }
 
   # Start actual download
-  local HTTP_CODE=$(curl \
+  # Note: we can not do "local" call with command evaluation in 1-liner,
+  # otherwise our error check will fail (will always indicate "success"
+  # since it will be checking "local" call instead of $(...) expression exit code)
+  local HTTP_CODE
+  HTTP_CODE=$(curl \
   --silent    \
   --retry 5    \
   --location    \
@@ -1095,20 +1191,28 @@ export -f get_by_url
 function get_sudo_read_file_prefix {
 
   # Take arguments
-  FILEPATH="${1}"
+  local FILEPATH="${1}"
 
-  # Check arguments are not empty
+  # Check required arguments are not empty
   [ ! -z "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" "error_target_filepath_is_blank"; return 1; }
 
-  # Check file exists
-  [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 1; }
+## EVEN THIS CHECK MIGHT NEED "sudo"
+## Let us intentionally skip this check, if file does not exist then
+## this f-n return an error: error_target_file_is_not_readable
+## 
+##  # Check file exists
+##  [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 1; }
   
   # Check if target file is readable by the current user.
   # Also set SUDO_READ_FILE_PREFIX="sudo" if file can be read only by "root"
   local SUDO_READ_FILE_PREFIX=""
   [ -r "${FILEPATH}" ] || {
     # The FILEPATH is not readable by the current user, check if current user can_sudo
-    local CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" "failed_to_get_current_user"; return 1; }
+    # Note: we can not do "local" call with command evaluation in 1-liner,
+    # otherwise our error check will fail (will always indicate "success"
+    # since it will be checking "local" call instead of $(...) expression exit code)
+    local CURRENT_USER
+    CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" "failed_to_get_current_user"; return 1; }
     if can_sudo "${CURRENT_USER}"; then
       # Yes, current uer can_sudo, try with sudo and if successful, then set SUDO_READ_FILE_PREFIX="sudo"
       sudo [ -r "${FILEPATH}" ] && SUDO_READ_FILE_PREFIX="sudo" || { set_state "${FUNCNAME[0]}" 'error_target_file_is_not_readable'; return 1; }
@@ -1124,6 +1228,7 @@ function get_sudo_read_file_prefix {
   # Indicate: function succeed
   set_state "${FUNCNAME[0]}" 'success'
 }
+export -f get_sudo_read_file_prefix
 
 ###############################################################################
 # Category: file
@@ -1136,20 +1241,28 @@ function get_sudo_read_file_prefix {
 function get_sudo_write_file_prefix {
 
   # Take arguments
-  FILEPATH="${1}"
+  local FILEPATH="${1}"
 
-  # Check arguments are not empty
+  # Check required arguments are not empty
   [ ! -z "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" "error_target_filepath_is_blank"; return 1; }
 
-  # Check file exists
-  [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 1; }
+## EVEN THIS CHECK MIGHT NEED "sudo"
+## Let us intentionally skip this check, if file does not exist then
+## this f-n return an error: error_target_file_is_not_writeable
+## 
+##  # Check file exists
+##  [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 1; }
   
   # Check if target file is writable by the current user
   # Also set SUDO_WRITE_FILE_PREFIX="sudo" if file can be written only by "root"
   local SUDO_WRITE_FILE_PREFIX=""
   [ -w "${FILEPATH}" ] || {
     # The FILEPATH is not writable by the current user, check if current user can_sudo
-    local CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" "failed_to_get_current_user"; return 1; }
+    # Note: we can not do "local" call with command evaluation in 1-liner,
+    # otherwise our error check will fail (will always indicate "success"
+    # since it will be checking "local" call instead of $(...) expression exit code)
+    local CURRENT_USER
+    CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" "failed_to_get_current_user"; return 1; }
     if can_sudo "${CURRENT_USER}"; then
       # Yes, current uer can_sudo, try with sudo and if successful, then set SUDO_WRITE_FILE_PREFIX="sudo"
       sudo [ -w "${FILEPATH}" ] && SUDO_WRITE_FILE_PREFIX="sudo" || { set_state "${FUNCNAME[0]}" 'error_target_file_is_not_writable'; return 1; }
@@ -1165,6 +1278,7 @@ function get_sudo_write_file_prefix {
   # Indicate: function succeed
   set_state "${FUNCNAME[0]}" 'success'
 }
+export -f get_sudo_write_file_prefix
 
 ###############################################################################
 # Category: file
@@ -1180,18 +1294,30 @@ function get_sudo_write_file_prefix {
 function get_sudo_readwrite_file_prefix {
 
   # Take arguments
-  FILEPATH="${1}"
+  local FILEPATH="${1}"
 
-  # Check arguments are not empty
+  # Check required arguments are not empty
   [ ! -z "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" "error_target_filepath_is_blank"; return 1; }
 
-  # Check file exists
-  [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 1; }
+## EVEN THIS CHECK MIGHT NEED "sudo"
+## Let us intentionally skip this check, if file does not exist then
+## this f-n return an error: ????
+## 
+##  # Check file exists
+##  [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 1; }
+  
+  # Get "sudo read / write" prefixes
+  # Note: we can not do "local" call with command evaluation in 1-liner,
+  # otherwise our error check will fail (will always indicate "success"
+  # since it will be checking "local" call instead of $(...) expression exit code)
+  local SUDO_READ_FILE_PREFIX
+  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 1; }
+  
+  local SUDO_WRITE_FILE_PREFIX
+  SUDO_WRITE_FILE_PREFIX=$(get_sudo_write_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 1; }
   
   # If we need to use "sudo" for either: read or write, then
   # let's set SUDO_READWRITE_FILE_PREFIX="sudo"
-  local SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 1; }
-  local SUDO_WRITE_FILE_PREFIX=$(get_sudo_write_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 1; }
   if [ "${SUDO_READ_FILE_PREFIX}" == "sudo" ] || [ "${SUDO_READ_FILE_PREFIX}" == "sudo" ]; then
     local SUDO_READWRITE_FILE_PREFIX="sudo"
   fi
@@ -1202,6 +1328,7 @@ function get_sudo_readwrite_file_prefix {
   # Indicate: function succeed
   set_state "${FUNCNAME[0]}" 'success'
 }
+export -f get_sudo_readwrite_file_prefix
 
 ###############################################################################
 # Category: file
@@ -1218,9 +1345,9 @@ export -f glob_matches
 # Utility function - injects text into the end of existing file.
 #
 # Function serch regular expression PATTERN in the existing file by the given FILEPATH and if missing, then
-# the INJECT_CONTENT got injected at the end of the FILEPATH.
+# the INJECT_CONTENT got injected at the end of the given file.
 # Return:
-#  code 0 - succesful injection (or PATTERN already present in the FILEPATH)
+#  code 0 - succesful injection (or PATTERN already present in the file)
 #  code 1 - failed to inject (not enough permissions, target file does not exist etc.)
 #           In case of error: the error will be reported by error() function (to standard output and into logger)
 #
@@ -1233,14 +1360,17 @@ export -f glob_matches
 #
 # Usage example:
 #
+#   # Create test target file
 #   FILEPATH="/tmp/some_file.txt"
 #   echo "creating example target file" > "${FILEPATH}"
-#   PATTERN="source \"${FF_AGENT_PROFILE_FILE}\""
+#
+#   # Define pattern to search
+#   PATTERN="source /some/required/dependency"
 #
 #   INJECT_CONTENT=$(
 #       cat <<EOT
-# # Sourcing custom ff_agent/.bashrc file (injected by set_environment -> ff_bash_functions -> ${FUNCNAME[0]} on $(date --utc))
-# source "${FF_AGENT_PROFILE_FILE}"
+# # Sourcing XYZ dependency (injected by set_environment -> ff_bash_functions -> ${FUNCNAME[0]} on $(date --utc))
+# source /some/required/dependency
 # injected line #3
 # injected line #4
 #
@@ -1259,33 +1389,59 @@ function inject_into_file {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Take arguments
-  FILEPATH="${1}"
-  PATTERN="${2}"
-  INJECT_CONTENT="${3}"
+  local FILEPATH="${1}"
+  local PATTERN="${2}"
+  local INJECT_CONTENT="${3}"
 
-  # Check arguments are not empty
-  [ ! -z "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" "error_target_filepath_is_blank"; return 1; }
-  [ ! -z "${PATTERN}" ] || { set_state "${FUNCNAME[0]}" "error_pattern_is_blank"; return 1; }
-  [ ! -z "${INJECT_CONTENT}" ] || { set_state "${FUNCNAME[0]}" "error_inject_content_is_blank"; return 1; }
+  # Check required arguments are not empty
+  # Define required variables
+  local REQUIRED_VARIABLES=(
+    FILEPATH
+    PATTERN
+    INJECT_CONTENT
+  )
+
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || {
+      local ERROR_CODE="$( echo "error_empty_argument_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
+      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      return 1
+    }
+  done
+
+  # Check if we need to use "sudo" prefix to read / write / readwrite (or check file existence) given file
+  # Note: we can not do "local" call with command evaluation in 1-liner,
+  # otherwise our error check will fail (will always indicate "success"
+  # since it will be checking "local" call instead of $(...) expression exit code)
+  local SUDO_READ_FILE_PREFIX
+  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 4; }
+  
+  local SUDO_WRITE_FILE_PREFIX
+  SUDO_WRITE_FILE_PREFIX=$(get_sudo_write_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
+  
+  local SUDO_READWRITE_FILE_PREFIX
+  SUDO_READWRITE_FILE_PREFIX=$(get_sudo_readwrite_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
 
   # Check the target file exists
-  [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" "error_target_file_does_not_exist: '${FILEPATH}'"; return 1; }
+  ${SUDO_READ_FILE_PREFIX} [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" "error_target_file_does_not_exist: '${FILEPATH}'"; return 1; }
 
-  # Check if target file contains the PATTERN
+  # Check if target file contains the PATTERN.
+  # Note: the file_contains_pattern() will take care of "sudo" prefix
   if ! file_contains_pattern "${FILEPATH}" "${PATTERN}"; then
     # Expected pattern is missing. Inject text.
 
     # Inject extra EOL if last line of the file missing EOL and file is not empty
     if ! does_file_have_eol_at_the_end "${FILEPATH}"; then
       # Add EOL to the end of the file (so our injected line starts from the new line)
-      echo "" >> "${FILEPATH}" || {
+      echo "" | ${SUDO_READ_FILE_PREFIX} tee -a "${FILEPATH}" || {
         set_state "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'
         return 1
       }
     fi
 
     # Append INJECT_CONTENT to the end of the target file
-    echo "${INJECT_CONTENT}" >> "${FILEPATH}" || {
+    echo "${INJECT_CONTENT}" | ${SUDO_READ_FILE_PREFIX} tee -a "${FILEPATH}" || {
       set_state "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'
       return 1
     }
@@ -1343,7 +1499,7 @@ export -f is_writable
 # Utility function -  parses given file and removes all lines containing a match by the given regular expression.
 #
 # Usage example:
-#   remove_all_lines_by_regexp "Some line matcher regexp \(.*\)"  /some/path/to/the/file.txt
+#   remove_all_lines_by_regexp /some/path/to/the/file.txt "Some line matcher regexp \(.*\)"
 #
 # Return codes:
 #   0 - successfully removed lines
@@ -1359,39 +1515,56 @@ export -f is_writable
 #
 function remove_all_lines_by_regexp {
 
+  # Indicate: function started
+  set_state "${FUNCNAME[0]}" 'started'
+
   # Get regexp argument
-  REGEX="${1}"
+  local FILEPATH="${1}"
+  local REGEX="${2}"
+  
+  # Check required arguments are not empty
+  # Define required variables
+  local REQUIRED_VARIABLES=(
+    FILEPATH
+    REGEX
+  )
 
-  # Check is is not empty string
-  if [ "${REGEX}" == "" ]; then
-    # Error: missing regular expression
-    return 1
-  fi
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || {
+      local ERROR_CODE="$( echo "error_empty_argument_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
+      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      return 1
+    }
+  done
 
-  # Get filename argument
-  FILEPATH="${2}"
+  # Check if we need to use "sudo" prefix to read / write / readwrite (or check file existence) given file
+  # Note: we can not do "local" call with command evaluation in 1-liner,
+  # otherwise our error check will fail (will always indicate "success"
+  # since it will be checking "local" call instead of $(...) expression exit code)
+  local SUDO_READ_FILE_PREFIX
+  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 4; }
+  
+  local SUDO_WRITE_FILE_PREFIX
+  SUDO_WRITE_FILE_PREFIX=$(get_sudo_write_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
+  
+  local SUDO_READWRITE_FILE_PREFIX
+  SUDO_READWRITE_FILE_PREFIX=$(get_sudo_readwrite_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
 
-  # Check filename is not blank
-  if [ "${FILEPATH}" == "" ]; then
-    # Error: missing target filename
-    return 2
-  fi
-
-  # Check file exists
-  if [ ! -f "${FILEPATH}" ]; then
-    # Error: file does not exist
-    return 3
-  fi
+  # Check the target file exists
+  ${SUDO_READ_FILE_PREFIX} [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" "error_target_file_does_not_exist: '${FILEPATH}'"; return 1; }
 
   # Check if target file is readable
-  if [ ! -r "${FILEPATH}" ]; then
+  if ${SUDO_READ_FILE_PREFIX} [ ! -r "${FILEPATH}" ]; then
     # Error: not enough permissions to read target file
+    set_state "${FUNCNAME[0]}" 'failed_to_read_target_file'
     return 4
   fi
 
   # Check if target file is writable
-  if [ ! -w "${FILEPATH}" ]; then
+  if ${SUDO_WRITE_FILE_PREFIX} [ ! -w "${FILEPATH}" ]; then
     # Error: not enough permissions to write target file
+    set_state "${FUNCNAME[0]}" 'failed_to_write_target_file'
     return 5
   fi
 
@@ -1399,44 +1572,52 @@ function remove_all_lines_by_regexp {
   # Note: we collect grep output even though "-q" is used: to cover all the error cases and
   # not spill output to stderr/stdout. We might enrich return error with more details later
   # (examaple: bad syntax in the used regex).
-  GREP_OUTPUT=$( grep -q "${REGEX}" "${FILEPATH}" 2>&1 )
-  EXIT_CODE=${?}
+  local GREP_OUTPUT
+  GREP_OUTPUT=$( ${SUDO_READ_FILE_PREFIX} grep --quiet "${REGEX}" "${FILEPATH}" 2>&1 )
+  local EXIT_CODE=${?}
 
   # Check if the pattern is found
   if [ ${EXIT_CODE} -eq 1 ]; then
-    # The pattern was not found
+    # The pattern match not found
+    set_state "${FUNCNAME[0]}" 'error_pattern_match_not_found'
     return 6
   fi
   if [ ${EXIT_CODE} -gt 1 ]; then
     # Error: 7 - failed to search by given pattern.
+    set_state "${FUNCNAME[0]}" 'failed_to_search_by_given_pattern'
     return 7
   fi
 
   # Take a note on the current number of lines
-  LINE_COUNT_BEFORE_CHANGE="$( cat "${FILEPATH}" | wc -l )"
+  local LINE_COUNT_BEFORE_CHANGE
+  LINE_COUNT_BEFORE_CHANGE="$( ${SUDO_READ_FILE_PREFIX} cat "${FILEPATH}" | wc -l )" || { set_state "${FUNCNAME[0]}" 'failed_to_count_lines_before_edit'; return 1; }
 
   # Found line in the target file. Edit file:
-  EDITOR_OUTPUT=$( sed -i "/${REGEX}/d" "${FILEPATH}" 2>&1 )
+  local EDITOR_OUTPUT
+  EDITOR_OUTPUT=$( ${SUDO_READWRITE_FILE_PREFIX} sed -i "/${REGEX}/d" "${FILEPATH}" 2>&1 )
 
   # Check if stream editor error out.
   # Example: bad pattern would return code=1 and error message: sed: -e expression #1, char 8: unterminated address regex
-  EDITOR_CODE=${?}
+  local EDITOR_CODE=${?}
   if [ ${EDITOR_CODE} -ne 0 ]; then
     # Error: editor return an error (most probably bad regex pattern)
+    set_state "${FUNCNAME[0]}" 'failed_to_edit_file'
     return 8
   fi
 
   # Count the number of deleted lines
   # Note: sed always return 0, so it won't let us know how many changes were done
-  LINE_COUNT_AFTER_CHANGE="$( cat "${FILEPATH}" | wc -l )"
+  LINE_COUNT_AFTER_CHANGE="$( ${SUDO_READ_FILE_PREFIX} cat "${FILEPATH}" | wc -l )" || { set_state "${FUNCNAME[0]}" 'failed_to_count_lines_after_edit'; return 1; }
   DELETED_LINES_COUNT=$(( LINE_COUNT_BEFORE_CHANGE - LINE_COUNT_AFTER_CHANGE ))
 
   # Check the number of deleted lines
   if [ ${DELETED_LINES_COUNT} -gt 0 ]; then
     # Success
+    set_state "${FUNCNAME[0]}" 'success'
     return 0
   else
     # Somehow the number of lines did't change even though we found the pattern (obviously an error).
+    set_state "${FUNCNAME[0]}" 'error_number_of_lines_after_edit_did_not_change'
     return 9
   fi
 }
@@ -1456,16 +1637,16 @@ export -f remove_all_lines_by_regexp
 #     echo "Successfully changed ${LINES_CHANGED_COUNT} line(s)"
 #
 # Return codes:
-#   0 - successfully changed lines (and print number of changed lines to the standard output)
-#   1 - missing inputs: regular expression or replacement string is empty
-#   2 - missing target filename
-#   3 - target file does not exist
-#   4 - not enough permissions to read the target file
-#   5 - not enough permissions to write the target file
-#   6 - the pattern was not found (in some cases this might be 'success' because some line was already changed successfully before (example: call same f-n twice))
-#   7 - failed to search by given pattern (most probably bad regex pattern)
-#   8 - editor return an error (most probably bad regex pattern
-#   9 - zero lines changed (despite the pattern was found and editor didn't error out and we have all the permissions)
+#   0 - Successfully changed lines (and print number of changed lines to the standard output)
+#   1 - Missing inputs: regular expression or replacement string is empty
+#   2 - Missing target filename
+#   3 - Target file does not exist
+#   4 - Not enough permissions to read the target file
+#   5 - Not enough permissions to write the target file
+#   6 - The pattern was not found (in some cases this might be 'success' because some line was already changed successfully before (example: call same f-n twice))
+#   7 - Failed to search by given pattern (most probably bad regex pattern)
+#   8 - Editor return an error (most probably bad regex pattern
+#   9 - Zero lines changed (despite the pattern was found and editor didn't error out and we have all the permissions)
 #  10 - Failed to create temporary file
 #  11 - Failed to copy target file to temporary file
 #  12 - Failed to remove temporary file
@@ -1480,22 +1661,40 @@ function replace_all_lines_by_regexp {
   local REPLACE="${2}"
   local FILEPATH="${3}"
 
-  # Check if regex is not empty (note: ${REPLACE} can be empty)
-  [ ! -z "${REGEX}" ] || { set_state "${FUNCNAME[0]}" 'error_empty_regex_argument'; return 1; }
+  # Check required arguments are not empty (note: ${REPLACE} can be empty)
+  # Define required variables
+  local REQUIRED_VARIABLES=(
+    REPLACE
+    FILEPATH
+  )
 
-  # Check filename is not blank
-  [ ! -z "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_empty_regex_argument'; return 2; }
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || {
+      local ERROR_CODE="$( echo "error_empty_argument_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
+      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      return 1
+    }
+  done
 
-  # Check file exists
-  [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 3; }
+  # Check if we need to use "sudo" prefix to read / write / readwrite (or check file existence) given file
+  # Note: we can not do "local" call with command evaluation in 1-liner,
+  # otherwise our error check will fail (will always indicate "success"
+  # since it will be checking "local" call instead of $(...) expression exit code)
+  local SUDO_READ_FILE_PREFIX
+  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 4; }
+  
+  # local SUDO_WRITE_FILE_PREFIX
+  # SUDO_WRITE_FILE_PREFIX=$(get_sudo_write_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
+  
+  local SUDO_READWRITE_FILE_PREFIX
+  SUDO_READWRITE_FILE_PREFIX=$(get_sudo_readwrite_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
 
-  # Check if we need to use "sudo" prefix to read / write / readwrite given file
-  local SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 4; }
-  local SUDO_WRITE_FILE_PREFIX=$(get_sudo_write_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
-  local SUDO_READWRITE_FILE_PREFIX=$(get_sudo_readwrite_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
+  # Check the target file exists
+  ${SUDO_READ_FILE_PREFIX} [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 3; }
 
   # Try to find by given regexp
-  GREP_OUTPUT=$( ${SUDO_READ_FILE_PREFIX} grep -q "${REGEX}" "${FILEPATH}" 2>&1 )
+  GREP_OUTPUT=$( ${SUDO_READ_FILE_PREFIX} grep --quiet "${REGEX}" "${FILEPATH}" 2>&1 )
   EXIT_CODE=${?}
 
   # Check if the pattern is found
@@ -1577,7 +1776,7 @@ function s {
     GREP_OPTIONS="--color=always"
     PATTERN="${1}"
     if [ "${PATTERN}" != "" ]; then
-        find . -name "*" -type f -not -path "*node_modules*" -exec grep -i --text --line-number -H "${PATTERN}" {} \;
+        find . -name "*" -type f -not -path "*node_modules*" -exec grep --ignore-case --text --line-number -H "${PATTERN}" {} \;
         return ${?}
     else
         echo "Search files in a subtree for a regex. Case insensitive." 1>&2
@@ -1608,7 +1807,7 @@ export -f s
 #
 function truncate_file {
   # Get filename argument
-  FILEPATH="${1}"
+  local FILEPATH="${1}"
 
   # Check filename is not blank
   if [ "${FILEPATH}" == "" ]; then
@@ -2045,8 +2244,14 @@ function is_process_running_as_me {
     [ ! -z "${COMMAND_PATTERN}" ] || { set_state "${FUNCNAME[0]}" 'error_require_pattern_to_search_for'; return 1; }
 
     # We require PS and GREP commands
-    local PS=$( command_exists ps ) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_ps_command'; return 1; }
-    local GREP=$( command_exists grep ) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_grep_command'; return 1; }
+    # Note: we can not do "local" call with command evaluation in 1-liner,
+    # otherwise our error check will fail (will always indicate "success"
+    # since it will be checking "local" call instead of $(...) expression exit code)
+    local PS
+    PS=$( command_exists ps ) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_ps_command'; return 1; }
+
+    local GREP
+    GREP=$( command_exists grep ) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_grep_command'; return 1; }
 
     # Get current user. Note: the ${USER} environment is NOT set when running as 'root' in docker, we must use f-n get_current_user() instead.
     CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
@@ -2120,7 +2325,10 @@ function get_secret {
   # Note: -z - true if the length of string is zero
   #       -n - true if the length of string is nonzero
   if [ -z "${GET_SECRET_WIPE_NULLS_RUN_ONCE_FLAG}" ]; then
-      grep -l null "${FF_AGENT_HOME}/secrets/*" 2>/dev/null | xargs rm 2>/dev/null
+      # Note: --files-with-matches - Suppress normal output; instead print the  name  of  each  input
+      #                              file  from  which  output would normally have been printed.  The
+      #                              scanning will stop on the first match.
+      grep --files-with-matches null "${FF_AGENT_HOME}/secrets/*" 2>/dev/null | xargs rm 2>/dev/null
       GET_SECRET_WIPE_NULLS_RUN_ONCE_FLAG="any non empty string can be 'a flag'"
   fi
 
@@ -2441,7 +2649,11 @@ function set_state {
 
   # Compose "state/chate" JSON and pipe it to publish_message()
   # Note: we POST "state/change" JSON to ff_host. (from portal to self, from 'traffic generator' to portal, from 'inside docker' to (agent?)).
-  local UUID="$( ff_uuid )" || { error "${FUNCNAME[0]}" 'failed_generate_uuid'; return 1; }
+  # Note: we can not do "local" call with command evaluation in 1-liner,
+  # otherwise our error check will fail (will always indicate "success"
+  # since it will be checking "local" call instead of $(...) expression exit code)
+  local UUID
+  UUID="$( ff_uuid )" || { error "${FUNCNAME[0]}" 'failed_generate_uuid'; return 1; }
 
   # Check: all the environment variables used in JSON are actually set.
   local ALL_EXPECTED_ENVRIONMENT_VARIABLES=(
@@ -2458,6 +2670,7 @@ function set_state {
     TIMESTAMP_EPOCH_MS
     UUID
   )
+
   for VARIABLE_NAME in "${ALL_EXPECTED_ENVRIONMENT_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
       local ERROR_CODE=$( echo "error_check_environment_variables_are_set_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )
@@ -2643,7 +2856,7 @@ function is_user_in_group {
   local GROUP="${2}"
   [ -z "${USERNAME}" ] && return 1
   [ -z "${GROUP}" ] && return 1
-  if getent group "${GROUP}" | grep -q "\b${USERNAME}\b"; then
+  if getent group "${GROUP}" | grep --quiet "\b${USERNAME}\b"; then
       return 0
   else
       return 1
@@ -2725,7 +2938,11 @@ function get_best_ff_agent_uri {
   # Check if variable already set. If not set - generate new uuid
   if [ -z "${FF_AGENT_URI}" ]; then
       # Generate new uuid, check errors, export new value
-      local UUID="$( ff_uuid )" || { set_state "${FUNCNAME[0]}" "failed_to_generate_new_uuid"; return 1; }
+      # Note: we can not do "local" call with command evaluation in 1-liner,
+      # otherwise our error check will fail (will always indicate "success"
+      # since it will be checking "local" call instead of $(...) expression exit code)
+      local UUID
+      UUID="$( ff_uuid )" || { set_state "${FUNCNAME[0]}" "failed_to_generate_new_uuid"; return 1; }
       FF_AGENT_URI="/agent/agent_uuid/${UUID}"
   fi
 
@@ -3360,7 +3577,11 @@ function check_set_get_secret {
 
   set_secret "${SECRET_NAME}" "${SECRET_VALUE}" || { set_state "${FUNCNAME[0]}" 'failed_set_secret'; return 1; }
 
-  local RETRIEVED_VALUE=$( get_secret "${SECRET_NAME}" ) || {
+  # Note: we can not do "local" call with command evaluation in 1-liner,
+  # otherwise our error check will fail (will always indicate "success"
+  # since it will be checking "local" call instead of $(...) expression exit code)
+  local RETRIEVED_VALUE
+  RETRIEVED_VALUE=$( get_secret "${SECRET_NAME}" ) || {
     set_state "${FUNCNAME[0]}" 'failed_retrieve_secret'
     return 1
   }
@@ -3403,7 +3624,12 @@ function check_set_get_state {
 
   # Set state and try to retrieve value
   set_state "${STATE_NAME}" "${STATE_VALUE}" || { return 1; }
-  local RETRIEVED_VALUE=$( get_state "${STATE_NAME}" ) || { set_state "${FUNCNAME[0]}" 'failed_retrieve_state'; return 1; }
+
+  # Note: we can not do "local" call with command evaluation in 1-liner,
+  # otherwise our error check will fail (will always indicate "success"
+  # since it will be checking "local" call instead of $(...) expression exit code)
+  local RETRIEVED_VALUE
+  RETRIEVED_VALUE=$( get_state "${STATE_NAME}" ) || { set_state "${FUNCNAME[0]}" 'failed_retrieve_state'; return 1; }
 
   # Compare retrieved and expected values
   if [ "${RETRIEVED_VALUE}" != "${STATE_VALUE}" ]; then
@@ -3831,7 +4057,11 @@ EOF
   )
 
   # Run command, capture server response as ${RESULT} and curl exit code as ${STATUS}
-  local RESULT=$(
+  # Note: we can not do "local" call with command evaluation in 1-liner,
+  # otherwise our error check will fail (will always indicate "success"
+  # since it will be checking "local" call instead of $(...) expression exit code)
+  local RESULT
+  RESULT=$(
     curl \
       --silent   \
       --retry 5    \
