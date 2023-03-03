@@ -836,6 +836,91 @@ function does_file_have_eol_at_the_end {
 export -f does_file_have_eol_at_the_end
 
 ###############################################################################
+# Category: file
+# Utility function - makes sure given content is present in the file.
+#
+# Synopsis:
+#     ensure_content "${TARGET_FILE}" "${PATTERN}" "${INJECT_CONTENT}"
+#
+# Function logic:
+#   - Take 3 arguments: target file, regex pattern and desired content
+#   - Search for given pattern
+#   - If no match found: call inject_into_file()
+#   - If match found: call replace_all_lines_by_regexp(), which will replace all occurrences
+#   - Use "sudo" if/when needed (and available)
+#   - Return proper code (0=success) and use set_state()
+#
+# Usage example (1st will modify existing line, 2nd will inject a new line):
+#   ensure_content "/etc/ssh/sshd_config" '^PermitRootLogin.*' "PermitRootLogin no"
+#   ensure_content "/etc/ssh/sshd_config" '^PasswordAuthentication.*' "PasswordAuthentication no"
+#
+function ensure_content {
+  # Indicate: function started
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Take arguments
+  local FILEPATH="${1}"
+  local REGEX="${2}"
+  local REPLACE="${3}"
+
+  # Check required arguments are not empty (note: ${REPLACE} can be empty)
+  # Define required variables
+  local REQUIRED_VARIABLES=(
+    FILEPATH
+    REGEX
+  )
+
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || {
+      local ERROR_CODE="$( echo "error_empty_argument_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
+      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      return 1
+    }
+  done
+
+  # Check if we need to use "sudo" prefix to read / write / readwrite (or check file existence) given file
+  # Note: we can not do "local" call with command evaluation in 1-liner,
+  # otherwise our error check will fail (will always indicate "success"
+  # since it will be checking "local" call instead of $(...) expression exit code)
+  local SUDO_READ_FILE_PREFIX
+  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 1; }
+  
+  # Check the target file exists
+  ${SUDO_READ_FILE_PREFIX} [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 1; }
+
+  # Try to find by given regexp
+  GREP_OUTPUT=$( ${SUDO_READ_FILE_PREFIX} grep --quiet "${REGEX}" "${FILEPATH}" 2>&1 )
+  EXIT_CODE=${?}
+
+  # Check if the pattern is found
+  if [ ${EXIT_CODE} -eq 1 ]; then
+    # The pattern was not found, call inject_into_file
+    inject_into_file "${@}" || { set_state "${FUNCNAME[0]}" 'failed_to_inject_into_file'; return 1; }
+    set_state "${FUNCNAME[0]}" 'success'
+    return 0
+  fi
+
+  if [ ${EXIT_CODE} -gt 1 ]; then
+    # Error: 7 - failed to search by given pattern.
+    set_state "${FUNCNAME[0]}" 'failed_to_search_by_given_pattern'
+    return 1
+  fi
+
+  if [ ${EXIT_CODE} -eq 0 ]; then
+    # Pattern found, call replace_all_lines_by_regexp
+    replace_all_lines_by_regexp "${@}" || { set_state "${FUNCNAME[0]}" 'failed_to_replace_all_lines_by_regexp'; return 1; }
+
+    # Return success
+    set_state "${FUNCNAME[0]}" 'success'
+    return 0
+  fi
+
+  set_state "${FUNCNAME[0]}" 'unexpected_error' # this should never happen, all EXIT_CODE cases covered above 
+  return 1  
+}
+
+###############################################################################
 # Utility function f
 # Search recursively from current location for files or directories starting with a prefix prefix, case insensitive
 # @param ${1} string package name
@@ -1441,7 +1526,7 @@ function inject_into_file {
     fi
 
     # Append INJECT_CONTENT to the end of the target file
-    echo "${INJECT_CONTENT}" | ${SUDO_READ_FILE_PREFIX} tee -a "${FILEPATH}" || {
+    echo "${INJECT_CONTENT}" | ${SUDO_READ_FILE_PREFIX} tee -a "${FILEPATH}" >/dev/null || {
       set_state "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'
       return 1
     }
@@ -1629,10 +1714,10 @@ export -f remove_all_lines_by_regexp
 # by the given regular expression to other string.
 #
 # Synopsis:
-#   replace_all_lines_by_regexp "find pattern" "replacement string" "/path/to/file"
+#   replace_all_lines_by_regexp "${TARGET_FILE}" "${PATTERN}" "${INJECT_CONTENT}"
 #
 # Usage example:
-#   LINES_CHANGED_COUNT=$( replace_all_lines_by_regexp "Some line matcher regexp \(.*\)" "New content" "/some/path/to/the/file.txt" )
+#   LINES_CHANGED_COUNT=$( replace_all_lines_by_regexp "/some/path/to/the/file.txt" "Some line matcher regexp \(.*\)" "New content" )
 #   if [ $? -eq 0 ]; then
 #     echo "Successfully changed ${LINES_CHANGED_COUNT} line(s)"
 #
@@ -1657,15 +1742,15 @@ function replace_all_lines_by_regexp {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Take arguments
-  local REGEX="${1}"
-  local REPLACE="${2}"
-  local FILEPATH="${3}"
+  local FILEPATH="${1}"
+  local REGEX="${2}"
+  local REPLACE="${3}"
 
   # Check required arguments are not empty (note: ${REPLACE} can be empty)
   # Define required variables
   local REQUIRED_VARIABLES=(
-    REPLACE
     FILEPATH
+    REGEX
   )
 
   # Check required environment variables are set
