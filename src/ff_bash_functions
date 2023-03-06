@@ -840,7 +840,7 @@ export -f does_file_have_eol_at_the_end
 # Utility function - makes sure given content is present in the file.
 #
 # Synopsis:
-#     ensure_content "${TARGET_FILE}" "${PATTERN}" "${INJECT_CONTENT}"
+#     ensure_file_contains "${FILEPATH}" "${REGEX}" "${INJECT_CONTENT}"
 #
 # Function logic:
 #   - Take 3 arguments: target file, regex pattern and desired content
@@ -851,19 +851,19 @@ export -f does_file_have_eol_at_the_end
 #   - Return proper code (0=success) and use set_state()
 #
 # Usage example (1st will modify existing line, 2nd will inject a new line):
-#   ensure_content "/etc/ssh/sshd_config" '^PermitRootLogin.*' "PermitRootLogin no"
-#   ensure_content "/etc/ssh/sshd_config" '^PasswordAuthentication.*' "PasswordAuthentication no"
+#   ensure_file_contains "/etc/ssh/sshd_config" '^PermitRootLogin.*' "PermitRootLogin no"
+#   ensure_file_contains "/etc/ssh/sshd_config" '^PasswordAuthentication.*' "PasswordAuthentication no"
 #
-function ensure_content {
+function ensure_file_contains {
   # Indicate: function started
   set_state "${FUNCNAME[0]}" 'started'
 
   # Take arguments
   local FILEPATH="${1}"
   local REGEX="${2}"
-  local REPLACE="${3}"
+  local INJECT_CONTENT="${3}"
 
-  # Check required arguments are not empty (note: ${REPLACE} can be empty)
+  # Check required arguments are not empty (note: ${INJECT_CONTENT} can be empty)
   # Define required variables
   local REQUIRED_VARIABLES=(
     FILEPATH
@@ -1714,7 +1714,7 @@ export -f remove_all_lines_by_regexp
 # by the given regular expression to other string.
 #
 # Synopsis:
-#   replace_all_lines_by_regexp "${TARGET_FILE}" "${PATTERN}" "${INJECT_CONTENT}"
+#   replace_all_lines_by_regexp "${FILEPATH}" "${REGEX}" "${INJECT_CONTENT}"
 #
 # Usage example:
 #   LINES_CHANGED_COUNT=$( replace_all_lines_by_regexp "/some/path/to/the/file.txt" "Some line matcher regexp \(.*\)" "New content" )
@@ -1744,9 +1744,9 @@ function replace_all_lines_by_regexp {
   # Take arguments
   local FILEPATH="${1}"
   local REGEX="${2}"
-  local REPLACE="${3}"
+  local INJECT_CONTENT="${3}"
 
-  # Check required arguments are not empty (note: ${REPLACE} can be empty)
+  # Check required arguments are not empty (note: ${INJECT_CONTENT} can be empty)
   # Define required variables
   local REQUIRED_VARIABLES=(
     FILEPATH
@@ -1812,7 +1812,7 @@ function replace_all_lines_by_regexp {
   fi
 
   # We found line(s) in the target file. Edit file:
-  EDITOR_OUTPUT=$( ${SUDO_READWRITE_FILE_PREFIX} sed -i "s/${REGEX}/${REPLACE}/g" "${FILEPATH}" 2>&1 )
+  EDITOR_OUTPUT=$( ${SUDO_READWRITE_FILE_PREFIX} sed -i "s/${REGEX}/${INJECT_CONTENT}/g" "${FILEPATH}" 2>&1 )
 
   # Check if stream editor error out.
   # Example: bad pattern would return code=1 and error message: sed: -e expression #1, char 8: unterminated address regex
