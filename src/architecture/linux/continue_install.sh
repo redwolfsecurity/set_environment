@@ -24,6 +24,7 @@ function continue_install {
     
     # Preserved "set environment" sources provide the installer linked by set_environment_install script, which must be in the PATH.
     ensure_ff_agent_bin_exists || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_ensure_ff_agent_bin_exists"; abort; }
+    copy_scripts_to_ff_agent_bin "${PROJECT_ROOT_DIR}" || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_sopy_scripts_to_ff_agent_bin"; abort; }
     ensure_set_environment_install_exists || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_ensure_set_environment_install_exists"; abort; }
 }
 
