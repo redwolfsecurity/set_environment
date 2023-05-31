@@ -2112,6 +2112,16 @@ export -f stop_and_remove_container_by_name
 function generate_strong_password {
     # Works on Linux and Mac
     # Makes password 16 characters long
+    # XXXX
+    local DEPENDENCIES="dd uudecode sed cut"
+    for DEPENDENCY in ${DEPENDENCIES}
+    do
+      if ! command_exists ${DEPENDENCY} >/dev/null; then
+          error "${FUNCNAME[0]}" "error_dependency_not_met_command_${DEPENDENCY}_not_found"
+          return 1
+      fi
+    done
+      
     dd if=/dev/urandom count=1 2> /dev/null | uuencode -m - | sed -ne 2p | cut -c-16
 }
 export -f generate_strong_password
