@@ -127,8 +127,8 @@ function apt_install_basic_packages {
       # System: CA certificates
       ca-certificates # Common CA certificates - Docker requires
 
-      # For generate_strong_password
-      uuencode
+      # For generate_strong_password (which uuencode is part of)
+      sharutils
   )
   local MISSING_PACKAGES=()
 
