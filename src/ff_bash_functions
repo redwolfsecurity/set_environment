@@ -3714,18 +3714,18 @@ export -f get_ff_agent_username
 #    fi
 #
 function is_framework_api_defined {
-  # Print 'false' if FF_HOST not set
-  [ -z "${FF_HOST}" ] && { echo 'false'; return; }
+  # Print 'false' and return 1if FF_HOST not set
+  [ -z "${FF_HOST}" ] && { echo 'false'; return 1; }
 
   # Print 'true' if both FF_API_USERNAME and FF_API_PASSWORDS are set
-  [ ! -z "${FF_API_USERNAME}" ] && [ ! -z "${FF_API_PASSWORDS}" ] && { echo 'true'; return; }
+  [ ! -z "${FF_API_USERNAME}" ] && [ ! -z "${FF_API_PASSWORDS}" ] && { echo 'true'; return 0; }
 
   # Print 'true' if FF_API_TOKEN is set
-  [ ! -z "${FF_API_TOKEN}" ] && { echo 'true'; return; }
+  [ ! -z "${FF_API_TOKEN}" ] && { echo 'true'; return 0; }
 
   # Print 'false' in all other cases
   echo 'false'
-  return
+  return 1
 }
 export -f is_framework_api_defined
 
@@ -3736,11 +3736,35 @@ export -f is_framework_api_defined
 function is_set_environment_working {
   set_state "${FUNCNAME[0]}" 'started'
 
-  # Check the "command_exists" exists
-  command_exists command_exists >/dev/null || { set_state "${FUNCNAME[0]}" 'failed_dependency_command_exists'; return 1; }
+  local HAS_ERRORS=false
+  local VERBOSE=false
+
+  [ "${1}" == "--verbose" ] && VERBOSE=true
+
+  # Verify expected commands exist
+  COMMANDS=(
+    command_exists
+    set_state
+    check_environment_variables_are_set
+    check_set_get_state
+    check_set_get_secret
+    check_ff_agent_bin_is_in_the_path
+  )
+
+  local ASSERTION='command_exists'
+  for COMMAND in ${COMMANDS[@]}
+  do
+    if command_exists ${COMMAND} >/dev/null ; then
+      [ "${VERBOSE}" == 'true' ] && log "SUCCESS assertion='${ASSERTION}' command='${COMMAND}'"
+    else
+      HAS_ERRORS=true
+      [ "${VERBOSE}" == 'true' ] && error "assertion='${ASSERTION}'  command='${COMMAND}'"
+      set_state "${FUNCNAME[0]}" "error_assertion_failed_${ASSERTION}_command_${COMMAND}"
+    fi
+  done
 
   # Loop through array of f-nested f-ns, on error set flag HAS_ERRORS (don't exit)
-  local HAS_ERRORS=false
+  # MaKE SURE THESE COMMANDS BELOW ARE TESTED ABOVE
   CHECKS=(
     # Check expected environments are in place
     check_environment_variables_are_set
@@ -3760,13 +3784,16 @@ function is_set_environment_working {
 
   local COMMAND  # Declare variable local, so it does not polute our scope outside this f-n
   for COMMAND in "${CHECKS[@]}"; do
-    if ! command_exists >/dev/null "${COMMAND}"; then
-      # Error: command not found
-      HAS_ERRORS=true
-      set_state "error_command_not_found_${COMMAND}"
-    else
-      # Command exists, run it and check result
-      "${COMMAND}" || { HAS_ERRORS=true; set_state "error_command_failed_${COMMAND}"; }
+    # Run the command. It must return 0 on success
+    if ${COMMAND}; then
+      # Command returns 0, which we take as successfull assertion
+      if [ "${COMMAND}" ]; then
+            [ "${VERBOSE}" == 'true' ] && log "SUCCESS assertion='${COMMAND}'"
+      else 
+        HAS_ERRORS=true
+        [ "${VERBOSE}" == 'true' ] && error "failed assertion='${COMMAND}'"
+        set_state "error_assertion_failed_${COMMAND}"
+      fi
     fi
   done
 
