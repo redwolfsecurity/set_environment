@@ -307,6 +307,9 @@ function docker_install {
   # Set up docker daemon logging (log to syslog)
   docker_set_log_to_syslog || { set_state "${FUNCNAME[0]}" "failed_to_docker_set_log_to_syslog"; return 1; }
   
+  # Restart docker daemon for logging change to take efffect
+  sudo systemctl restart docker || { set_state "${FUNCNAME[0]}" "failed_to_restart_docker_daemon"; return 1; }
+
   set_state "${FUNCNAME[0]}" 'success'
 }
 export -f docker_install
