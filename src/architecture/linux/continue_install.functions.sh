@@ -126,6 +126,9 @@ function apt_install_basic_packages {
 
       # System: CA certificates
       ca-certificates # Common CA certificates - Docker requires
+
+      # For generate_strong_password (which uuencode is part of)
+      sharutils
   )
   local MISSING_PACKAGES=()
 
@@ -1057,7 +1060,7 @@ EOT
   # Install 'n' into ff_agent/.n  (yes, we have downloaded 'n' into TMPDIR,
   # then used it to install 'npm', and now we use 'npm' to install "globally" n.
   # The proper installed 'n' will reisde under ff_agent/.n/ folder)
-  npm install --global n || {
+  npm install --verbose --global n || {
     # Error: clean up tmp folder, report an error and return error code 1
     popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
     set_state "${FUNCNAME[0]}" 'error_installing_n'; return 1;
