@@ -80,6 +80,7 @@
 ## END UTILITY FUNCTIONS: TERMINAL / SHELL
 ## BEGIN UTILITY FUNCTIONS: PROCESS
 #    - is_process_running_as_me 
+#    - retry_command
 ## END UTILITY FUNCTIONS: PROCESS
 ## BEGIN UTILITY FUNCTIONS: CONTAINERS
 #    - container_name_exists 
@@ -1864,6 +1865,77 @@ function is_process_running_as_me {
     return ${STATUS}
 }
 export -f is_process_running_as_me
+
+###############################################################################
+# Category: UTILITY FUNCTIONS: PROCESS
+#
+# Auxiliary method to retry a command several times up to the given number of maximum
+# attempts with sleeping given number of seconds between retries.
+#
+# Return code:
+#   0 - command executed successfully
+#   non-zero code - command failed after all attempts or bad arguments (check by "get_state retry_command")
+#                   Note: the error code will be actual command exit code returned on the last failed attempt.
+#
+# Synopsis:
+#       retry_command retry_attempts_max sleep_between_tries_seconds some_command [command_arguments...]
+#
+# Usage example:
+#       # Retry up to 5 times to install_xyz(), sleep 10 seconds between tries
+#       retry_command 5 10 install_xyz || { error "failed_to_install_xyz"; exit 1; }
+# 
+# Note: this function does not have state, i.e. the set_state() is not used
+# to indicate start/success (only for errors or failed attempts).
+function retry_command {
+
+    # Get number of max attempts
+    RETRY_ATTEMPTS_MAX=$1
+    # Shift all arguments to the left (original $1 gets lost)
+    shift
+
+    # Check argument not empty and >0
+    [ "${RETRY_ATTEMPTS_MAX}" != "" ] || { set_state "${FUNCNAME[0]}" 'failed_to_get_retry_attempts_max'; return 1; }
+    [ "${RETRY_ATTEMPTS_MAX}" -gt 0 ] || { set_state "${FUNCNAME[0]}" 'error_retry_attempts_max_must_be_positive_number'; return 1; }
+
+    # Get number of seconds to sleep between attempts
+    SLEEP_SECONDS=$1
+    shift # Shift all arguments to the left (original $1 gets lost)
+
+    # Check argument not empty & >1
+    [ "${SLEEP_SECONDS}" != "" ] || { set_state "${FUNCNAME[0]}" 'failed_to_get_sleep_seconds'; return 1; }
+    [ "${SLEEP_SECONDS}" -gt 0 ] || { set_state "${FUNCNAME[0]}" 'error_sleep_seconds_must_be_postive_number'; return 1; }
+
+    # Get the rest of the arguments as an array
+    local COMMAND_AS_ARRAY=("$@")
+
+    # Check: the command as array must be non-empty
+    [ ! -z "${COMMAND_AS_ARRAY}" ] || { set_state "${FUNCNAME[0]}" 'error_got_empty_command'; return 1; }
+
+    # Attempts loop: we will break out of the loop only if command is succeed or 
+    local ATTEMPT_COUNT=0
+    local FAILED_COMMAND_EXIT_CODE=0
+    while [ ${ATTEMPT_COUNT} -lt ${RETRY_ATTEMPTS_MAX} ]
+    do
+        # Increment attempts counter
+        ATTEMPT_COUNT=$((ATTEMPT_COUNT+1)) 
+
+        # Try the command and break the loop (by return 0) if succeed
+        "${COMMAND_AS_ARRAY[@]}" && return 0
+        
+        # Preserve actual exit code returned by failed command (this will be non-zero value)
+        FAILED_COMMAND_EXIT_CODE=$?
+
+        # Sleep only if not last attempt
+        [ ${ATTEMPT_COUNT} -lt ${RETRY_ATTEMPTS_MAX} ] && sleep ${SLEEP_SECONDS}
+    done
+
+    # Command failed on all attempts
+    set_state "${FUNCNAME[0]}" "failed_after_all_attempts"
+
+    # Return preserved bad code returned by the command
+    return ${FAILED_COMMAND_EXIT_CODE}
+}
+export -f retry_command
 
 ### END UTILITY FUNCTIONS: PROCESS
 

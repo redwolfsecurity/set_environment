@@ -1048,7 +1048,7 @@ EOT
 
 
   # Install 'n_lts' using dowloaded into TMPDIR 'n' ('n_lts' will be installed into ff_agent/.n)
-  bash n lts || {
+  retry_command 5 15 bash n lts || {
     # Error: clean up tmp folder, report an error and return error code 1
     popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
     set_state "${FUNCNAME[0]}" 'error_installing_n_lts'; return 1;
