@@ -38,7 +38,10 @@ function install_set_environment {
     [ -z "${CURRENT_USER}" ] && { echo "Error: failed to get current user. Can not proceed." >&2; exit 1; } # note: can not yet use error() / abort() / set_state()
     
     # Check the current user must be not "root"
-    [ "${CURRENT_USER}" != "root" ] || { echo "Error: can not run by 'root' user. Try to run as a different user." >&2; exit 1; } # note: can not yet use error() / abort() / set_state()
+    [ "${CURRENT_USER}" != "root" ] || { echo "Error: user 'root' is not allowed." >&2; exit 1; } # note: can not yet use error() / abort() / set_state()
+
+    # Check Effective UID is not 0. Note: we don't use "-ne 0" to avoid false positive in case EUID is not set.
+    [ "${EUID}" != "0" ] ||  { echo "Error: user 'root' is not allowed." >&2; exit 1; }
 
     # Change directory into the script's directory. This ensure all relative paths working correctly.
     cd "$( dirname $( readlink -f "${BASH_SOURCE[0]}" ) )" || { echo "Error: failed to change directory to $( dirname ${BASH_SOURCE[0]} )" >&2; exit 1; } # note: can not yet use error() / abort() / set_state()
