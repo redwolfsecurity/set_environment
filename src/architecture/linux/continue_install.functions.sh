@@ -1128,7 +1128,7 @@ export -f install_nodejs_suite
 function install_set_environment_baseline {
 
   # Discover environment (choose user, make sure it's home folder exists, check FF_CONTENT_URL is set etc.)
-  discover_environment || { abort "terminal_error_failed_to_discover_environment"; }
+  discover_environment --installer || { abort "terminal_error_failed_to_discover_environment"; }
 
   # Now we can set_state()
   set_state "${FUNCNAME[0]}" 'started'

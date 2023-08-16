@@ -3020,7 +3020,15 @@ export -f get_best_organization
 function discover_environment {
 
   ######################################################################
-  # Choose user, agent home and make sure agent home folder exists
+  #
+  # Choose user, agent home and make sure agent home folder exists. Also
+  # export bunch of environment variables (see list below).
+  #
+  # There are 2 modes:
+  #   1) Initial installation mode (for example on blank system)
+  #      This mode require "--installer" argument (see function install_set_environment_baseline).
+  #   2) Usage of installed set_environment mode (for example user calls discover_environment() from it's .profile)
+  #      This mode require no arguments.
   #
   # Choose proper user to run as create "ff_agent" folder (known as ${FF_AGENT_HOME}).
   # The proper user is not root but user with sudo that can install packages.
@@ -3048,7 +3056,32 @@ function discover_environment {
   #  FF_PROXY_USERNAME
   #  FF_PROXY_PASSWORD
   #
-  choose_ff_agent_home || { abort "failed_to_choose_ff_agent_home"; }
+
+  # Convert arguments to array
+  ARGUMENTS=($@)
+
+  # Check if we are in the "intstallation mode" (i.e. arguments array contains exact match for: "--installer")
+  IFS=$'\001'
+  if [[ "$IFS${ARGUMENTS[*]}$IFS" =~ "${IFS}--installer${IFS}" ]]; then
+      local IS_INSTALLER_MODE="true"
+  fi
+  unset IFS
+
+  # Choose user, it's home and ff_agent home. This will export 3 environment variables:
+  #   1) FF_AGENT_USERNAME
+  #   2) FF_AGENT_USER_HOME
+  #   3) FF_AGENT_HOME
+  #
+  # Note: we chose user only during "installation mode", and for "usage mode" we simply
+  # use current user.
+  if [[ "${IS_INSTALLER_MODE}" == "true" ]]; then
+    # Initial installation mode: don't pass arguments to choose_ff_agent_home()
+    choose_ff_agent_home || { abort "failed_to_choose_ff_agent_home"; }
+  else
+    # Usage of installed set_environment mode: pass current username to choose_ff_agent_home()
+    local CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
+    choose_ff_agent_home "${CURRENT_USER}" || { abort "failed_to_choose_ff_agent_home_for_user"; }
+  fi
   ensure_ff_agent_home_exists || { abort "failed_to_ensure_ff_agent_home_exists"; }
 
   # Get best values, check errors, export and set_secret().
@@ -3588,19 +3621,28 @@ export -f get_current_user
 
 ###############################################################################
 #
-# Function choose_ff_agent_home:
+# Function choose_ff_agent_home takes one optional argument (selected user).
+# During installation we need to choose the right user out of the list of
+# potential candidates (choosing will require "sudo"), but after installation
+# is complete we simply need to use set_environment for the current user.
+# To tell the above 2 cases apart (installation vs usage) we can pass additional
+# optional argument here USERNAME_ARGUMENT (note: we do not USERNAME because it
+# is taken by the linux system environment). If an argument is present, then there is
+# no need to select a user. If argument is not present, then it is installation case
+# and we need to select the "best user".
 #
 # Sets the following environment variables:
-#   FF_AGENT_USERNAME - example: ubuntu
-#   FF_AGENT_HOME          - example: /home/ubuntu/ff_agent
+#   FF_AGENT_USERNAME  - example: ubuntu
+#   FF_AGENT_USER_HOME - example: /home/ubuntu
+#   FF_AGENT_HOME      - example: /home/ubuntu/ff_agent
 #
 # Return:
-#  on success - export environment variables and return 0
-#  on error - return nonzero code
+#  on success - export environment variables (FF_AGENT_USERNAME, FF_AGENT_USER_HOME, FF_AGENT_HOME) and return 0
+#  on error - return non zero code
 #
 # Baseline installer must choose the "best user" (not root, able to sudo).
 #
-# Reason why we must avoid using root user: if program started by root user and a security
+# Reason why we must avoid using root user: if a program started by root user and a security
 # flaw is exploited, the attacker has access to all the data and can directly control the system.
 # For example, it might install a trojan or key-logger into your kernel. We only escalate user
 # privileges when required and allowed/agreed to install dependency packages.
@@ -3610,10 +3652,25 @@ export -f get_current_user
 #
 function choose_ff_agent_home {
 
+    # Take optional argument USERNAME_ARGUMENT (note: we do not USERNAME because it is taken by the linux system environment)
+    USERNAME_ARGUMENT="${1}"
+
     # These exports are our "return values"
     # Note: we should not get value from subprocess and call 'export' on the same 1-line liek this: "export SOMEVAR=$( some_function_call ) || { error "error details"; return 1; } "
     #       because export would hide actual exit call of the "some_function_call" and thus we'll miss an error!
-    FF_AGENT_USERNAME=$( get_ff_agent_username ) || { error "terminal_error_failed_to_choose_user"; return 1; }
+    if [ -z "USERNAME_ARGUMENT" ]; then
+      # The USERNAME_ARGUMENT is not present, we will get best ff_agent username
+      # by calling get_ff_agent_username(), which will try list of users and it will use "sudo".
+      FF_AGENT_USERNAME=$( get_ff_agent_username ) || { error "terminal_error_failed_to_choose_user"; return 1; }
+    else
+      # The USERNAME_ARGUMENT is present. Check if given user exists and use it.
+      if user_exists ${POTENTIAL_USER}; then
+        FF_AGENT_USERNAME="${USERNAME_ARGUMENT}"
+      else
+        # Error: we got argument "USERNAME_ARGUMENT", but that user does not exist!
+        error "terminal_error_choose_ff_agent_home_got_nonexisting_user_argument"; return 1;
+      fi
+    fi
     export FF_AGENT_USERNAME
 
     # Even if this function run by some other/not-chosen" user, the FF_AGENT_USER_HOME would point to the "right/choosen" home. Example: /home/ubuntu
