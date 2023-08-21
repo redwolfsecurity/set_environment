@@ -1,7 +1,5 @@
 #!/bin/bash -x
 
-# This is OS-family specific script to continue installing "set_environment" project.
-
 ###############################################################################
 #
 # continue_install() is a function to continuation OS-specific portion of set environment installation.
@@ -25,7 +23,20 @@ function continue_install {
     # Preserved "set environment" sources provide the installer linked by set_environment_install script, which must be in the PATH.
     ensure_ff_agent_bin_exists || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_ensure_ff_agent_bin_exists"; abort; }
     ensure_set_environment_install_exists || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_ensure_set_environment_install_exists"; abort; }
+
+    # Last step: run a selfcheck
+    is_set_environment_working || { set_state "${FUNCNAME[0]}" "terminal_error_selfcheck_failed"; abort; }
+
+    set_state "${FUNCNAME[0]}" 'success'
 }
+
+# This is OS-family specific script to continue installing "set_environment" project.
+
+# Source common functions
+source src/ff_bash_functions || { echo "Error: failed to source common functions." >&2; exit 1; } # note: can not yet use error() / abort() / set_state()
+
+# Initialize terminal
+terminal_initialize || { set_state "${FUNCNAME[0]}" "terminal_error_initialize_terminal"; abort; }
 
 continue_install  # no need to check errors here, the f-n itself reports errors (all of which are "terminal" errors) and aborts/exits.
 
