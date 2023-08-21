@@ -42,6 +42,12 @@ pipeline {
         // Let's run few basic checks by calling is_set_environment_working()
         // sh 'is_set_environment_working'                 // this fails: is_set_environment_working: not found
         sh 'bash --login -c "is_set_environment_working"'
+
+	// Ensure no syntax errors in bash scripts
+	sh 'bash -n install'
+	sh 'bash -n src/ff_bash_functions'
+	sh 'bash -n src/architecture/linux/continue_install.sh'
+	sh 'bash -n src/architecture/linux/continue_install.functions.sh'
       }
     }
 
