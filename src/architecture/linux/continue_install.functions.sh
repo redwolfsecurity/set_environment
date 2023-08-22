@@ -471,14 +471,18 @@ function install_docker {
       return 1
   fi
 
+  # Add GPG key for download.docker.com
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
   [ ${?} -ne 0 ] && { set_state "${FUNCNAME[0]}" "failed_to_add_gpg_key"; return 1; }
 
+  # Add repository
   sudo add-apt-repository "deb [arch=${ARCHITECTURE}] https://download.docker.com/linux/ubuntu ${DISTRO} stable"
   [ ${?} -ne 0 ] && { set_state "${FUNCNAME[0]}" "failed_to_add_repository"; return 1; }
 
+  # Update apt
   apt_update
 
+  # Install docker
   apt_install docker-ce || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_ce"; return 1; }
   apt_install docker-compose || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_compose"; return 1; }
   # containerd is available as a daemon for Linux and Windows. It manages the complete container lifecycle of its host system, from image transfer and storage to container execution and supervision to low-level storage to network attachments and beyond.
@@ -528,8 +532,20 @@ cat <<EOT
 EOT
   ) | sudo tee ${FILEPATH} > /dev/null
 
+  # Check exit code of setting up logging
   if [ "${?}" -ne 0 ]; then
       set_state "${FUNCNAME[0]}" "failed_to_install_docker_logging_configuration"
+      return 1
+  fi
+
+  # Restart docker to apply logging configuration (to syslog)
+  sudo systemctl restart docker
+
+  # Check docker now logs to syslog
+  local EXPECTED_DOCKER_LOGGING="syslog"
+  local ACTUAL_DOCKER_LOGGING=$( docker info --format '{{.LoggingDriver}}' )
+  if [ "${EXPECTED_DOCKER_LOGGING}" != "${ACTUAL_DOCKER_LOGGING}" ]; then
+      set_state "${FUNCNAME[0]}" "failed_to_confirm_logging_configuration_applied"
       return 1
   fi
 
