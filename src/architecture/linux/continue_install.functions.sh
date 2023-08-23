@@ -1150,7 +1150,7 @@ function install_set_environment_baseline {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Analyzes currently selected user and might call "background_install()" to re-run the installer under a different user
-  # Note: it have a dependency: variable FF_AGENT_USERNAME - must be set (by calling choose_ff_agent_home)
+  # Note: it have a dependency: variable FF_AGENT_USERNAME - must be set (by get_best_ff_agent_home())
   if [ "$( check_if_need_background_install )" == "true" ]; then
     background_install "${FF_AGENT_USERNAME}"
     return 0

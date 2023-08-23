@@ -103,7 +103,7 @@
 #    - can_sudo 
 #    - check_group_exists 
 #    - create_user 
-#    - effectively_root 
+#    - is_effectively_root 
 #    - get_home_directory_for_user 
 #    - get_ppid_cmd 
 #    - is_user_in_group 
@@ -135,7 +135,7 @@
 #    - check_set_get_secret 
 #    - check_set_get_state 
 #    - get_current_user 
-#    - choose_ff_agent_home 
+#    - get_best_ff_agent_home 
 #    - ensure_ff_agent_home_exists 
 #    - ff_api_get 
 #    - get_expected_nodejs_version 
@@ -2726,14 +2726,14 @@ export -f create_user
 ###############################################################################
 # Category: authorization
 # Utility function - Am I root? Return 0 if I am, 1 if not
-function effectively_root {
+function is_effectively_root {
     if  [ "${EUID}" -eq 0 ]; then
         return 0 # I have root powers
     else
         return 1 # Don't have root powers
     fi
 }
-export -f effectively_root
+export -f is_effectively_root
 
 ###############################################################################
 # Category: identity
@@ -3024,13 +3024,13 @@ function discover_environment {
   #
   # Choose proper user to run as create "ff_agent" folder (known as ${FF_AGENT_HOME}).
   # The proper user is not root but user with sudo that can install packages.
-  # We need to choose_ff_agent_home before we can set/get secrets.
+  # We need to get_best_ff_agent_home before we can set/get secrets.
   # This sets some of environment variables: FF_AGENT_USERNAME, FF_AGENT_HOME.
   # Also creates FF_AGENT_HOME directory.
   # Baseline installer must set the following environment variables:
-  #  [x] FF_AGENT_USERNAME  (see choose_ff_agent_home())
-  #  [x] FF_AGENT_USER_HOME (see choose_ff_agent_home())
-  #  [x] FF_AGENT_HOME      (see choose_ff_agent_home())
+  #  [x] FF_AGENT_USERNAME  (see get_best_ff_agent_home())
+  #  [x] FF_AGENT_USER_HOME (see get_best_ff_agent_home())
+  #  [x] FF_AGENT_HOME      (see get_best_ff_agent_home())
   #  [x] FF_AGENT_URI (see get_best_ff_agent_uri())
   #  [x] FF_HOST (see get_best_ff_host())
   #  [x] FF_CONTENT_URL (see get_best_ff_content_url())
@@ -3048,7 +3048,7 @@ function discover_environment {
   #  FF_PROXY_USERNAME
   #  FF_PROXY_PASSWORD
   #
-  choose_ff_agent_home || { abort "failed_to_choose_ff_agent_home"; }
+  get_best_ff_agent_home || { abort "failed_to_get_best_ff_agent_home"; }
   ensure_ff_agent_home_exists || { abort "failed_to_ensure_ff_agent_home_exists"; }
 
   # Get best values, check errors, export and set_secret().
@@ -3588,7 +3588,7 @@ export -f get_current_user
 
 ###############################################################################
 #
-# Function choose_ff_agent_home:
+# Function get_best_ff_agent_home:
 #
 # Sets the following environment variables:
 #   FF_AGENT_USERNAME - example: ubuntu
@@ -3608,7 +3608,7 @@ export -f get_current_user
 # Failure to choose the right user would end up in the terminal installation error:
 # "terminal_error_failed_to_discover_environment".
 #
-function choose_ff_agent_home {
+function get_best_ff_agent_home {
 
     # These exports are our "return values"
     # Note: we should not get value from subprocess and call 'export' on the same 1-line liek this: "export SOMEVAR=$( some_function_call ) || { error "error details"; return 1; } "
@@ -3624,7 +3624,7 @@ function choose_ff_agent_home {
     local AGENT_DIR_NAME="ff_agent"
     export FF_AGENT_HOME="${FF_AGENT_USER_HOME}/${AGENT_DIR_NAME}"
 }
-export -f choose_ff_agent_home
+export -f get_best_ff_agent_home
 
 ###############################################################################
 #
@@ -3740,7 +3740,7 @@ function get_ff_agent_username {
 
     POTENTIAL_USERS=( ff_agent ubuntu ${CURRENT_USER} )
 
-    if effectively_root
+    if is_effectively_root
     then
         # Look for a better user.
         for POTENTIAL_USER in "${POTENTIAL_USERS[@]}"
