@@ -139,7 +139,6 @@
 #    - ensure_ff_agent_home_exists 
 #    - ff_api_get 
 #    - get_expected_nodejs_version 
-#    - get_ff_agent_username 
 #    - is_framework_api_defined 
 #    - is_set_environment_working 
 #    - publish_message 
@@ -989,7 +988,7 @@ function get_by_url {
       # We use -f to make mv to overwrite whenever possible without asking for any confirmations
       mv -f "${TMP_FILEPATH}" "${FILEPATH}" || {
         # If failed to move try with sudo
-        CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" 'error_getting_current_user'; return 1; }
+        local CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" 'error_getting_current_user'; return 1; }
         if can_sudo "${CURRENT_USER}"; then
           # Have sudo privileges. Try to move using 'sudo'.
           sudo mv -f "${TMP_FILEPATH}" "${FILEPATH}" || { set_state "${FUNCNAME[0]}" 'error_moving_file_as_root'; return 1; }
@@ -1857,7 +1856,7 @@ function is_process_running_as_me {
     local GREP=$( command_exists grep ) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_grep_command'; return 1; }
 
     # Get current user. Note: the ${USER} environment is NOT set when running as 'root' in docker, we must use f-n get_current_user() instead.
-    CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
+    local CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
 
     ${PS} -u "${CURRENT_USER}" -U "${CURRENT_USER}" o command | ${GREP} --silent -e "^${COMMAND_PATTERN}"
     STATUS=${?}
@@ -3611,9 +3610,9 @@ export -f get_current_user
 function get_best_ff_agent_home {
 
     # These exports are our "return values"
-    # Note: we should not get value from subprocess and call 'export' on the same 1-line liek this: "export SOMEVAR=$( some_function_call ) || { error "error details"; return 1; } "
+    # Note: we should not get value from subprocess and call 'export' on the same 1-line like this: "export SOMEVAR=$( some_function_call ) || { error "error details"; return 1; } "
     #       because export would hide actual exit call of the "some_function_call" and thus we'll miss an error!
-    FF_AGENT_USERNAME=$( get_ff_agent_username ) || { error "terminal_error_failed_to_choose_user"; return 1; }
+    FF_AGENT_USERNAME="$(get_current_user)" || { error "terminal_error_failed_to_get_current_user"; return 1; }
     export FF_AGENT_USERNAME
 
     # Even if this function run by some other/not-chosen" user, the FF_AGENT_USER_HOME would point to the "right/choosen" home. Example: /home/ubuntu
@@ -3720,58 +3719,6 @@ function get_expected_nodejs_version {
   echo 'v18.4.0'
 }
 export -f get_expected_nodejs_version
-
-###############################################################################
-#
-# Find out the best user to run as.
-# Return:
-#  on success - return code 0 and print a username to use to standard output.
-#  on error   - log error() and return 1
-#
-# The logic "best user" selection:
-# We don't run as root, or root-like account.
-# We would like an account that can install packages to set the environment up correctly.
-# We check the following user accounts candidates: "ff_agent", "ubuntu" or current user.
-# Selected user should have rights to install packages. Ideally locally, but one step at a time.
-#
-function get_ff_agent_username {
-
-    CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
-
-    POTENTIAL_USERS=( ff_agent ubuntu ${CURRENT_USER} )
-
-    if is_effectively_root
-    then
-        # Look for a better user.
-        for POTENTIAL_USER in "${POTENTIAL_USERS[@]}"
-        do
-            if user_exists ${POTENTIAL_USER}
-            then
-                if can_sudo "${POTENTIAL_USER}"
-                then
-                    echo "${POTENTIAL_USER}"
-                    return 0
-                fi
-            fi
-        done
-
-        error "Current user ${CURRENT_USER} is effectively root and this script can not run as root."
-        error "Tried to find other users to run as (${POTENTIAL_USERS}) but was not successful."
-        return 1
-
-    else
-        # We aren't root. But can we sudo? We need that to currently install certain packages.
-        if can_sudo "${CURRENT_USER}"
-        then
-            echo "${CURRENT_USER}"
-            return 0
-        else
-            error "User ${CURRENT_USER} can not sudo. Currently sudo is required to install packages. Please run from a non-root account with sudo privileges."
-            return 1
-        fi
-    fi
-}
-export -f get_ff_agent_username
 
 ###############################################################################
 #
