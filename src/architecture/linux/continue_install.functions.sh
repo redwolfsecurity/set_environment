@@ -1582,6 +1582,17 @@ function preserve_sources {
   # Make sure ${FF_AGENT_HOME} is set
   [ ! -z "${FF_AGENT_HOME}" ] || { set_state "${FUNCNAME[0]}" 'error_ff_agen_home_not_set'; return 1; }
 
+  # We need to trust github.com to avoid errors like this:
+  # The authenticity of host 'github.com (140.82.113.4)' can't be established.
+  # This fix was found here:
+  # https://gist.github.com/vikpe/34454d69fe03a9617f2b009cc3ba200b
+  # https://github.com/ome/devspace/issues/38
+  # And to avoid dublicates:
+  # https://serverfault.com/questions/132970/can-i-automatically-add-a-new-host-to-known-hosts
+  if ! grep --quiet "$(ssh-keyscan github.com 2>/dev/null)" ${HOME}/.ssh/known_hosts; then
+    ssh-keyscan github.com >> ${FF_AGENT_USER_HOME}/.ssh/known_hosts
+  fi
+
   # Extract project owner from github repository URL
   local URL=$( git remote show origin | grep 'Fetch URL:' | awk -F'Fetch URL: ' '{print $2}' )
   [ ! -z "${URL}" ] || { set_state "${FUNCNAME[0]}" 'failed_to_extract_project_url'; return 1; }
