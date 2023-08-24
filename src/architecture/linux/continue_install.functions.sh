@@ -15,6 +15,7 @@
 #    - check_if_need_background_install
 #    - create_npmrc_credentials
 #    - ensure_ff_agent_bin_exists
+#    - ensure_ff_agent_home_exists
 #    - ensure_set_environment_install_exists
 #    - install_docker
 #    - install_ff_agent
@@ -346,6 +347,51 @@ function ensure_ff_agent_bin_exists {
   set_state "${FUNCNAME[0]}" 'success'
 }
 export -f ensure_ff_agent_bin_exists
+
+###############################################################################
+#
+# Function makes sure ${FF_AGENT_HOME} folder exist. If not - tries to create it.
+#
+# Require environment variables set:
+#   - FF_AGENT_HOME
+#
+# Return:
+#  on success - return 0
+#  on error - return nonzero code
+#
+function ensure_ff_agent_home_exists {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Dependency check: 'tr' is installed
+  if ! command_exists tr >/dev/null; then
+    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
+    return 1
+  fi
+
+  # Define required variables
+  local REQUIRED_VARIABLES=(
+    FF_AGENT_HOME
+  )
+
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || {
+      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
+      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      return 1
+    }
+  done
+
+  # Make sure ${FF_AGENT_HOME} folder exist
+  if [ ! -d "${FF_AGENT_HOME}" ]; then
+      # The folder is missing: create a new one
+      mkdir -p "${FF_AGENT_HOME}" || { set_state "${FUNCNAME[0]}" "failed_to_create_ff_agent_home"; return 1; }
+  fi
+
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f ensure_ff_agent_home_exists
 
 ###############################################################################
 #
@@ -1145,6 +1191,7 @@ function install_set_environment_baseline {
 
   # Discover environment (choose user, make sure it's home folder exists, check FF_CONTENT_URL is set etc.)
   discover_environment || { abort "terminal_error_failed_to_discover_environment"; }
+  ensure_ff_agent_home_exists || { abort "failed_to_ensure_ff_agent_home_exists"; }
 
   # Now we can set_state()
   set_state "${FUNCNAME[0]}" 'started'

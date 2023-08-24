@@ -129,6 +129,7 @@
 #    - get_lsb_release 
 ## END DISCOVER FUNCTIONS
 ## BEGIN SET ENVIRONMENT FUNCTIONS
+#    - assert_ff_agent_home_exists
 #    - check_environment_variables_are_set 
 #    - check_ff_agent_bin_is_in_the_path 
 #    - check_nodejs_installation 
@@ -136,7 +137,6 @@
 #    - check_set_get_state 
 #    - get_current_user 
 #    - get_best_ff_agent_home 
-#    - ensure_ff_agent_home_exists 
 #    - ff_api_get 
 #    - get_expected_nodejs_version 
 #    - is_framework_api_defined 
@@ -567,7 +567,7 @@ export -f index_of
 #   fi
 #
 #  Expected output:
-#    The ownder of the url 'git://github.com/some-user/my-repo.git' is 'some-user'.
+#    The owner of the url 'git://github.com/some-user/my-repo.git' is 'some-user'.
 #
 # Other example:
 # URLS=(
@@ -1806,7 +1806,6 @@ function terminal_initialize {
   fi
 
   return 0
-
 }
 export -f terminal_initialize
 
@@ -3048,7 +3047,7 @@ function discover_environment {
   #  FF_PROXY_PASSWORD
   #
   get_best_ff_agent_home || { abort "failed_to_get_best_ff_agent_home"; }
-  ensure_ff_agent_home_exists || { abort "failed_to_ensure_ff_agent_home_exists"; }
+  assert_ff_agent_home_exists || { abort "failed_to_assert_ff_agent_home_exists"; }
 
   # Get best values, check errors, export and set_secret().
   FF_CONTENT_URL=$( get_best_ff_content_url ) || { abort "failed_to_get_best_ff_content_url"; }
@@ -3329,6 +3328,52 @@ export -f get_lsb_release
 
 
 ### BEGIN SET ENVIRONMENT FUNCTIONS
+
+###############################################################################
+#
+# Function makes sure ${FF_AGENT_HOME} folder exist. If not it errors out.
+#
+# Require environment variables set:
+#   - FF_AGENT_HOME
+#
+# Return:
+#  on success - return 0
+#  on error - return nonzero code
+#
+function assert_ff_agent_home_exists {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Dependency check: 'tr' is installed
+  if ! command_exists tr >/dev/null; then
+    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
+    return 1
+  fi
+
+  # Define required variables
+  local REQUIRED_VARIABLES=(
+    FF_AGENT_HOME
+  )
+
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || {
+      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
+      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      return 1
+    }
+  done
+
+  # Make sure ${FF_AGENT_HOME} folder exist
+  if [ ! -d "${FF_AGENT_HOME}" ]; then
+      # The folder is missing: error out
+      set_state "${FUNCNAME[0]}" "error_ff_agent_home_does_not_exist"
+      return 1
+  fi
+
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f assert_ff_agent_home_exists
 
 ###############################################################################
 # Utility function check_environment_variables_are_set() checks if all the expected environment variables are set
@@ -3627,58 +3672,6 @@ export -f get_best_ff_agent_home
 
 ###############################################################################
 #
-# Function makes sure ${FF_AGENT_HOME} folder exist. If not - tries to create it.
-#
-# Require environment variables set:
-#   - FF_AGENT_HOME
-#   - FF_AGENT_USERNAME
-#
-# Return:
-#  on success - return 0
-#  on error - return nonzero code
-#
-function ensure_ff_agent_home_exists {
-  set_state "${FUNCNAME[0]}" 'started'
-
-  # Dependency check: 'tr' is installed
-  if ! command_exists tr >/dev/null; then
-    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
-    return 1
-  fi
-
-  # Define required variables
-  local REQUIRED_VARIABLES=(
-    FF_AGENT_HOME
-    FF_AGENT_USERNAME
-  )
-
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-      return 1
-    }
-  done
-
-  # Make sure ${FF_AGENT_HOME} folder exist
-  if [ ! -d "${FF_AGENT_HOME}" ]; then
-      # ${FF_AGENT_HOME} folder is missing: create new one.
-      mkdir -p "${FF_AGENT_HOME}"
-      if [ ${?} -ne 0 ]; then
-        # Failed to create ${FF_AGENT_HOME} - report error and return code 1
-        set_state "${FUNCNAME[0]}" "failed_to_create_ff_agent_home"
-        return 1
-      fi
-  fi
-
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
-}
-export -f ensure_ff_agent_home_exists
-
-###############################################################################
-#
 # Function takes the only parameter: REST-API "call" and makes https GET request: https://${FF_HOST}${CALL}
 #
 # Usage example:  ff_api_get "/admin/organizations"
@@ -3964,5 +3957,3 @@ EOF
 export -f publish_message
 
 ### END SET ENVIRONMENT FUNCTIONS
-
-terminal_initialize
