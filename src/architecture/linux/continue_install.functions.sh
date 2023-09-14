@@ -809,8 +809,18 @@ function install_go {
     }
   done
 
-  # Get the latest available version number.
-  local EXPECTED_VERSION=$( get_by_url 'https://go.dev/VERSION?m=text' '-' ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_latest_version_number'; return 1; }
+  # Get the latest available version number. Note: the url below now returns 2 lines,
+  # 1st with version (example: go1.21.0)
+  # 2nd useless line that breaks it if not supressed (example: time 2023-08-04T20:14:06Z)
+  local URL="https://go.dev/VERSION?m=text"
+  local EXPECTED_VERSION=$( get_by_url "${URL}" '-' | head -n1 )
+  
+  # Check status of 1st command in the excuted bove pipeline
+  if [ ${PIPESTATUS[0]} -ne 0 ]; then
+    set_state "${FUNCNAME[0]}" 'failed_to_get_latest_version_number'
+    return 1
+  fi
+
   [ ! -z "${EXPECTED_VERSION}" ] || { set_state "${FUNCNAME[0]}" 'failed_to_get_latest_version_number'; return 1; }
 
   # Check if go is already installed and has expected vesrion
@@ -824,6 +834,7 @@ function install_go {
         set_state "${FUNCNAME[0]}" 'success'
         return 0
       fi
+      # Version mismatch, simply continue installation (to upgrade)...
   fi
 
   # Create temporary folder (for downloading 'go' archive)
@@ -862,10 +873,20 @@ function install_go {
   # Check if file downloaded (in case of "404 not found" curl return code 0 and will not create "-o file")
   [ -f "${TEMP_DIR}/${TARBALL_FILENAME}" ] || { set_state "${FUNCNAME[0]}" "failed_to_download_archive"; return 1; }
 
-  # Remove pverious local version of 'go' if exists
+  # Remove previous local version of 'go' if exists
+  # 1st "blind assumption" to remove go from expected place
   if [ -d "${FF_AGENT_HOME}/go" ]; then
     rm -fr "${FF_AGENT_HOME}/go" || { set_state "${FUNCNAME[0]}" "failed_to_remove_existing_go"; return 1; }
   fi
+  # 2nd remove "go" if it is in the path
+  if command_exists go >/dev/null; then
+      # Yes, 'go' is installed.
+      local EXISTING_GO_FILEPATH=$(command_exists go)
+      sudo rm "${EXISTING_GO_FILEPATH}"
+  fi
+  # Also noted other locations! Must improve "remove go" functionality to cleanup these as well:
+  # /usr/bin/go -> ../lib/go-1.13/bin/go
+  # /usr/lib/go -> go-1.13/
 
   # Install 'go'
 
