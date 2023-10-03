@@ -14,9 +14,9 @@
 #    - background_install
 #    - check_if_need_background_install
 #    - create_npmrc_credentials
-#    - ensure_ff_agent_bin_exists
-#    - ensure_ff_agent_home_exists
-#    - ensure_set_environment_install_exists
+#    - set_environment_ensure_ff_agent_bin_exists
+#    - set_environment_ensure_ff_agent_home_exists
+#    - set_environment_ensure_install_exists
 #    - install_docker
 #    - install_ff_agent
 #    - install_ff_agent_bashrc
@@ -25,15 +25,15 @@
 #    - install_nodejs
 #    - install_nodejs_suite
 #    - install_set_environment_baseline
-#    - is_pm2_installed ()
-#    - is_pm2_running_as_me ()
+#    - pm2_is_installed ()
+#    - pm2_is_running_as_me ()
 #    - pm2_configure ()
 #    - pm2_ensure ()
 #    - pm2_install ()
 #    - pm2_start ()
 #    - pm2_stop ()
 #    - pm2_uninstall ()
-#    - preserve_sources
+#    - set_environment_preserve_source_code
 #    - set_script_logging
 #    - setup_logging
 
@@ -317,7 +317,7 @@ export -f check_if_need_background_install
 #
 # Function makes sure "${FF_AGENT_HOME}/bin" folder is created.
 #
-function ensure_ff_agent_bin_exists {
+function set_environment_ensure_ff_agent_bin_exists {
 
   set_state "${FUNCNAME[0]}" 'started'
 
@@ -346,7 +346,7 @@ function ensure_ff_agent_bin_exists {
 
   set_state "${FUNCNAME[0]}" 'success'
 }
-export -f ensure_ff_agent_bin_exists
+export -f set_environment_ensure_ff_agent_bin_exists
 
 ###############################################################################
 #
@@ -359,7 +359,7 @@ export -f ensure_ff_agent_bin_exists
 #  on success - return 0
 #  on error - return nonzero code
 #
-function ensure_ff_agent_home_exists {
+function set_environment_ensure_ff_agent_home_exists {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Dependency check: 'tr' is installed
@@ -391,14 +391,15 @@ function ensure_ff_agent_home_exists {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f ensure_ff_agent_home_exists
+export -f set_environment_ensure_ff_agent_home_exists
 
 ###############################################################################
 #
-# Function makes sure symlink exists (or create new one if missing).
+# Function makes sure the symlink to "set environment" installer exists in the FF_AGENT_HOME/bin/ folder.
+# If symlink is missing it will be created:
 #    ${FF_AGENT_HOME}/bin/set_environment_install -> ${FF_AGENT_HOME}/git/redwolfsecurity/set_environment/install
 #
-function ensure_set_environment_install_exists {
+function set_environment_ensure_install_exists {
 
   set_state "${FUNCNAME[0]}" 'started'
 
@@ -436,7 +437,7 @@ function ensure_set_environment_install_exists {
 
   set_state "${FUNCNAME[0]}" 'success'
 }
-export -f ensure_set_environment_install_exists
+export -f set_environment_ensure_install_exists
 
 ###############################################################################
 #
@@ -661,7 +662,7 @@ function install_ff_agent_bashrc {
 
   # Make sure ${FF_AGENT_HOME} folder exists
   if [ ! -d "${FF_AGENT_HOME}" ]; then
-    # ${FF_AGENT_HOME} folder is missing. Don't try to create it (it is responsibility of ensure_ff_agent_home_exists()).
+    # ${FF_AGENT_HOME} folder is missing. Don't try to create it (it is responsibility of set_environment_ensure_ff_agent_home_exists()).
     # Report an error and abort.
     set_state "${FUNCNAME[0]}" 'terminal_error_ff_agent_home_folder_does_not_exist'
     error "FF_AGENT_HOME='${FF_AGENT_HOME}' directory Does not exist. Aborting."
@@ -1212,7 +1213,7 @@ function install_set_environment_baseline {
 
   # Discover environment (choose user, make sure it's home folder exists, check FF_CONTENT_URL is set etc.)
   discover_environment || { abort "terminal_error_failed_to_discover_environment"; }
-  ensure_ff_agent_home_exists || { abort "failed_to_ensure_ff_agent_home_exists"; }
+  set_environment_ensure_ff_agent_home_exists || { abort "failed_to_set_environment_ensure_ff_agent_home_exists"; }
 
   # Now we can set_state()
   set_state "${FUNCNAME[0]}" 'started'
@@ -1237,10 +1238,10 @@ export -f install_set_environment_baseline
 
 ###############################################################################
 # Category: process
-# is_pm2_installed
+# pm2_is_installed
 # Checks if pm2 is installed
 # Returns 0 if it is, 1 if it isn't
-function is_pm2_installed {
+function pm2_is_installed {
     set_state "${FUNCNAME[0]}" 'started'
     local STATUS=0
     local PACKAGE="pm2"
@@ -1253,7 +1254,7 @@ function is_pm2_installed {
     set_state "${FUNCNAME[0]}" 'success'
     return ${STATUS}
 }
-export -f is_pm2_installed
+export -f pm2_is_installed
 
 # ##########################################################################################
 # #
@@ -1397,22 +1398,22 @@ export -f is_pm2_installed
 
 ###############################################################################
 # Category: process
-# is_pm2_running_as_me
+# pm2_is_running_as_me
 # Will return 0 if it is, 1 if it is not
-function is_pm2_running_as_me {
+function pm2_is_running_as_me {
     set_state "${FUNCNAME[0]}" 'started'
     # Process will look like PM2 v4.5.5: God Daemon (/home/user/.pm2)
     local PATTERN="PM2 .*: God Daemon"
 
     # Check if process is running as local user.
-    is_process_running_as_me "${PATTERN}"
+    process_is_running_as_me "${PATTERN}"
     STATUS=${?}
 
     set_state "${FUNCNAME[0]}" 'success'
 
     return ${STATUS}
 }
-export -f is_pm2_running_as_me
+export -f pm2_is_running_as_me
 
 ###############################################################################
 # Category: process
@@ -1453,7 +1454,7 @@ function pm2_ensure {
     set_state "${FUNCNAME[0]}" 'started'
 
     # If pm2 is running, then we ensure it is properly configured. It might have been running already, but not properly configured.
-    is_pm2_running_as_me
+    pm2_is_running_as_me
     if [ ${?} == 0 ]; then
         pm2_configure || { set_state "${FUNCNAME[0]}" 'error_configuring_pm2'; abort 'error_configuring_pm2'; }
         set_state "${FUNCNAME[0]}" 'success'
@@ -1462,13 +1463,13 @@ function pm2_ensure {
 
     # It is not running as me, it might not be installed. If that's the case, we install it.
     # Is pm2 installed? If not, install it
-    is_pm2_installed || pm2_install || { set_state "${FUNCNAME[0]}" 'error_failed_to_install_pm2'; abort; }
+    pm2_is_installed || pm2_install || { set_state "${FUNCNAME[0]}" 'error_failed_to_install_pm2'; abort; }
 
     # Now it has to at least be installed, and not running, so we try to start it.
     pm2_start || { set_state "${FUNCNAME[0]}" 'failed_to_start_pm2'; abort 'failed_to_start_pm2'; }
 
     # Check if pm2 started and running by expected user
-    is_pm2_running_as_me || { set_state "${FUNCNAME[0]}" 'error_pm2_not_running_as_user'; abort 'error_pm2_not_running_as_user'; }
+    pm2_is_running_as_me || { set_state "${FUNCNAME[0]}" 'error_pm2_not_running_as_user'; abort 'error_pm2_not_running_as_user'; }
 
     # Now it is running, so let's configure it
     pm2_configure || { set_state "${FUNCNAME[0]}" 'error_configuring_pm2'; abort 'error_configuring_pm2'; }
@@ -1493,7 +1494,7 @@ function pm2_install {
     # "pm2 kill" instead of trying to use f-n stop_pm(). Also then update f-n comments to say that this f-n stops pm2 if it is already installed.
     #
     # # We will try to stop it. But that won't stop us from uninstalling it.
-    # is_pm2_running_as_me && stop_pm2
+    # pm2_is_running_as_me && stop_pm2
 
     local PM2=$( command_exists "${NPM_PACKAGE}" )
     [ "${PM2}" != "" ] && { set_state "${FUNCNAME[0]}" 'success_no_action_already_installed'; return 0; }
@@ -1519,7 +1520,7 @@ function pm2_start {
     set_state "${FUNCNAME[0]}" 'started'
 
     # Check if it is running. If it is, we're happy.
-    is_pm2_running_as_me && { set_state "${FUNCNAME[0]}" 'success_no_action_pm2_is_running'; return 0; }
+    pm2_is_running_as_me && { set_state "${FUNCNAME[0]}" 'success_no_action_pm2_is_running'; return 0; }
 
     local PM2=$( command_exists pm2 )
     [ -z "${PM2}" ] && { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_pm2_command'; return 1; }
@@ -1528,7 +1529,7 @@ function pm2_start {
     # Check if it is running. If it is, we're happy.
     # Note: pm2 can start and still return non-zero (i.e. it started but there was no ecosystem.config.js
     # So it is not sufficient to test for return code, but if it is running as me, then it is at least started
-    is_pm2_running_as_me && { set_state "${FUNCNAME[0]}" 'success'; return 0; }
+    pm2_is_running_as_me && { set_state "${FUNCNAME[0]}" 'success'; return 0; }
 
     set_state "${FUNCNAME[0]}" 'error_failed_to_start_pm2'
 }
@@ -1543,7 +1544,7 @@ function pm2_stop {
     set_state "${FUNCNAME[0]}" 'started'
 
     # Check if it is running. If it isn't, we finish.
-    is_pm2_running_as_me || { set_state "${FUNCNAME[0]}" 'success_no_action_pm2_not_running'; return 0; }
+    pm2_is_running_as_me || { set_state "${FUNCNAME[0]}" 'success_no_action_pm2_not_running'; return 0; }
 
     # Check if we have the pm2 command. We need it to be able to stop pm2
     local PM2=$( command_exists pm2 ) || { set_state "${FUNCNAME[0]}" 'error_pm2_command_not_found'; return 1; }
@@ -1553,7 +1554,7 @@ function pm2_stop {
     ${PM2} kill || { set_state "${FUNCNAME[0]}" 'error_pm2_kill_failed'; return 1; }
 
     # Verify that it is actually stopped. If it is still running after we killed it, it is a problem.
-    is_pm2_running_as_me || { set_state "${FUNCNAME[0]}" 'error_unable_to_validate_pm2_daemon_gone_postcondition_pm2_still_running'; return 1; }
+    pm2_is_running_as_me || { set_state "${FUNCNAME[0]}" 'error_unable_to_validate_pm2_daemon_gone_postcondition_pm2_still_running'; return 1; }
 
     # We have stopped it, and it is not running.
     set_state "${FUNCNAME[0]}" 'success'
@@ -1570,7 +1571,7 @@ function pm2_uninstall {
     local PACKAGE="pm2"
 
     # If it is not installed, we are done.
-    is_pm2_installed || { set_state "${FUNCNAME[0]}" 'success_no_action_not_installed'; return 0; }
+    pm2_is_installed || { set_state "${FUNCNAME[0]}" 'success_no_action_not_installed'; return 0; }
 
     # It's installed, so we will try to remove it
     local NPM=$( command_exists npm)
@@ -1578,7 +1579,7 @@ function pm2_uninstall {
     ${NPM} remove --global "${PACKAGE}" || { set_state "${FUNCNAME[0]}" 'error_uninstalling_package'; return 1; }
 
     # Verify it is removed. If this returns 1, it is not found. If it returns 0, we still have it.
-    is_pm2_installed || { set_state "${FUNCNAME[0]}" 'success'; return 0; }
+    pm2_is_installed || { set_state "${FUNCNAME[0]}" 'success'; return 0; }
 
     set_state "${FUNCNAME[0]}" 'error_validating_uninstallation'
 }
@@ -1586,16 +1587,17 @@ export -f pm2_uninstall
 
 ###############################################################################
 #
-# Function preserve_sources require the only argument: root folder of the project from which installer was started.
-# It will analyze if installer was started from expected place (ff_agent/git/[companyname]/set_environment/ folder) and if not
-# it will preserve source code into appropriate folder for future reuse (updates etc.).
+# Function set_environment_preserve_source_code require the only argument: root folder of the project
+# from which the installer was started. It will analyze if the installer was started
+# from the expected place (ff_agent/git/[companyname]/set_environment/ folder) and if not
+# it will preserve source code into appropriate folder for future use (updates etc.).
 #
-function preserve_sources {
+function set_environment_preserve_source_code {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Get passed parameters (path to currently installed project folder)
   PROJECT_ROOT_DIR="${1}"
-  [ -d "${PROJECT_ROOT_DIR}" ] || { set_state "${FUNCNAME[0]}" 'failed_to_preserve_sources'; return 1; }
+  [ -d "${PROJECT_ROOT_DIR}" ] || { set_state "${FUNCNAME[0]}" 'failed_to_set_environment_preserve_source_code'; return 1; }
 
   # As a preparation to preserve project source files (used during this installation), let's change directory to the project root directory.
   pushd "${PROJECT_ROOT_DIR}" || { set_state "${FUNCNAME[0]}" 'failed_to_cd_into_project'; return 1; }
@@ -1663,7 +1665,7 @@ function preserve_sources {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f preserve_sources
+export -f set_environment_preserve_source_code
 
 ###############################################################################
 # Log this script standard output and standard error to a log file AND system logger

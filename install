@@ -7,7 +7,7 @@ set -x
 # Project github page: https://github.com/redwolfsecurity/set_environment
 #
 # Caller must source this script, so it can inject environment into the current terminal as well.
-# To check the installation result one can use "is_set_environment_working" selfcheck function.
+# To check the installation result one can use "set_environment_is_working" selfcheck function.
 # If installation succeed then selfcheck function will return success code 0.
 #
 # Caller can check if set_environment was started by the right user (after sourcing ". ./install")

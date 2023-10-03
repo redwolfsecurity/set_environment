@@ -39,15 +39,15 @@ pipeline {
         // sh 'bash --login -c "echo \${FF_AGENT_HOME}"'   // empty
         // sh 'bash --login -c "echo \\${FF_AGENT_HOME}"'  // this yields: /home/ff_agent/ff_agent
 
-        // Let's run few basic checks by calling is_set_environment_working()
-        // sh 'is_set_environment_working'                 // this fails: is_set_environment_working: not found
-        sh 'bash --login -c "is_set_environment_working"'
+        // Let's run few basic checks by calling set_environment_is_working()
+        // sh 'set_environment_is_working'                 // this fails: set_environment_is_working: not found
+        sh 'bash --login -c "set_environment_is_working"'
 
-	// Ensure no syntax errors in bash scripts
-	sh 'bash -n install'
-	sh 'bash -n src/ff_bash_functions'
-	sh 'bash -n src/architecture/linux/continue_install.sh'
-	sh 'bash -n src/architecture/linux/continue_install.functions.sh'
+        // Ensure no syntax errors in bash scripts
+        sh 'bash -n install'
+        sh 'bash -n src/ff_bash_functions'
+        sh 'bash -n src/architecture/linux/continue_install.sh'
+        sh 'bash -n src/architecture/linux/continue_install.functions.sh'
       }
     }
 

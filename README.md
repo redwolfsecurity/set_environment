@@ -39,7 +39,7 @@ FF_CONTENT_URL=https://cdn.redwolfsecurity.com/ ./install 2>&1 | logger -t 'set_
 ### Testing
 
 After installation is complete you should open a new terminal window, so that added initialization would be able to inject "set environment" components into your environment (see your initialization files: ~/.bashrc and ~/.profile).
-Now you can run test function "is_set_environment_working". It will return 0 if it is working, 1 otherwose.
+Now you can run test function "set_environment_is_working". It will return 0 if it is working, 1 otherwose.
 
 ### Now That You're Done
 
