@@ -559,8 +559,8 @@ function install_docker {
   # Postcondition checks
   # Verify docker is properly set up
   # Note we are running via sudo, and if we added user to the ${GROUP} then it won't be applied in this shell.
-  set_secret docker_release "$( docker --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_to_get_release"; return 1; }
-  set_secret docker_compose_relase "$( docker-compose --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_compose_to_get_release"; return 1; }
+  secret_set docker_release "$( docker --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_to_get_release"; return 1; }
+  secret_set docker_compose_relase "$( docker-compose --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_compose_to_get_release"; return 1; }
 
   # Check if installed docker version is less than minimally required
   if [ "$( get_installed_docker_version )" -lt "${MINIMUM_VERSION}" ]; then
