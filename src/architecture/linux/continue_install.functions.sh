@@ -330,59 +330,6 @@ export -f service_is_running
 
 ###############################################################################
 #
-# Function takes 1 argument: path to the root folder of the set_environment project
-# and it copies scripts
-#     from: src/architecture/linux/ff_agent_bin/
-#     to: "${FF_AGENT_HOME}"/bin
-#
-function copy_scripts_to_ff_agent_bin {
-  set_state "${FUNCNAME[0]}" 'started'
-
-  # Define required variables
-  local REQUIRED_VARIABLES=(
-    FF_AGENT_HOME
-  )
-
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-      return 1
-    }
-  done
-
-  # Define target directory
-  TARGET_DIR="${FF_AGENT_HOME}/bin"
-
-  # Check if target directory exists
-  [ -d "${TARGET_DIR}" ] || { set_state "${FUNCNAME[0]}" 'error_target_directory_does_not_exist'; return 1; }
-  
-  # Get passed parameters (path to currently installed project folder)
-  PROJECT_ROOT_DIR="${1}"
-  [ -d "${PROJECT_ROOT_DIR}" ] || { set_state "${FUNCNAME[0]}" 'failed_to_set_environment_preserve_source_code'; return 1; }
-
-  # As a preparation to preserve project source files (used during this installation), let's change directory to the project root directory.
-  pushd "${PROJECT_ROOT_DIR}" || { set_state "${FUNCNAME[0]}" 'failed_to_cd_into_project'; return 1; }
-
-  # Check PWD is set or try to use $(pwd) or error out
-  if [ -z "${PWD}" ]; then
-    # PWD is not set, try to set it by "pwd" call
-    PWD="$( pwd )" || { set_state "${FUNCNAME[0]}" 'failed_to_get_pwd'; return 1; }
-  fi
-
-  # Copy scripts
-  cp "${PWD}"/src/architecture/linux/ff_agent_bin/* "${TARGET_DIR}" || { set_state "${FUNCNAME[0]}" 'failed_to_copy_scripts'; return 1; }
-
-  # Restore the original folder
-  popd || { set_state "${FUNCNAME[0]}" 'failed_to_popd_after_copying_scripts'; return 1; }
-
-  set_state "${FUNCNAME[0]}" 'success'
-}
-export -f copy_scripts_to_ff_agent_bin
-
-###############################################################################
-#
 # Function makes sure "${FF_AGENT_HOME}/bin" folder is created.
 #
 function set_environment_ensure_ff_agent_bin_exists {

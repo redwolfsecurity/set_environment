@@ -91,6 +91,60 @@ export -f docker_container_name_exists
 
 ###############################################################################
 #
+# Function docker_grep() grep recursively file system inside docker container and
+# tries to find given string.
+# You can specify container by the name or ID.
+#
+# Usage example:
+#   docker_grep action_manager LOG_DIR=
+#   docker_grep 34d4cf LOG_DIR=
+#
+# The above example will scan for "LOG_DIR" (ignoring the "=" sign and value, case sensitive).
+# Result is printed to standard output.
+#
+function docker_grep {
+  CONTAINER_IDNAME="${1}"
+  SEARCH_TERM="${2}"
+
+  # Extract the variable name
+  MATCH=$( echo "${SEARCH_TERM}" | cut -d= -f1 )
+
+  [ ! -z "${CONTAINER_IDNAME}" ] || { error "Failed to get the container name from the arguments."; exit 1; }
+  [ ! -z "${MATCH}" ] || { error "Failed to extract match term."; exit 1; }
+
+  # Newer call exclude non-ascii files, exclude certain paths, prints filename and line numbers (very fast)
+  # Note: had to split to 2 calls: find() and collect to array, later iterate and grep, otherwise
+  #
+  # Getting several errors:
+  #  - while calling "file": sudo: unable to execute /usr/bin/file: Argument list too long
+  #
+  # Note: we use "-u 0" to run the command as root, but if we pipe to any
+  # other commands they will be run as regular user (might require "sudo").
+  docker exec \
+    -u 0 \
+    "${CONTAINER_IDNAME}" \
+    find / \
+    ! -path '/lib/*'   \
+    ! -path '/sys/*'    \
+    ! -path '/proc/*'    \
+    ! -path '/usr/lib/*'  \
+    ! -path '/var/cache/*' \
+    ! -path '/usr/share/*'  \
+    ! -path '/usr/include/*' \
+    ! -path '/var/lib/dpkg/*' \
+    ! -path '/usr/local/lib/*' \
+    ! -path '/var/lib/systemd/*' \
+    ! -path '/usr/local/include/*'\
+    -type f \
+    -exec grep \
+          --binary-files=without-match \
+          --with-filename -n "${MATCH}" {} \
+    \;
+}
+export docker_grep
+
+###############################################################################
+#
 # Main entry point to make sure we have docker installed (of expected minimal major version)
 # and logging driver is set to syslog.
 #
