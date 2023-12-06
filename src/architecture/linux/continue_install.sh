@@ -20,12 +20,12 @@ function continue_install {
     
     # Project installer preserves the project source code: instead of erasing the source folder,
     # the code must be preserved under ff_agent/git/[project-owner]/set_environment/ folder.
-    preserve_sources "${PROJECT_ROOT_DIR}" || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_preserve_source_code"; abort; }
+    set_environment_preserve_source_code "${PROJECT_ROOT_DIR}" || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_preserve_source_code"; abort; }
     
     # Preserved "set environment" sources provide the installer linked by set_environment_install script, which must be in the PATH.
-    ensure_ff_agent_bin_exists || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_ensure_ff_agent_bin_exists"; abort; }
+    set_environment_ensure_ff_agent_bin_exists || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_set_environment_ensure_ff_agent_bin_exists"; abort; }
     copy_scripts_to_ff_agent_bin "${PROJECT_ROOT_DIR}" || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_sopy_scripts_to_ff_agent_bin"; abort; }
-    ensure_set_environment_install_exists || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_ensure_set_environment_install_exists"; abort; }
+    set_environment_ensure_install_exists || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_set_environment_ensure_install_exists"; abort; }
 }
 
 continue_install  # no need to check errors here, the f-n itself reports errors (all of which are "terminal" errors) and aborts/exits.

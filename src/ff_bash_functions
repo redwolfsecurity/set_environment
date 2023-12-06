@@ -79,7 +79,7 @@
 #    - terminal_reset 
 ## END UTILITY FUNCTIONS: TERMINAL / SHELL
 ## BEGIN UTILITY FUNCTIONS: PROCESS
-#    - is_process_running_as_me 
+#    - process_is_running_as_me 
 ## END UTILITY FUNCTIONS: PROCESS
 ## BEGIN UTILITY FUNCTIONS: CONTAINERS
 #    - container_name_exists 
@@ -2294,7 +2294,7 @@ export -f terminal_reset
 # Category: UTILITY FUNCTIONS: PROCESS
 # checks if a process is running as current user or effectively as current user.
 # Note we are checking for the pattern at the beginning of the command by default
-function is_process_running_as_me {
+function process_is_running_as_me {
     set_state "${FUNCNAME[0]}" 'started'
     local COMMAND_PATTERN="${1}"
     [ ! -z "${COMMAND_PATTERN}" ] || { set_state "${FUNCNAME[0]}" 'error_require_pattern_to_search_for'; return 1; }
@@ -2317,7 +2317,7 @@ function is_process_running_as_me {
     set_state "${FUNCNAME[0]}" 'success'
     return ${STATUS}
 }
-export -f is_process_running_as_me
+export -f process_is_running_as_me
 
 ### END UTILITY FUNCTIONS: PROCESS
 

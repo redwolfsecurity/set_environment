@@ -237,14 +237,17 @@ function docker_install {
       return 1
   fi
 
+  # Add GPG key for download.docker.com
   # TODO: We might not have sudo, so we should request command to be run.
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
   [ ${?} -ne 0 ] && { set_state "${FUNCNAME[0]}" "failed_to_add_gpg_key"; return 1; }
 
+  # Add docker apt repository (apt = Advanced package tool)
   # TODO: We might not have sudo, so we should request command to be run.
   sudo add-apt-repository "deb [arch=${ARCHITECTURE}] https://download.docker.com/linux/ubuntu ${DISTRO} stable"
   [ ${?} -ne 0 ] && { set_state "${FUNCNAME[0]}" "failed_to_add_repository"; return 1; }
 
+  # Update the apt package index file (apt = Advanced package tool)
   apt_update
 
   # Define required pagage names
@@ -293,8 +296,8 @@ function docker_install {
   # Postcondition checks
   # Verify docker is properly set up
   # Note we are running via sudo, and if we added user to the ${GROUP} then it won't be applied in this shell.
-  set_secret docker_release "$( docker --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_to_get_release"; return 1; }
-  set_secret docker_compose_relase "$( docker-compose --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_compose_to_get_release"; return 1; }
+  secret_set docker_release "$( docker --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_to_get_release"; return 1; }
+  secret_set docker_compose_relase "$( docker-compose --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_compose_to_get_release"; return 1; }
 
   # Check if installed docker version is less than minimally required
   # Do the docker_minimal_version_check
@@ -307,8 +310,19 @@ function docker_install {
   # Set up docker daemon logging (log to syslog)
   docker_set_log_to_syslog || { set_state "${FUNCNAME[0]}" "failed_to_docker_set_log_to_syslog"; return 1; }
   
-  # Restart docker daemon for logging change to take efffect
-  sudo systemctl restart docker || { set_state "${FUNCNAME[0]}" "failed_to_restart_docker_daemon"; return 1; }
+  # Restart docker to apply logging configuration (to syslog) only if docker is running
+  if service_is_running docker; then
+    # Restart docker
+    sudo systemctl restart docker
+
+    # Since docker is running we can check it is logging to syslog
+    local EXPECTED_DOCKER_LOGGING="syslog"
+    local ACTUAL_DOCKER_LOGGING=$( docker info --format '{{.LoggingDriver}}' )
+    if [ "${EXPECTED_DOCKER_LOGGING}" != "${ACTUAL_DOCKER_LOGGING}" ]; then
+        set_state "${FUNCNAME[0]}" "failed_to_confirm_logging_configuration_applied"
+        return 1
+    fi
+  fi
 
   set_state "${FUNCNAME[0]}" 'success'
 }
