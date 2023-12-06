@@ -130,7 +130,7 @@
 ## END DISCOVER FUNCTIONS
 ## BEGIN SET ENVIRONMENT FUNCTIONS
 #    - check_environment_variables_are_set 
-#    - check_ff_agent_bin_is_in_the_path 
+#    - ff_agent_check_bin_is_in_the_path 
 #    - check_nodejs_installation 
 #    - check_set_get_secret 
 #    - check_set_get_state 
@@ -3519,11 +3519,11 @@ function check_environment_variables_are_set {
 export -f check_environment_variables_are_set
 
 ###############################################################################
-# Utility function check_ff_agent_bin_is_in_the_path()
+# Utility function ff_agent_check_bin_is_in_the_path()
 # On success: reuturn 0
 # On failure: 1
 #
-function check_ff_agent_bin_is_in_the_path {
+function ff_agent_check_bin_is_in_the_path {
   set_state "${FUNCNAME[0]}" 'started'
 
   local FF_AGENT_BIN="${FF_AGENT_HOME}/bin"
@@ -3537,7 +3537,7 @@ function check_ff_agent_bin_is_in_the_path {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f check_ff_agent_bin_is_in_the_path
+export -f ff_agent_check_bin_is_in_the_path
 
 ###############################################################################
 # Utility function check_nodejs_installation() checks if nodejs is installed
@@ -3983,7 +3983,7 @@ function is_set_environment_working {
     check_set_get_secret
 
     # Check ff_agent/bin is in the path
-    check_ff_agent_bin_is_in_the_path
+    ff_agent_check_bin_is_in_the_path
   )
 
   local COMMAND  # Declare variable local, so it does not polute our scope outside this f-n
