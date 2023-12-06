@@ -26,31 +26,22 @@ function install_set_environment {
     # Can't set_state() here yet
     # set_state "${FUNCNAME[0]}" 'started'
 
-    # Get current username using one of the methods:
-    #   - "${USER}"
-    #   - "${USERNAME}"
-    #   - "$(whoami)"
-    # Error out if all the above methods failed.
-    local CURRENT_USER=""
-    [ -z "${CURRENT_USER}" ] && CURRENT_USER="${USER}"
-    [ -z "${CURRENT_USER}" ] && CURRENT_USER="${USERNAME}"
-    [ -z "${CURRENT_USER}" ] && { CURRENT_USER="$(whoami)" || { echo "Error: failed to get current user by command: whoami">&2; exit 1; } } # note: can not yet use error() / abort() / set_state()
-    [ -z "${CURRENT_USER}" ] && { echo "Error: failed to get current user. Can not proceed." >&2; exit 1; } # note: can not yet use error() / abort() / set_state()
-    
-    # Check the current user must be not "root"
-    [ "${CURRENT_USER}" != "root" ] || { echo "Error: user 'root' is not allowed." >&2; exit 1; } # note: can not yet use error() / abort() / set_state()
-
-    # Check Effective UID is not 0. Note: we don't use "-ne 0" to avoid false positive in case EUID is not set.
-    [ "${EUID}" != "0" ] ||  { echo "Error: user 'root' is not allowed." >&2; exit 1; }
-
     # Change directory into the script's directory. This ensure all relative paths working correctly.
     cd "$( dirname $( readlink -f "${BASH_SOURCE[0]}" ) )" || { echo "Error: failed to change directory to $( dirname ${BASH_SOURCE[0]} )" >&2; exit 1; } # note: can not yet use error() / abort() / set_state()
     
     # Source common functions
     source src/ff_bash_functions || { echo "Error: failed to source common functions." >&2; exit 1; } # note: can not yet use error() / abort() / set_state()
 
-    # Continue sourcing installer functions
+    # Initialize terminal
+    terminal_initialize || { set_state "${FUNCNAME[0]}" "terminal_error_initialize_terminal"; abort; }
+
+    # Continue by calling OS-specific installer
     source "src/architecture/$( discover_os )/continue_install.sh" "${@}" || { set_state "${FUNCNAME[0]}" "terminal_error_continue_install"; abort; }
+
+    # Last step: run a selfcheck
+    is_set_environment_working || { set_state "${FUNCNAME[0]}" "terminal_error_selfcheck_failed"; abort; }
+
+    set_state "${FUNCNAME[0]}" 'success'
 }
 
 install_set_environment  # no need to check errors here, the f-n itself reports errors (all of which are "terminal" errors) and aborts/exits.
