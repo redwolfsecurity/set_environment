@@ -39,7 +39,7 @@ function install_set_environment {
     source "src/architecture/$( discover_os )/continue_install.sh" "${@}" || { set_state "${FUNCNAME[0]}" "terminal_error_continue_install"; abort; }
 
     # Last step: run a selfcheck
-    is_set_environment_working || { set_state "${FUNCNAME[0]}" "terminal_error_selfcheck_failed"; abort; }
+    set_environment_is_working || { set_state "${FUNCNAME[0]}" "terminal_error_selfcheck_failed"; abort; }
 
     set_state "${FUNCNAME[0]}" 'success'
 }
