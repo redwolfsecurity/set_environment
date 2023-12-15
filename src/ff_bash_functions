@@ -3761,7 +3761,7 @@ function ff_api_get {
 export -f ff_api_get
 
 ###############################################################################
-# Function prints into standard output the expected version of nodejs.
+# Function prints into standard output the desired version of nodejs.
 # We use it during installation and to check installed "set environment" project.
 # The version is dependent on your OS distribution release. Some versions of Linux don't support newer versions of node.
 function get_desired_nodejs_version {

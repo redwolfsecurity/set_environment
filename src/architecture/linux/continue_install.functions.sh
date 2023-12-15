@@ -1158,7 +1158,7 @@ EOT
   retry_command 5 15 bash n "${VERSION}" || {
     # Error: clean up tmp folder, report an error and return error code 1
     popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
-    set_state "${FUNCNAME[0]}" 'error_installing_n_lts'; return 1;
+    set_state "${FUNCNAME[0]}" 'error_installing_n'; return 1;
   }
 
   # Install 'n' into ff_agent/.n  (yes, we have downloaded 'n' into TMPDIR,
