@@ -125,7 +125,6 @@
 #    - get_hardware_architecture 
 #    - get_lsb_codename 
 #    - get_lsb_id 
-#    - get_lsb_id_downcase 
 #    - get_lsb_release 
 ## END DISCOVER FUNCTIONS
 ## BEGIN SET ENVIRONMENT FUNCTIONS
@@ -138,7 +137,7 @@
 #    - choose_ff_agent_home 
 #    - ensure_ff_agent_home_exists 
 #    - ff_api_get 
-#    - get_expected_nodejs_version 
+#    - get_desired_nodejs_version 
 #    - get_ff_agent_username 
 #    - is_framework_api_defined 
 #    - is_set_environment_working 
@@ -3199,7 +3198,7 @@ function discover_os {
 
     local OS_FAMILY="unknown"
 
-    # Detect the platform based on "OSTYPE" variable
+    # Detect the platform based on "OSTYPE" variable. E.g. on a mac it might be 'darwin22.1.0'
     case "${OSTYPE}" in
     darwin*)  OS_FAMILY="macos" ;;
     linux*)   OS_FAMILY="linux" ;;
@@ -3212,14 +3211,17 @@ function discover_os {
 
     # If OS_FAMILY still not set, try to detect the platform based on "uname" output
     if [ "${OS_FAMILY}" == "unknown" ]; then
-        OS="`uname`"
+        OS=$( uname )
+        ## If the uname command fails, we don't know the OS, so we set it to unknown, which will work with the case below.
+        [[ $? == 0 ]] || { OS='unknown'; }
+
         case ${OS} in
         'Linux') OS_FAMILY='linux' ;;
         'FreeBSD') OS_FAMILY='bsd' ;;
         'WindowsNT') OS_FAMILY='windows' ;;
         'Darwin')  OS_FAMILY='macos' ;;
         #'AIX') OS_FAMILY='aix' ;;
-        *) ;;
+        *) OS_FAMILY='unknown';;
         esac
     fi
 
@@ -3276,7 +3278,13 @@ export -f get_hardware_architecture
 ###############################################################################
 # Category: environment
 # Utility function - Get os name - e.g. linux
+# This doesn't work on MAC's btw.
 function get_os_name {
+  for DEPENDENCY in basename uname tr
+  do
+    command_exists "${DEPENDENCY}" >/dev/null || { error "${FUNCNAME[0]} error dependency ${DEPENDENCY} not found."; return 1; }
+  done
+
   local OS_NAME="$( basename $( uname --operating-system ) | tr '[:upper:]' '[:lower:]' )"
   if [ -z "${OS_NAME}" ]; then
     # Error, got empty string
@@ -3292,37 +3300,41 @@ export -f get_os_name
 # Category: environment
 # Utility function - Get codename - e.g. breezy, focal, ..
 function get_lsb_codename {
+
+    command_exists lsb_release >/dev/null || { error "${FUNCNAME[0]} error dependency ${DEPENDENCY} not found."; return 1; }
     lsb_release --short --codename
 }
 export -f get_lsb_codename
 
 ###############################################################################
 # Category: environment
-# Utility function - Get LSB ID - e.g. Ubuntu
+# Utility function - Get LSB ID (really, the kind of unix distribution like 'ubuntu' or 'redhat'
+# This uses the lsb_release command, which is part of the Linux Standard Base project
+# See: https://en.wikipedia.org/wiki/Linux_Standard_Base -- this project as of 2023 is essentially abandoned!
+# i.e. this still works on ubuntu, but it doesn't work on mac, and probably not other versions of Linux
+# The field returned is the type of operating this is. e.g. 'ubuntu' or an error
+# the --short returns 'Ubuntu'. Without --short it would return something like:
+#    Distributor ID:	Ubuntu
+#
 function get_lsb_id {
-    lsb_release --short --id
+    for DEPENDENCY in lsb_release tr
+    do
+      command_exists "${DEPENDENCY}" >/dev/null || { error "${FUNCNAME[0]} error dependency ${DEPENDENCY} not found."; return 1; }
+    done
+    lsb_release --short --id | tr '[:upper:]' '[:lower:]'
 }
 export -f get_lsb_id
 
 ###############################################################################
 # Category: environment
-# Utility function - Get LSB ID - e.g. ubuntu
-function get_lsb_id_downcase {
-  # Dependency check: 'tr' is installed
-  if ! command_exists tr >/dev/null; then
-    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
-    return 1
-  fi
-
-  lsb_release --short --id | tr '[:upper:]' '[:lower:]'
-}
-export -f get_lsb_id_downcase
-
-###############################################################################
-# Category: environment
 # Utility function - Get release - e.g. 16.04, 18.04, 20.04
 function get_lsb_release {
-    lsb_release --short --release
+    for DEPENDENCY in basename lsb_release
+    do
+      command_exists "${DEPENDENCY}" >/dev/null || { error "${FUNCNAME[0]} error dependency ${DEPENDENCY} not found."; return 1; }
+    done
+  
+    command_exists >/dev/null lsb_release && lsb_release --short --release
 }
 export -f get_lsb_release
 
@@ -3420,9 +3432,9 @@ function check_nodejs_installation {
     }
 
     # Get expected nodejs version
-    local EXPECTED_VERSION="$( get_expected_nodejs_version )"
+    local EXPECTED_VERSION="$( get_desired_nodejs_version )"
     [ -z "${EXPECTED_VERSION}" ] && {
-      ERROR_CODE="failed_to_get_expected_nodejs_version"
+      ERROR_CODE="failed_to_get_desired_nodejs_version"
       set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
       (( ERRORS_COUNT++ ))
     }
@@ -3716,10 +3728,22 @@ export -f ff_api_get
 ###############################################################################
 # Function prints into standard output the expected version of nodejs.
 # We use it during installation and to check installed "set environment" project.
-function get_expected_nodejs_version {
-  echo 'v18.4.0'
+# The version is dependent on your OS distribution release. Some versions of Linux don't support newer versions of node.
+function get_desired_nodejs_version {
+  local RELEASE=$( get_lsb_release ) # Will give us the version of ubuntu.
+  case "${RELEASE}" in
+    18.*) echo 'v18.4.0'
+    ;;
+    20.*) echo 'v18.4.0'
+    ;;
+    21.*) echo 'v18.4.0'
+    ;;
+    22.*) echo "v20.5.1"
+    ;;
+    *) echo 'v18.4.0';;
+  esac
 }
-export -f get_expected_nodejs_version
+export -f get_desired_nodejs_version
 
 ###############################################################################
 #
