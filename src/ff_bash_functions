@@ -79,44 +79,45 @@
 #    - terminal_reset 
 ## END UTILITY FUNCTIONS: TERMINAL / SHELL
 ## BEGIN UTILITY FUNCTIONS: PROCESS
-#    - is_process_running_as_me 
+#    - process_is_running_as_me 
 #    - retry_command
 ## END UTILITY FUNCTIONS: PROCESS
 ## BEGIN UTILITY FUNCTIONS: CONTAINERS
 #    - container_name_exists 
+#    - container_remove_by_name
+#    - container_stop_by_name
 #    - docker_cleanup
 #    - docker_volumes_to_containers_list
 #    - get_installed_docker_version 
 #    - is_container_healthy 
 #    - is_container_running 
 #    - restart_containers 
-#    - stop_and_remove_container_by_name 
 ## END UTILITY FUNCTIONS: DOCKERS
 ## BEGIN UTILITY FUNCTIONS: STATE/SECRETS
 #    - generate_strong_password 
-#    - get_secret 
 #    - get_state 
-#    - set_secret 
+#    - secret_get 
+#    - secret_set 
 #    - set_state 
 ## END UTILITY FUNCTIONS: STATE/SECRETS
 ## BEGIN UTILITY FUNCTIONS: USER / GROUPS
 #    - can_sudo 
 #    - check_group_exists 
 #    - create_user 
-#    - effectively_root 
+#    - is_effectively_root 
 #    - get_home_directory_for_user 
 #    - get_ppid_cmd 
 #    - is_user_in_group 
 #    - user_exists 
 ## END UTILITY FUNCTIONS: USER / GROUPS
-## BEGIN DISCOVER FUNTIONS
+## BEGIN DISCOVER FUNCTIONS
+#    - ff_agent_get_best_ff_agent_uri 
+#    - ff_agent_get_best_ff_content_url 
+#    - ff_agent_get_best_ff_host 
+#    - ff_agent_get_best_ff_port 
+#    - ff_agent_get_best_namespace 
+#    - ff_agent_get_best_organization 
 #    - ff_uuid 
-#    - get_best_ff_agent_uri 
-#    - get_best_ff_content_url 
-#    - get_best_ff_host 
-#    - get_best_ff_port 
-#    - get_best_namespace 
-#    - get_best_organization 
 #    - discover_environment 
 #    - discover_optional_environment_variable 
 #    - discover_os 
@@ -128,19 +129,19 @@
 #    - get_lsb_release 
 ## END DISCOVER FUNCTIONS
 ## BEGIN SET ENVIRONMENT FUNCTIONS
-#    - check_environment_variables_are_set 
-#    - check_ff_agent_bin_is_in_the_path 
-#    - check_nodejs_installation 
-#    - check_set_get_secret 
-#    - check_set_get_state 
+#    - assert_ff_agent_home_exists
+#    - environment_check_required_variables_are_set 
+#    - ff_agent_check_bin_is_in_the_path 
+#    - nodejs_check_installation 
+#    - secret_check_set_and_get 
+#    - state_check_set_and_get 
 #    - get_current_user 
-#    - choose_ff_agent_home 
-#    - ensure_ff_agent_home_exists 
+#    - get_best_ff_agent_home 
 #    - ff_api_get 
 #    - get_desired_nodejs_version 
-#    - get_ff_agent_username 
+#    - get_ff_agent_username
 #    - is_framework_api_defined 
-#    - is_set_environment_working 
+#    - set_environment_is_working 
 #    - publish_message 
 ## END SET ENVIRONMENT FUNCTIONS
 
@@ -567,7 +568,7 @@ export -f index_of
 #   fi
 #
 #  Expected output:
-#    The ownder of the url 'git://github.com/some-user/my-repo.git' is 'some-user'.
+#    The owner of the url 'git://github.com/some-user/my-repo.git' is 'some-user'.
 #
 # Other example:
 # URLS=(
@@ -988,7 +989,7 @@ function get_by_url {
       # We use -f to make mv to overwrite whenever possible without asking for any confirmations
       mv -f "${TMP_FILEPATH}" "${FILEPATH}" || {
         # If failed to move try with sudo
-        CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" 'error_getting_current_user'; return 1; }
+        local CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" 'error_getting_current_user'; return 1; }
         if can_sudo "${CURRENT_USER}"; then
           # Have sudo privileges. Try to move using 'sudo'.
           sudo mv -f "${TMP_FILEPATH}" "${FILEPATH}" || { set_state "${FUNCNAME[0]}" 'error_moving_file_as_root'; return 1; }
@@ -1806,7 +1807,6 @@ function terminal_initialize {
   fi
 
   return 0
-
 }
 export -f terminal_initialize
 
@@ -1846,7 +1846,7 @@ export -f terminal_reset
 # Category: UTILITY FUNCTIONS: PROCESS
 # checks if a process is running as current user or effectively as current user.
 # Note we are checking for the pattern at the beginning of the command by default
-function is_process_running_as_me {
+function process_is_running_as_me {
     set_state "${FUNCNAME[0]}" 'started'
     local COMMAND_PATTERN="${1}"
     [ ! -z "${COMMAND_PATTERN}" ] || { set_state "${FUNCNAME[0]}" 'error_require_pattern_to_search_for'; return 1; }
@@ -1856,14 +1856,14 @@ function is_process_running_as_me {
     local GREP=$( command_exists grep ) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_grep_command'; return 1; }
 
     # Get current user. Note: the ${USER} environment is NOT set when running as 'root' in docker, we must use f-n get_current_user() instead.
-    CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
+    local CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
 
     ${PS} -u "${CURRENT_USER}" -U "${CURRENT_USER}" o command | ${GREP} --silent -e "^${COMMAND_PATTERN}"
     STATUS=${?}
     set_state "${FUNCNAME[0]}" 'success'
     return ${STATUS}
 }
-export -f is_process_running_as_me
+export -f process_is_running_as_me
 
 ###############################################################################
 # Category: UTILITY FUNCTIONS: PROCESS
@@ -1968,6 +1968,109 @@ function container_name_exists {
     fi
 }
 export -f container_name_exists
+
+
+###############################################################################
+# Category: container
+# Utility function - Stops and removes docker containers by given container name pattern
+#
+# Function gets container name (case sensitive) (can be partial match) as the only input argument and
+# tries to find all matching containers (even if they're in a stopped state). Then for every found
+# container it will "docker stop" and "docker remove" them.
+# Function return code 0 on success
+#
+# Example:
+#    container_stop_by_name control_fron
+#
+function container_remove_by_name {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  CONTAINER_NAME="${1}"
+
+  # Check the container name isn't blank
+  [ "${CONTAINER_NAME}" != "" ] || { set_state "${FUNCNAME[0]}" 'error_bad_arguments'; return 1; }
+
+  # Count existing container(s) by given docker name
+  FOUND_CONTAINERS_COUNT=$( docker ps -a | grep "${CONTAINER_NAME}" | wc -l )
+
+  # Check if we have at least 1 container by given name (or simply return success)
+  [ ${FOUND_CONTAINERS_COUNT} -gt 0 ] || { set_state "${FUNCNAME[0]}" 'success'; return 0; }
+
+  # Yes, we found >1 containers
+  for DOCKER_ID in $(docker ps -a | grep "${CONTAINER_NAME}" | awk '{print $1}'); do
+    # Make sure DOCKER_ID is not a blank string
+    [ "${DOCKER_ID}" != "" ] || { set_state "${FUNCNAME[0]}" 'failed_to_get_docker_id'; return 1; }
+      
+    # Try to stop and remove the container
+    docker stop "${DOCKER_ID}"
+    docker rm "${DOCKER_ID}"
+
+    # Sometimes container can be in the broken state, in this case even after stopping and removing it
+    # the DOCKER_ID is still visible in the "docker ps" list. In this cas we need to kill -9 corresponding
+    # process on the host level:
+    STILL_PRESENT_DOCKER_ID=$( docker ps -a | grep "${DOCKER_ID}" | wc -l )
+    if [ "${STILL_PRESENT_DOCKER_ID}" != "" ]; then
+      # Yes, we have found "unstoppable" docker. Kill -9 the corresponding process now
+      PID_TO_KILL_COUNT=$( sudo ps aux | grep "${DOCKER_ID}" | wc -l )
+      PID_TO_KILL=$( sudo ps aux | grep "${DOCKER_ID}" )
+      if [ ${PID_TO_KILL_COUNT} -ne 1 ]; then
+        # Something went wrong, we supposed to find exactly ONE pid to terminate.
+        set_state "${FUNCNAME[0]}" 'failed_to_get_docker_pid'
+        return 1
+      fi
+
+      # Send "kill -9" signal to the found process
+      sudo kill -9 "${PID_TO_KILL}" || { set_state "${FUNCNAME[0]}" 'error_killing_process'; return 1; }
+
+      # The "unstoppable" docker terminated, now we can safely remove the container
+      docker rm "${DOCKER_ID}" || { set_state "${FUNCNAME[0]}" 'error_removing_docker'; return 1; }
+    fi
+  done
+
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f container_remove_by_name
+
+###############################################################################
+# Category: container
+# Utility function - Stops docker containers by given container name pattern
+#
+# Function gets container name (case sensitive) (can be partial match) as the only input argument and
+# tries to find all matching containers (even if they're in a stopped state). Then for every found
+# container it will "docker stop" and "docker remove" them.
+# Function return code 0 on success
+#
+# Example:
+#    container_stop_by_name control_fron
+#
+function container_stop_by_name {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  CONTAINER_NAME="${1}"
+
+  # Check the container name isn't blank
+  [ "${CONTAINER_NAME}" != "" ] || { set_state "${FUNCNAME[0]}" 'error_bad_arguments'; return 1; }
+
+  # Count existing container(s) by given docker name
+  FOUND_CONTAINERS_COUNT=$( docker ps -a | grep "${CONTAINER_NAME}" | wc -l )
+
+  # Check if we have at least 1 container by given name (or simply return success)
+  [ ${FOUND_CONTAINERS_COUNT} -gt 0 ] || { set_state "${FUNCNAME[0]}" 'success'; return 0; }
+
+  # Yes, we found >1 containers
+  for DOCKER_ID in $(docker ps -a | grep "${CONTAINER_NAME}" | awk '{print $1}'); do
+    # Make sure DOCKER_ID is not a blank string
+    [ "${DOCKER_ID}" != "" ] || { set_state "${FUNCNAME[0]}" 'failed_to_get_docker_id'; return 1; }
+      
+    # Try to stop and remove the container
+    docker stop "${DOCKER_ID}"
+  done
+
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f container_stop_by_name
 
 ###############################################################################
 # Category: container
@@ -2111,68 +2214,6 @@ function restart_containers {
 }
 export -f restart_containers
 
-###############################################################################
-# Category: container
-# Utility function - Restart docker containers
-# Function gets container name (case sensitive) (can be partial) as the only input argument and
-# tries to find all matching containers (even if they're in stopped state). Then for every found
-# container it will "docker stop" and "docker remove" them.
-# Function return code 0 on success
-#
-function stop_and_remove_container_by_name {
-  set_state "${FUNCNAME[0]}" 'started'
-
-  CONTAINER_NAME="${1}"
-
-  # Check the container name isn't blank
-  [ "${CONTAINER_NAME}" != "" ] || { set_state "${FUNCNAME[0]}" 'error_bad_arguments'; return 1; }
-
-  # Count existing container(s) by given docker name
-  FOUND_CONTAINERS_COUNT=$( docker ps -a | grep "${CONTAINER_NAME}" | wc -l )
-
-  # Check if we found >1
-  if [ ${FOUND_CONTAINERS_COUNT} -gt 1 ]; then
-    # Yes, we found >1 containers to stop/remove
-    for DOCKER_ID in $(docker ps -a | grep "${CONTAINER_NAME}" | awk '{print $1}'); do
-      # Make sure DOCKER_ID is not a blank string
-      if [ "${DOCKER_ID}" == "" ]; then
-        set_state "${FUNCNAME[0]}" 'failed_to_get_docker_id'
-        return 1
-      fi
-
-      # Try to stop and remove the container
-      docker stop "${DOCKER_ID}"
-      docker rm "${DOCKER_ID}"
-
-      # Sometimes container can be in the broken state, in this case even after stopping and removing it
-      # the DOCKER_ID is still visible in the "docker ps" list. In this cas we need to kill -9 corresponding
-      # process on the host level:
-      STILL_PRESENT_DOCKER_ID=$( docker ps -a | grep "${DOCKER_ID}" | wc -l )
-      if [ "${STILL_PRESENT_DOCKER_ID}" != "" ]; then
-        # Yes, we have found "unstoppable" docker. Kill -9 the corresponding process now
-        PID_TO_KILL_COUNT=$( sudo ps aux | grep "${DOCKER_ID}" | wc -l )
-        PID_TO_KILL=$( sudo ps aux | grep "${DOCKER_ID}" )
-        if [ ${PID_TO_KILL_COUNT} -ne 1 ]; then
-          # Something went wrong, we supposed to find exactly ONE pid to terminate.
-          set_state "${FUNCNAME[0]}" 'failed_to_get_docker_pid'
-          return 1
-        fi
-
-        # Send "kill -9" signal to the found process
-        sudo kill -9 "${PID_TO_KILL}" || { set_state "${FUNCNAME[0]}" 'error_killing_process'; return 1; }
-
-        # The "unstoppable" docker terminated, now we can safely remove the container
-        docker rm "${DOCKER_ID}" || { set_state "${FUNCNAME[0]}" 'error_removing_docker'; return 1; }
-      fi
-    done
-
-  fi
-
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
-}
-export -f stop_and_remove_container_by_name
-
 ### END UTILITY FUNCTIONS: DOCKERS
 
 
@@ -2198,9 +2239,59 @@ function generate_strong_password {
 export -f generate_strong_password
 
 ###############################################################################
+# Function get_state() allows to get state set (by string name).
+# Return value:
+#   - if state found by given state name, print its value to standard output and return code 0
+#   - if state not found, print nothing into standard output and return code 1
+#
+function get_state {
+
+  # Preserve current bash echo settings and enable bash echo setting
+  BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_bash_echo_settings'; return 1; }
+
+  set_bash_echo_off || { set_state "${FUNCNAME[0]}" 'failed_to_set_bash_echo_off'; return 1; } # Disable xtrace to avoid priting secrets
+
+  # Get 1 argument: state name
+  STATE_NAME="${1}"
+
+  # Check state name isn't
+  [ ! -z "${STATE_NAME}" ] || { error "get_state(): blank state name argument"; return 1; }
+
+  # Check if state name contains any prohibited symbols, then error out.
+  [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { error "get_state(): illigal characters in the state name argument: '${BASH_REMATCH[1]}'"; return 1; }
+
+  # Make sure "${FF_AGENT_HOME}" is not empty
+  if [ -z "${FF_AGENT_HOME}" ]; then
+      error "Can not set state. FF_AGENT_HOME variable not defined. State would have been set to ${STATE_NAME}=${VALUE}"
+      set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+      return 1
+  fi
+
+  # Construct path to the state file
+  STATE_DIR="${FF_AGENT_HOME}/state"
+  STATE_FILE="${STATE_DIR}/${STATE_NAME}"
+
+  # Check if state file exists
+  if [ -f "${STATE_FILE}" ]; then
+    # State file found, try to print it's content and preserve result code
+    VALUE="$( cat "${STATE_FILE}" )"
+    EXIT_CODE=${?}
+    # Print value to standard output
+    echo -n "${VALUE}"
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    return ${EXIT_CODE}
+  else
+    # Error: state file not found. Restore xtrace and eturn code 1
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    return 1
+  fi
+}
+export -f get_state
+
+###############################################################################
 # Utility function, getting secret value by given secret key name.
-# Note: get_secret() require the FF_AGENT_HOME to be set.
-function get_secret {
+# Note: secret_get() require the FF_AGENT_HOME to be set.
+function secret_get {
   
   # Dependency check: 'tr' is installed
   if ! command_exists tr >/dev/null; then
@@ -2218,7 +2309,7 @@ function get_secret {
   local KEY="${1}"
 
   # Check KEY is not blank
-  [ ! -z "${KEY}" ] || { error "get_secret(): blank KEY argument"; return 1; }
+  [ ! -z "${KEY}" ] || { error "secret_get(): blank KEY argument"; return 1; }
 
   # Check if KEY contains any prohibited symbols, then error out.
   [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { 
@@ -2333,12 +2424,12 @@ function get_secret {
 
   # Case: We're looking for KEY=="FF_AGENT_URI" and we are on a traffic_generator.
   # In this case FF_AGENT_URI was already generated and stored to /etc/ff/configuration/agent_uri
-  # Let's retreive it from there and re-store it by set_secret()
+  # Let's retreive it from there and re-store it by secret_set()
   if [ "${KEY}" == "ff_agent_uri" ] && [ -f /etc/ff/configuration/agent_uri ]; then
     FF_AGENT_URI="$( cat /etc/ff/configuration/agent_uri )"
     # Store "agent" to proper unified place for secrets, so we don't have to look for it in random places again next time.
     if [ ! -z "${FF_AGENT_URI}" ]; then
-      set_secret ff_agent_uri "${FF_AGENT_URI}"
+      secret_set ff_agent_uri "${FF_AGENT_URI}"
       set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
       echo "${FF_AGENT_URI}"
       set_state "${FUNCNAME[0]}" 'success'
@@ -2365,61 +2456,11 @@ function get_secret {
   set_state "${FUNCNAME[0]}" 'failed_to_find_secret_value'
   return 1
 }
-export -f get_secret
-
-###############################################################################
-# Function get_state() allows to get state set (by string name).
-# Return value:
-#   - if state found by given state name, print its value to standard output and return code 0
-#   - if state not found, print nothing into standard output and return code 1
-#
-function get_state {
-
-  # Preserve current bash echo settings and enable bash echo setting
-  BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_bash_echo_settings'; return 1; }
-
-  set_bash_echo_off || { set_state "${FUNCNAME[0]}" 'failed_to_set_bash_echo_off'; return 1; } # Disable xtrace to avoid priting secrets
-
-  # Get 1 argument: state name
-  STATE_NAME="${1}"
-
-  # Check state name isn't
-  [ ! -z "${STATE_NAME}" ] || { error "get_state(): blank state name argument"; return 1; }
-
-  # Check if state name contains any prohibited symbols, then error out.
-  [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { error "get_state(): illigal characters in the state name argument: '${BASH_REMATCH[1]}'"; return 1; }
-
-  # Make sure "${FF_AGENT_HOME}" is not empty
-  if [ -z "${FF_AGENT_HOME}" ]; then
-      error "Can not set state. FF_AGENT_HOME variable not defined. State would have been set to ${STATE_NAME}=${VALUE}"
-      set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-      return 1
-  fi
-
-  # Construct path to the state file
-  STATE_DIR="${FF_AGENT_HOME}/state"
-  STATE_FILE="${STATE_DIR}/${STATE_NAME}"
-
-  # Check if state file exists
-  if [ -f "${STATE_FILE}" ]; then
-    # State file found, try to print it's content and preserve result code
-    VALUE="$( cat "${STATE_FILE}" )"
-    EXIT_CODE=${?}
-    # Print value to standard output
-    echo -n "${VALUE}"
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    return ${EXIT_CODE}
-  else
-    # Error: state file not found. Restore xtrace and eturn code 1
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    return 1
-  fi
-}
-export -f get_state
+export -f secret_get
 
 ###############################################################################
 # Utility function
-function set_secret {
+function secret_set {
 
   # Preserve current bash echo settings and enable bash echo setting
   BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_bash_echo_settings'; return 1; }
@@ -2478,7 +2519,7 @@ function set_secret {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f set_secret
+export -f secret_set
 
 ###############################################################################
 # Utility function
@@ -2585,7 +2626,7 @@ function set_state {
   )
   for VARIABLE_NAME in "${ALL_EXPECTED_ENVRIONMENT_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE=$( echo "error_check_environment_variables_are_set_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )
+      local ERROR_CODE=$( echo "error_environment_check_required_variables_are_set_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )
       error "${FUNCNAME[0]}: ${ERROR_CODE}"
       return 1
     }
@@ -2725,14 +2766,14 @@ export -f create_user
 ###############################################################################
 # Category: authorization
 # Utility function - Am I root? Return 0 if I am, 1 if not
-function effectively_root {
+function is_effectively_root {
     if  [ "${EUID}" -eq 0 ]; then
         return 0 # I have root powers
     else
         return 1 # Don't have root powers
     fi
 }
-export -f effectively_root
+export -f is_effectively_root
 
 ###############################################################################
 # Category: identity
@@ -2793,7 +2834,177 @@ export -f user_exists
 
 
 
-### BEGIN DISCOVER FUNTIONS
+### BEGIN DISCOVER FUNCTIONS
+
+###############################################################################
+#
+# Auxiliary function wraps the logic of choosing the best value for: 'FF_AGENT_URI'
+# Note: this function uses get/set secrets and state, thus it can be called only after "choose proper user" step is complete.
+#
+# Function return:
+#   - on success: return code 0 and choosen value printed to standard outout
+#   - on failure: return code 1
+#
+# Usage example:
+#    FF_AGENT_URI=$( ff_agent_get_best_ff_agent_uri ) || { set_state "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_agent_uri"; return 1; }
+#
+function ff_agent_get_best_ff_agent_uri {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Try to get FF_AGENT_URI from environment or by secret_get()
+  discover_optional_environment_variable "FF_AGENT_URI" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable"; return 1; }
+
+  # Check if variable already set. If not set - generate new uuid
+  if [ -z "${FF_AGENT_URI}" ]; then
+      # Generate new uuid, check errors, export new value
+      local UUID="$( ff_uuid )" || { set_state "${FUNCNAME[0]}" "failed_to_generate_new_uuid"; return 1; }
+      FF_AGENT_URI="/agent/agent_uuid/${UUID}"
+  fi
+
+  # At this point we must have not empty FF_AGENT_URI value.
+  # Make sure the variable is now not empty or error out.
+  ensure_variable_not_empty 'FF_AGENT_URI' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_agent_uri"; return 1; }
+
+  # Print result to standard output, set state to 'success' and return success code.
+  echo "${FF_AGENT_URI}"
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f ff_agent_get_best_ff_agent_uri
+
+###############################################################################
+#
+# Auxiliary function wraps the logic of choosing the best value for: 'FF_CONTENT_URL'
+# Note: this function uses get/set secrets and state, thus it can be called only after "choose proper user" step is complete.
+#
+# Function return:
+#   - on success: return code 0 and choosen value printed to standard outout
+#   - on failure: return code 1
+#
+# Usage example:
+#  FF_CONTENT_URL=$( ff_agent_get_best_ff_content_url )
+#  [ ${?} -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_content_url"; return 1; }
+#
+function ff_agent_get_best_ff_content_url {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Try to get FF_CONTENT_URL from environment or by secret_get()
+  discover_optional_environment_variable "FF_CONTENT_URL" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable"; return 1; }
+
+  # Remove trailing slash from FF_CONTENT_URL, so it works correctly when we concatenate
+  # FF_CONTENT_URL with other path components (e.g.: ${}/subfolder/file.txt)
+  # Note: its save to call trim_slash() even if FF_CONTENT_URL is empty at this step.
+  FF_CONTENT_URL="$( trim_slash "${FF_CONTENT_URL}" )" || { set_state "${FUNCNAME[0]}" "error_trim_slash_from_ff_content_url"; return 1; }
+
+  # Make sure the variable is now not empty or error out.
+  ensure_variable_not_empty 'FF_CONTENT_URL' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_content_url"; return 1; }
+
+  # Print result to standard output, set state to 'success' and return success code.
+  echo "${FF_CONTENT_URL}"
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f ff_agent_get_best_ff_content_url
+
+###############################################################################
+#
+# Auxiliary function wraps the logic of choosing the best value for: 'FF_HOST'
+# Note: this function uses get/set secrets and state, thus it can be called only after "choose proper user" step is complete.
+#
+# Function return:
+#   - on success: return code 0 and choosen value printed to standard outout
+#   - on failure: return code 1
+#
+# Usage example:
+#  UPLOAD_TO=$( ff_agent_get_best_ff_host )
+#  [ ${?} -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_host"; return 1; }
+#
+function ff_agent_get_best_ff_host {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Try to get FF_HOST from environment or by secret_get()
+  discover_optional_environment_variable "FF_HOST" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_host"; return 1; } # Note: FF_HOST: FF_HOST will be set to legacy portal hostname if this is a portal.
+
+  # Check if variable already set. If not try to get it's value by command 'hostname'
+  [ -z "${FF_HOST}" ] && { FF_HOST="$( hostname )"; }
+
+  # Make sure the variable is now not empty or error out.
+  ensure_variable_not_empty 'FF_HOST' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_host"; return 1; }
+
+  # Print result to standard output, set state to 'success' and return success code.
+  echo "${FF_HOST}"
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f ff_agent_get_best_ff_host
+
+###############################################################################
+#
+# Auxiliary function wraps the logic of choosing the best value for: 'FF_HOST'
+# Note: this function uses get/set secrets and state, thus it can be called only after "choose proper user" step is complete.
+#
+# Function return:
+#   - on success: return code 0 and choosen value printed to standard outout
+#   - on failure: return code 1
+#
+function ff_agent_get_best_ff_port {
+  set_state "${FUNCNAME[0]}" 'started'
+  FF_PORT_DEFAULT=443
+
+  # Try to get FF_PORT from environment or by secret_get()
+  discover_optional_environment_variable "FF_PORT" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_port"; return 1; }
+
+  # Check if variable already set. If not then use default
+  [ -z "${FF_PORT}" ] && { FF_PORT="${FF_PORT_DEFAULT}"; }
+
+  # Print result to standard output, set state to 'success' and return success code.
+  echo "${FF_PORT}"
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f ff_agent_get_best_ff_port
+
+###############################################################################
+#
+function ff_agent_get_best_namespace {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Try to get value from environment or by secret_get()
+  discover_optional_environment_variable "NAMESPACE" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_namespace"; return 1; }
+
+  # Check if variable already set. If not set it to our default "system.local" namespace: '00000000-0000-0000-0000-000000000000'.
+  [ -z "${NAMESPACE}" ] && { NAMESPACE='00000000-0000-0000-0000-000000000000'; }
+
+  # Make sure the variable is now not empty or error out.
+  ensure_variable_not_empty 'NAMESPACE' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_namespace"; return 1; }
+
+  # Print result to standard output, set state to 'success' and return success code.
+  echo "${NAMESPACE}"
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f ff_agent_get_best_namespace
+
+###############################################################################
+#
+function ff_agent_get_best_organization {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Try to get value from environment or by secret_get()
+  discover_optional_environment_variable "ORGANIZATION" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_organization"; return 1; }
+
+  # Check if variable already set. If not set it to our default organization "system.local"
+  [ -z "${ORGANIZATION}" ] && { ORGANIZATION='system.local'; }
+
+  # Make sure the variable is now not empty or error out.
+  ensure_variable_not_empty 'ORGANIZATION' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_organization"; return 1; }
+
+  # Print result to standard output, set state to 'success' and return success code.
+  echo "${ORGANIZATION}"
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f ff_agent_get_best_organization
 
 ###############################################################################
 #
@@ -2831,176 +3042,6 @@ export -f ff_uuid
 
 ###############################################################################
 #
-# Auxiliary function wraps the logic of choosing the best value for: 'FF_AGENT_URI'
-# Note: this function uses get/set secrets and state, thus it can be called only after "choose proper user" step is complete.
-#
-# Function return:
-#   - on success: return code 0 and choosen value printed to standard outout
-#   - on failure: return code 1
-#
-# Usage example:
-#    FF_AGENT_URI=$( get_best_ff_agent_uri ) || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_agent_uri"; return 1; }
-#
-function get_best_ff_agent_uri {
-  set_state "${FUNCNAME[0]}" 'started'
-
-  # Try to get FF_AGENT_URI from environment or by get_secret()
-  discover_optional_environment_variable "FF_AGENT_URI" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable"; return 1; }
-
-  # Check if variable already set. If not set - generate new uuid
-  if [ -z "${FF_AGENT_URI}" ]; then
-      # Generate new uuid, check errors, export new value
-      local UUID="$( ff_uuid )" || { set_state "${FUNCNAME[0]}" "failed_to_generate_new_uuid"; return 1; }
-      FF_AGENT_URI="/agent/agent_uuid/${UUID}"
-  fi
-
-  # At this point we must have not empty FF_AGENT_URI value.
-  # Make sure the variable is now not empty or error out.
-  ensure_variable_not_empty 'FF_AGENT_URI' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_agent_uri"; return 1; }
-
-  # Print result to standard output, set state to 'success' and return success code.
-  echo "${FF_AGENT_URI}"
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
-}
-export -f get_best_ff_agent_uri
-
-###############################################################################
-#
-# Auxiliary function wraps the logic of choosing the best value for: 'FF_CONTENT_URL'
-# Note: this function uses get/set secrets and state, thus it can be called only after "choose proper user" step is complete.
-#
-# Function return:
-#   - on success: return code 0 and choosen value printed to standard outout
-#   - on failure: return code 1
-#
-# Usage example:
-#  FF_CONTENT_URL=$( get_best_ff_content_url )
-#  [ ${?} -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_content_url"; return 1; }
-#
-function get_best_ff_content_url {
-  set_state "${FUNCNAME[0]}" 'started'
-
-  # Try to get FF_CONTENT_URL from environment or by get_secret()
-  discover_optional_environment_variable "FF_CONTENT_URL" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable"; return 1; }
-
-  # Remove trailing slash from FF_CONTENT_URL, so it works correctly when we concatenate
-  # FF_CONTENT_URL with other path components (e.g.: ${}/subfolder/file.txt)
-  # Note: its save to call trim_slash() even if FF_CONTENT_URL is empty at this step.
-  FF_CONTENT_URL="$( trim_slash "${FF_CONTENT_URL}" )" || { set_state "${FUNCNAME[0]}" "error_trim_slash_from_ff_content_url"; return 1; }
-
-  # Make sure the variable is now not empty or error out.
-  ensure_variable_not_empty 'FF_CONTENT_URL' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_content_url"; return 1; }
-
-  # Print result to standard output, set state to 'success' and return success code.
-  echo "${FF_CONTENT_URL}"
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
-}
-export -f get_best_ff_content_url
-
-###############################################################################
-#
-# Auxiliary function wraps the logic of choosing the best value for: 'FF_HOST'
-# Note: this function uses get/set secrets and state, thus it can be called only after "choose proper user" step is complete.
-#
-# Function return:
-#   - on success: return code 0 and choosen value printed to standard outout
-#   - on failure: return code 1
-#
-# Usage example:
-#  UPLOAD_TO=$( get_best_ff_host )
-#  [ ${?} -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_host"; return 1; }
-#
-function get_best_ff_host {
-  set_state "${FUNCNAME[0]}" 'started'
-
-  # Try to get FF_HOST from environment or by get_secret()
-  discover_optional_environment_variable "FF_HOST" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_host"; return 1; } # Note: FF_HOST: FF_HOST will be set to legacy portal hostname if this is a portal.
-
-  # Check if variable already set. If not try to get it's value by command 'hostname'
-  [ -z "${FF_HOST}" ] && { FF_HOST="$( hostname )"; }
-
-  # Make sure the variable is now not empty or error out.
-  ensure_variable_not_empty 'FF_HOST' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_host"; return 1; }
-
-  # Print result to standard output, set state to 'success' and return success code.
-  echo "${FF_HOST}"
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
-}
-export -f get_best_ff_host
-
-###############################################################################
-#
-# Auxiliary function wraps the logic of choosing the best value for: 'FF_HOST'
-# Note: this function uses get/set secrets and state, thus it can be called only after "choose proper user" step is complete.
-#
-# Function return:
-#   - on success: return code 0 and choosen value printed to standard outout
-#   - on failure: return code 1
-#
-function get_best_ff_port {
-  set_state "${FUNCNAME[0]}" 'started'
-  FF_PORT_DEFAULT=443
-
-  # Try to get FF_PORT from environment or by get_secret()
-  discover_optional_environment_variable "FF_PORT" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_port"; return 1; }
-
-  # Check if variable already set. If not then use default
-  [ -z "${FF_PORT}" ] && { FF_PORT="${FF_PORT_DEFAULT}"; }
-
-  # Print result to standard output, set state to 'success' and return success code.
-  echo "${FF_PORT}"
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
-}
-export -f get_best_ff_port
-
-###############################################################################
-#
-function get_best_namespace {
-  set_state "${FUNCNAME[0]}" 'started'
-
-  # Try to get value from environment or by get_secret()
-  discover_optional_environment_variable "NAMESPACE" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_namespace"; return 1; }
-
-  # Check if variable already set. If not set it to our default "system.local" namespace: '00000000-0000-0000-0000-000000000000'.
-  [ -z "${NAMESPACE}" ] && { NAMESPACE='00000000-0000-0000-0000-000000000000'; }
-
-  # Make sure the variable is now not empty or error out.
-  ensure_variable_not_empty 'NAMESPACE' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_namespace"; return 1; }
-
-  # Print result to standard output, set state to 'success' and return success code.
-  echo "${NAMESPACE}"
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
-}
-export -f get_best_namespace
-
-###############################################################################
-#
-function get_best_organization {
-  set_state "${FUNCNAME[0]}" 'started'
-
-  # Try to get value from environment or by get_secret()
-  discover_optional_environment_variable "ORGANIZATION" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_organization"; return 1; }
-
-  # Check if variable already set. If not set it to our default organization "system.local"
-  [ -z "${ORGANIZATION}" ] && { ORGANIZATION='system.local'; }
-
-  # Make sure the variable is now not empty or error out.
-  ensure_variable_not_empty 'ORGANIZATION' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_organization"; return 1; }
-
-  # Print result to standard output, set state to 'success' and return success code.
-  echo "${ORGANIZATION}"
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
-}
-export -f get_best_organization
-
-###############################################################################
-#
 # Figure out environment - where are we?
 #
 # First the function is trying to choose right FF_AGENT_HOME, then it
@@ -3010,7 +3051,7 @@ export -f get_best_organization
 #    - FF_HOST
 #
 # Dependencies:
-#    - FF_CONTENT_URL variable must be set either by "set_secrets" or in environment variable
+#    - FF_CONTENT_URL variable must be set either by "secret_sets" or in environment variable
 #
 # Function return code:
 #   0 - on success
@@ -3023,19 +3064,19 @@ function discover_environment {
   #
   # Choose proper user to run as create "ff_agent" folder (known as ${FF_AGENT_HOME}).
   # The proper user is not root but user with sudo that can install packages.
-  # We need to choose_ff_agent_home before we can set/get secrets.
+  # We need to get_best_ff_agent_home before we can set/get secrets.
   # This sets some of environment variables: FF_AGENT_USERNAME, FF_AGENT_HOME.
   # Also creates FF_AGENT_HOME directory.
   # Baseline installer must set the following environment variables:
-  #  [x] FF_AGENT_USERNAME  (see choose_ff_agent_home())
-  #  [x] FF_AGENT_USER_HOME (see choose_ff_agent_home())
-  #  [x] FF_AGENT_HOME      (see choose_ff_agent_home())
-  #  [x] FF_AGENT_URI (see get_best_ff_agent_uri())
-  #  [x] FF_HOST (see get_best_ff_host())
-  #  [x] FF_CONTENT_URL (see get_best_ff_content_url())
-  #  [x] NAMESPACE (see get_best_namespace())
+  #  [x] FF_AGENT_USERNAME  (see get_best_ff_agent_home())
+  #  [x] FF_AGENT_USER_HOME (see get_best_ff_agent_home())
+  #  [x] FF_AGENT_HOME      (see get_best_ff_agent_home())
+  #  [x] FF_AGENT_URI (see ff_agent_get_best_ff_agent_uri())
+  #  [x] FF_HOST (see ff_agent_get_best_ff_host())
+  #  [x] FF_CONTENT_URL (see ff_agent_get_best_ff_content_url())
+  #  [x] NAMESPACE (see ff_agent_get_best_namespace())
   #  [x] N_PREFIX (see install_n())
-  #  [x] ORGANIZATION (see get_best_organization())
+  #  [x] ORGANIZATION (see ff_agent_get_best_organization())
   #  [x] TERM  (see terminal_initialize())
   #
   # Preserving a set of other discussed environment values to add in future:
@@ -3047,35 +3088,35 @@ function discover_environment {
   #  FF_PROXY_USERNAME
   #  FF_PROXY_PASSWORD
   #
-  choose_ff_agent_home || { abort "failed_to_choose_ff_agent_home"; }
-  ensure_ff_agent_home_exists || { abort "failed_to_ensure_ff_agent_home_exists"; }
+  get_best_ff_agent_home || { abort "failed_to_get_best_ff_agent_home"; }
+  assert_ff_agent_home_exists || { abort "failed_to_assert_ff_agent_home_exists"; }
 
-  # Get best values, check errors, export and set_secret().
-  FF_CONTENT_URL=$( get_best_ff_content_url ) || { abort "failed_to_get_best_ff_content_url"; }
-  set_secret ff_content_url "${FF_CONTENT_URL}"
+  # Get best values, check errors, export and secret_set().
+  FF_CONTENT_URL=$( ff_agent_get_best_ff_content_url ) || { abort "failed_to_ff_agent_get_best_ff_content_url"; }
+  secret_set ff_content_url "${FF_CONTENT_URL}"
   export FF_CONTENT_URL
 
   # Similarly for best NAMESPACE
-  NAMESPACE=$( get_best_namespace ) || { abort "failed_to_get_best_namespace"; }
-  set_secret namespace "${NAMESPACE}"
+  NAMESPACE=$( ff_agent_get_best_namespace ) || { abort "failed_to_ff_agent_get_best_namespace"; }
+  secret_set namespace "${NAMESPACE}"
   export NAMESPACE
 
   # Similarly for best ORGANIZATION
-  ORGANIZATION=$( get_best_organization ) || { abort "failed_to_get_best_organization"; }
-  set_secret organization "${ORGANIZATION}"
+  ORGANIZATION=$( ff_agent_get_best_organization ) || { abort "failed_to_ff_agent_get_best_organization"; }
+  secret_set organization "${ORGANIZATION}"
   export ORGANIZATION
 
   # Similarly for FF_AGENT_URI
-  FF_AGENT_URI=$( get_best_ff_agent_uri )     || { abort "failed_to_get_best_ff_agent_uri"; }
-  set_secret ff_agent_uri "${FF_AGENT_URI}"
+  FF_AGENT_URI=$( ff_agent_get_best_ff_agent_uri )     || { abort "failed_to_ff_agent_get_best_ff_agent_uri"; }
+  secret_set ff_agent_uri "${FF_AGENT_URI}"
   export FF_AGENT_URI
 
-  FF_HOST=$( get_best_ff_host )               || { abort "failed_to_get_best_ff_host"; }
-  set_secret ff_host "${FF_HOST}"
+  FF_HOST=$( ff_agent_get_best_ff_host )               || { abort "failed_to_ff_agent_get_best_ff_host"; }
+  secret_set ff_host "${FF_HOST}"
   export FF_HOST
 
-  FF_PORT=$( get_best_ff_port )               || { abort "failed_to_get_best_ff_port"; }
-  set_secret ff_port "${FF_PORT}"
+  FF_PORT=$( ff_agent_get_best_ff_port )               || { abort "failed_to_ff_agent_get_best_ff_port"; }
+  secret_set ff_port "${FF_PORT}"
   export FF_PORT
 
   # ######################################################################
@@ -3138,7 +3179,7 @@ export -f discover_environment
 #
 # F-n checks:
 #    - if such variable already exists function export that variable and exits with no changes to the existing value
-#    - if no such variable exists f-n tries to get previously stored value by calling "get_secret ${NAME}" and export this value (if found)
+#    - if no such variable exists f-n tries to get previously stored value by calling "secret_get ${NAME}" and export this value (if found)
 #    - if no value found on previous steps, then f-n exports this variable with ${DEFAULT_VALUE} (only if default value is not blank)
 #
 # Return code:
@@ -3169,9 +3210,9 @@ function discover_optional_environment_variable {
     return 1
   fi
   
-  # Try to get value by "get_secret()"
+  # Try to get value by "secret_get()"
   local NAME_LOWERCASE="$( echo "${NAME}" | tr '[:upper:]' '[:lower:]' )"
-  local RESTORED_VALUE=$( get_secret "${NAME_LOWERCASE}" )
+  local RESTORED_VALUE=$( secret_get "${NAME_LOWERCASE}" )
   if [ ! -z "${RESTORED_VALUE}" ]; then
       # Got non-empty value, use it to export variable
       export "${NAME}"="${RESTORED_VALUE}"
@@ -3184,7 +3225,7 @@ function discover_optional_environment_variable {
       return 0
   fi
 
-  # Case: can't find variable value neither from "get_secret()" nor from "DEFAULT_VALUE". Not an error.
+  # Case: can't find variable value neither from "secret_get()" nor from "DEFAULT_VALUE". Not an error.
   return 0
 }
 export -f discover_optional_environment_variable
@@ -3344,12 +3385,58 @@ export -f get_lsb_release
 ### BEGIN SET ENVIRONMENT FUNCTIONS
 
 ###############################################################################
-# Utility function check_environment_variables_are_set() checks if all the expected environment variables are set
+#
+# Function makes sure ${FF_AGENT_HOME} folder exist. If not it errors out.
+#
+# Require environment variables set:
+#   - FF_AGENT_HOME
+#
+# Return:
+#  on success - return 0
+#  on error - return nonzero code
+#
+function assert_ff_agent_home_exists {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Dependency check: 'tr' is installed
+  if ! command_exists tr >/dev/null; then
+    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
+    return 1
+  fi
+
+  # Define required variables
+  local REQUIRED_VARIABLES=(
+    FF_AGENT_HOME
+  )
+
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || {
+      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
+      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      return 1
+    }
+  done
+
+  # Make sure ${FF_AGENT_HOME} folder exist
+  if [ ! -d "${FF_AGENT_HOME}" ]; then
+      # The folder is missing: error out
+      set_state "${FUNCNAME[0]}" "error_ff_agent_home_does_not_exist"
+      return 1
+  fi
+
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f assert_ff_agent_home_exists
+
+###############################################################################
+# Utility function environment_check_required_variables_are_set() checks if all the expected environment variables are set
 #
 # On success: reuturn 0
 # On failure: return 1
 #
-function check_environment_variables_are_set {
+function environment_check_required_variables_are_set {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Dependency check: 'tr' is installed
@@ -3372,7 +3459,7 @@ function check_environment_variables_are_set {
   # Check required environment variables are set
   for VARIABLE_NAME in "${ALL_EXPECTED_ENVRIONMENT_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE=$( echo "error_check_environment_variables_are_set_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )
+      local ERROR_CODE=$( echo "error_environment_check_required_variables_are_set_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )
       set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
       return 1
     }
@@ -3381,14 +3468,14 @@ function check_environment_variables_are_set {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f check_environment_variables_are_set
+export -f environment_check_required_variables_are_set
 
 ###############################################################################
-# Utility function check_ff_agent_bin_is_in_the_path()
+# Utility function ff_agent_check_bin_is_in_the_path()
 # On success: reuturn 0
 # On failure: 1
 #
-function check_ff_agent_bin_is_in_the_path {
+function ff_agent_check_bin_is_in_the_path {
   set_state "${FUNCNAME[0]}" 'started'
 
   local FF_AGENT_BIN="${FF_AGENT_HOME}/bin"
@@ -3402,16 +3489,16 @@ function check_ff_agent_bin_is_in_the_path {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f check_ff_agent_bin_is_in_the_path
+export -f ff_agent_check_bin_is_in_the_path
 
 ###############################################################################
-# Utility function check_nodejs_installation() checks if nodejs is installed
+# Utility function nodejs_check_installation() checks if nodejs is installed
 # under right path and expected version
 #
 # On success: reuturn 0
 # On failure: 1
 #
-function check_nodejs_installation {
+function nodejs_check_installation {
   set_state "${FUNCNAME[0]}" 'started'
 
   local ERRORS_COUNT=0
@@ -3419,14 +3506,14 @@ function check_nodejs_installation {
   local WHICH_NODE="$( command_exists node )"
   if [ "${WHICH_NODE}" == "" ]; then
     # 'node' does not exist
-    ERROR_CODE="error_check_nodejs_installation_nodejs_not_installed"
+    ERROR_CODE="error_nodejs_check_installation_nodejs_not_installed"
     set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
     (( ERRORS_COUNT++ ))
   else
     # 'node' exists: run few more node-related checks
     # Check nodejs is not installed under /usr
     [[ "${WHICH_NODE}" =~ ^/usr/ ]] && {
-      ERROR_CODE="error_check_nodejs_installation_wrong_installation_dir"
+      ERROR_CODE="error_nodejs_check_installation_wrong_installation_dir"
       set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
       (( ERRORS_COUNT++ ))
     }
@@ -3481,24 +3568,24 @@ function check_nodejs_installation {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f check_nodejs_installation
+export -f nodejs_check_installation
 
 ###############################################################################
-# Utility function check_set_get_secret() checks if set_secret() and get_secret()
+# Utility function secret_check_set_and_get() checks if secret_set() and secret_get()
 # work as expected.
 #
 # On success: reuturn 0
 # On failure: return 1 and prints error to standard error stream
 #
-function check_set_get_secret {
+function secret_check_set_and_get {
   set_state "${FUNCNAME[0]}" 'started'
   
-  SECRET_NAME="check_set_get_secret"
+  SECRET_NAME="secret_check_set_and_get"
   SECRET_VALUE=$( ff_uuid ) || { set_state "${FUNCNAME[0]}" 'failed_generate_uuid'; return 1; }
 
-  set_secret "${SECRET_NAME}" "${SECRET_VALUE}" || { set_state "${FUNCNAME[0]}" 'failed_set_secret'; return 1; }
+  secret_set "${SECRET_NAME}" "${SECRET_VALUE}" || { set_state "${FUNCNAME[0]}" 'failed_secret_set'; return 1; }
 
-  local RETRIEVED_VALUE=$( get_secret "${SECRET_NAME}" ) || {
+  local RETRIEVED_VALUE=$( secret_get "${SECRET_NAME}" ) || {
     set_state "${FUNCNAME[0]}" 'failed_retrieve_secret'
     return 1
   }
@@ -3513,10 +3600,10 @@ function check_set_get_secret {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f check_set_get_secret
+export -f secret_check_set_and_get
 
 ###############################################################################
-# Utility function check_set_get_state() checks if set_state() and get_state()
+# Utility function state_check_set_and_get() checks if set_state() and get_state()
 # work as expected.
 #
 # On success: reuturn 0
@@ -3524,7 +3611,7 @@ export -f check_set_get_secret
 #
 # Depend on: uuidgen, tr.
 #
-function check_set_get_state {
+function state_check_set_and_get {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Check tr is installed
@@ -3533,7 +3620,7 @@ function check_set_get_state {
     return 1
   fi
 
-  STATE_NAME="check_set_get_state"
+  STATE_NAME="state_check_set_and_get"
   STATE_VALUE=$( ff_uuid | tr -d '-' )
 
   # Check generated STATE_VALUE is not empty
@@ -3553,7 +3640,7 @@ function check_set_get_state {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f check_set_get_state
+export -f state_check_set_and_get
 
 ###############################################################################
 #
@@ -3600,7 +3687,7 @@ export -f get_current_user
 
 ###############################################################################
 #
-# Function choose_ff_agent_home:
+# Function get_best_ff_agent_home:
 #
 # Sets the following environment variables:
 #   FF_AGENT_USERNAME - example: ubuntu
@@ -3620,12 +3707,12 @@ export -f get_current_user
 # Failure to choose the right user would end up in the terminal installation error:
 # "terminal_error_failed_to_discover_environment".
 #
-function choose_ff_agent_home {
+function get_best_ff_agent_home {
 
     # These exports are our "return values"
-    # Note: we should not get value from subprocess and call 'export' on the same 1-line liek this: "export SOMEVAR=$( some_function_call ) || { error "error details"; return 1; } "
+    # Note: we should not get value from subprocess and call 'export' on the same 1-line like this: "export SOMEVAR=$( some_function_call ) || { error "error details"; return 1; } "
     #       because export would hide actual exit call of the "some_function_call" and thus we'll miss an error!
-    FF_AGENT_USERNAME=$( get_ff_agent_username ) || { error "terminal_error_failed_to_choose_user"; return 1; }
+    FF_AGENT_USERNAME="$(get_current_user)" || { error "terminal_error_failed_to_get_current_user"; return 1; }
     export FF_AGENT_USERNAME
 
     # Even if this function run by some other/not-chosen" user, the FF_AGENT_USER_HOME would point to the "right/choosen" home. Example: /home/ubuntu
@@ -3636,59 +3723,7 @@ function choose_ff_agent_home {
     local AGENT_DIR_NAME="ff_agent"
     export FF_AGENT_HOME="${FF_AGENT_USER_HOME}/${AGENT_DIR_NAME}"
 }
-export -f choose_ff_agent_home
-
-###############################################################################
-#
-# Function makes sure ${FF_AGENT_HOME} folder exist. If not - tries to create it.
-#
-# Require environment variables set:
-#   - FF_AGENT_HOME
-#   - FF_AGENT_USERNAME
-#
-# Return:
-#  on success - return 0
-#  on error - return nonzero code
-#
-function ensure_ff_agent_home_exists {
-  set_state "${FUNCNAME[0]}" 'started'
-
-  # Dependency check: 'tr' is installed
-  if ! command_exists tr >/dev/null; then
-    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
-    return 1
-  fi
-
-  # Define required variables
-  local REQUIRED_VARIABLES=(
-    FF_AGENT_HOME
-    FF_AGENT_USERNAME
-  )
-
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-      return 1
-    }
-  done
-
-  # Make sure ${FF_AGENT_HOME} folder exist
-  if [ ! -d "${FF_AGENT_HOME}" ]; then
-      # ${FF_AGENT_HOME} folder is missing: create new one.
-      mkdir -p "${FF_AGENT_HOME}"
-      if [ ${?} -ne 0 ]; then
-        # Failed to create ${FF_AGENT_HOME} - report error and return code 1
-        set_state "${FUNCNAME[0]}" "failed_to_create_ff_agent_home"
-        return 1
-      fi
-  fi
-
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
-}
-export -f ensure_ff_agent_home_exists
+export -f get_best_ff_agent_home
 
 ###############################################################################
 #
@@ -3747,58 +3782,6 @@ export -f get_desired_nodejs_version
 
 ###############################################################################
 #
-# Find out the best user to run as.
-# Return:
-#  on success - return code 0 and print a username to use to standard output.
-#  on error   - log error() and return 1
-#
-# The logic "best user" selection:
-# We don't run as root, or root-like account.
-# We would like an account that can install packages to set the environment up correctly.
-# We check the following user accounts candidates: "ff_agent", "ubuntu" or current user.
-# Selected user should have rights to install packages. Ideally locally, but one step at a time.
-#
-function get_ff_agent_username {
-
-    CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
-
-    POTENTIAL_USERS=( ff_agent ubuntu ${CURRENT_USER} )
-
-    if effectively_root
-    then
-        # Look for a better user.
-        for POTENTIAL_USER in "${POTENTIAL_USERS[@]}"
-        do
-            if user_exists ${POTENTIAL_USER}
-            then
-                if can_sudo "${POTENTIAL_USER}"
-                then
-                    echo "${POTENTIAL_USER}"
-                    return 0
-                fi
-            fi
-        done
-
-        error "Current user ${CURRENT_USER} is effectively root and this script can not run as root."
-        error "Tried to find other users to run as (${POTENTIAL_USERS}) but was not successful."
-        return 1
-
-    else
-        # We aren't root. But can we sudo? We need that to currently install certain packages.
-        if can_sudo "${CURRENT_USER}"
-        then
-            echo "${CURRENT_USER}"
-            return 0
-        else
-            error "User ${CURRENT_USER} can not sudo. Currently sudo is required to install packages. Please run from a non-root account with sudo privileges."
-            return 1
-        fi
-    fi
-}
-export -f get_ff_agent_username
-
-###############################################################################
-#
 # Function checks if we have framework API defined by checking if all of the following is set:
 #    - FF_HOST
 #    - ( FF_API_USERNAME and FF_API_PASSWORDS ) OR ( FF_API_TOKEN )
@@ -3826,10 +3809,10 @@ function is_framework_api_defined {
 export -f is_framework_api_defined
 
 ###############################################################################
-# Utility function is_set_environment_working() checks if all the aspects of "set_environment"
+# Utility function set_environment_is_working() checks if all the aspects of "set_environment"
 # are in place and functioning as expected
 #
-function is_set_environment_working {
+function set_environment_is_working {
   set_state "${FUNCNAME[0]}" 'started'
 
   local HAS_ERRORS=false
@@ -3841,10 +3824,10 @@ function is_set_environment_working {
   COMMANDS=(
     command_exists
     set_state
-    check_environment_variables_are_set
-    check_set_get_state
-    check_set_get_secret
-    check_ff_agent_bin_is_in_the_path
+    environment_check_required_variables_are_set
+    state_check_set_and_get
+    secret_check_set_and_get
+    ff_agent_check_bin_is_in_the_path
   )
 
   local ASSERTION='command_exists'
@@ -3863,19 +3846,19 @@ function is_set_environment_working {
   # MaKE SURE THESE COMMANDS BELOW ARE TESTED ABOVE
   CHECKS=(
     # Check expected environments are in place
-    check_environment_variables_are_set
+    environment_check_required_variables_are_set
 
     # Check nodejs installation
-    check_nodejs_installation
+    nodejs_check_installation
 
     # Check set_state() / get_state() by setting random value to some test state and then retrieving it back
-    check_set_get_state
+    state_check_set_and_get
 
-    # Check set_secret() / get_secret() by setting random value to some test secret and then retrieving it back
-    check_set_get_secret
+    # Check secret_set() / secret_get() by setting random value to some test secret and then retrieving it back
+    secret_check_set_and_get
 
     # Check ff_agent/bin is in the path
-    check_ff_agent_bin_is_in_the_path
+    ff_agent_check_bin_is_in_the_path
   )
 
   local COMMAND  # Declare variable local, so it does not polute our scope outside this f-n
@@ -3909,7 +3892,7 @@ function is_set_environment_working {
     return 0
   fi
 }
-export -f is_set_environment_working
+export -f set_environment_is_working
 
 ###############################################################################
 #
@@ -3932,7 +3915,7 @@ function publish_message {
   INPUT_JSON=`cat`
 
   # Check inputs
-  local FF_API_USERNAME=$( get_secret ff_api_username )
+  local FF_API_USERNAME=$( secret_get ff_api_username )
   if [ "${FF_API_USERNAME}" == "" ]; then
     set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     # error: FF_API_USERNAME is missing
@@ -3940,7 +3923,7 @@ function publish_message {
     return 1
   fi
 
-  local FF_API_PASSWORD=$( get_secret ff_api_password )
+  local FF_API_PASSWORD=$( secret_get ff_api_password )
   if [ "${FF_API_PASSWORD}" == "" ]; then
     set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     # error: FF_API_PASSWORD is missing
@@ -4041,5 +4024,3 @@ EOF
 export -f publish_message
 
 ### END SET ENVIRONMENT FUNCTIONS
-
-terminal_initialize

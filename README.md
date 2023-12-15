@@ -29,17 +29,20 @@ Set Environment has following goals:
 ### Installing
 
 In order to use this environment, you need to download this project from github and run installer by teh following commands:
-``` 
-cd /tmp && \
+```
+# Installing "set environment" baseline:
+TEMP_DIRECTORY=$( mktemp -d ) && \
+mkdir -p "${TEMP_DIRECTORY}" && \
+cd ${TEMP_DIRECTORY} && \
 git clone https://github.com/redwolfsecurity/set_environment.git && \
 cd set_environment && \
-FF_CONTENT_URL=https://cdn.redwolfsecurity.com/ ./install 2>&1 | logger -t 'set_environment'
+FF_CONTENT_URL=https://cdn.redwolfsecurity.com ./install
 ```
 
 ### Testing
 
 After installation is complete you should open a new terminal window, so that added initialization would be able to inject "set environment" components into your environment (see your initialization files: ~/.bashrc and ~/.profile).
-Now you can run test function "is_set_environment_working". It will return 0 if it is working, 1 otherwose.
+Now you can run test function "set_environment_is_working". It will return 0 if it is working, 1 otherwose.
 
 ### Now That You're Done
 
@@ -51,6 +54,6 @@ The ff_bash_functions file is in "${FF_AGENT_HOME}/git/redwolfsecurity/set_envir
 
 ## License
 
-Copyright 2021-2022 RedOki
+Copyright 2021-2023 RedOki
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
