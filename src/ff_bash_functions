@@ -3767,7 +3767,7 @@ export -f ff_api_get
 function get_desired_nodejs_version {
   local RELEASE=$( get_lsb_release ) # Will give us the version of ubuntu.
   case "${RELEASE}" in
-    18.*) echo 'v18.4.0'
+    18.*) echo 'v17'
     ;;
     20.*) echo 'v18.4.0'
     ;;
