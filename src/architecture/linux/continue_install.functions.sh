@@ -1150,9 +1150,12 @@ EOT
   fi
   # ------------------ Inject "ff_agent/.n/bin" into PATH and inject that export into FF_AGENT_PROFILE_FILE (end) ----------------
 
+  #
+  VERSION=$( get_desired_nodejs_version )
+  [ -z "${VERSION}" ] && { set_state "${FUNCNAME[0]}" 'failed_to_get_desired_nodejs_version'; abort; }
 
   # Install 'n_lts' using dowloaded into TMPDIR 'n' ('n_lts' will be installed into ff_agent/.n)
-  retry_command 5 15 bash n lts || {
+  retry_command 5 15 bash n "${VERSION}" || {
     # Error: clean up tmp folder, report an error and return error code 1
     popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
     set_state "${FUNCNAME[0]}" 'error_installing_n_lts'; return 1;
