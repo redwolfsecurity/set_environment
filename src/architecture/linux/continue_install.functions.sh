@@ -1150,12 +1150,15 @@ EOT
   fi
   # ------------------ Inject "ff_agent/.n/bin" into PATH and inject that export into FF_AGENT_PROFILE_FILE (end) ----------------
 
+  #
+  VERSION=$( get_desired_nodejs_version )
+  [ -z "${VERSION}" ] && { set_state "${FUNCNAME[0]}" 'failed_to_get_desired_nodejs_version'; abort; }
 
   # Install 'n_lts' using dowloaded into TMPDIR 'n' ('n_lts' will be installed into ff_agent/.n)
-  retry_command 5 15 bash n lts || {
+  retry_command 5 15 bash n "${VERSION}" || {
     # Error: clean up tmp folder, report an error and return error code 1
     popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
-    set_state "${FUNCNAME[0]}" 'error_installing_n_lts'; return 1;
+    set_state "${FUNCNAME[0]}" 'error_installing_n'; return 1;
   }
 
   # Install 'n' into ff_agent/.n  (yes, we have downloaded 'n' into TMPDIR,
@@ -1181,27 +1184,16 @@ export -f install_n
 function install_nodejs {
   set_state "${FUNCNAME[0]}" 'started'
 
-  local APPROACH='n'
+  # Get desired nodejs version
+  local VERSION="$( get_desired_nodejs_version )"
+  [ -z "${VERSION}" ] && { set_state "${FUNCNAME[0]}" 'failed_to_get_desired_nodejs_version'; abort; }
 
-  # Get expected nodejs version
-  local VERSION="$( get_expected_nodejs_version )"
-  [ -z "${VERSION}" ] && { set_state "${FUNCNAME[0]}" 'failed_to_get_expected_nodejs_version'; abort; }
 
-  case ${APPROACH} in
-      nvm)
-          install_nvm_ubuntu
-          export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
-          [ -s "${NVM_DIR}/nvm.sh" ] && \. "${NVM_DIR}/nvm.sh"
-          nvm install lts/*
-      ;;
-      n)
-          # # We need to stop pm2 before replacing location of nodejs, otherwise any pm2 command would faild
-          # stop_pm2
-          # uninstall_n_outside_ff_agent_home  || { set_state "${FUNCNAME[0]}" 'terminal_error_uninstall_n_outside_ff_agent_home'; abort; }
-          install_n || { set_state "${FUNCNAME[0]}" 'terminal_error_install_n'; abort; }
-          n install "${VERSION}" || { set_state "${FUNCNAME[0]}" 'terminal_error_switching_node_version'; abort; }
-      ;;
-  esac
+  # # We need to stop pm2 before replacing location of nodejs, otherwise any pm2 command would faild
+  # stop_pm2
+  # uninstall_n_outside_ff_agent_home  || { set_state "${FUNCNAME[0]}" 'terminal_error_uninstall_n_outside_ff_agent_home'; abort; }
+  install_n || { set_state "${FUNCNAME[0]}" 'terminal_error_install_n'; abort; }
+  n install "${VERSION}" || { set_state "${FUNCNAME[0]}" 'terminal_error_switching_node_version'; abort; }
 
   set_state "${FUNCNAME[0]}" 'success'
   return 0
