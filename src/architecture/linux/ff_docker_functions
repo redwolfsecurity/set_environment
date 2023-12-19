@@ -8,6 +8,7 @@
 ## BEGIN UTILITY FUNCTIONS: CONTAINERS
 #    - docker_cleanup 
 #    - docker_container_name_exists 
+#    - docker_grep 
 #    - docker_ensure 
 #    - docker_ensure_log_to_syslog 
 #    - docker_get_default_minimum_major_version 
@@ -26,7 +27,8 @@
 #    - docker_restart 
 #    - docker_restart_containers 
 #    - docker_set_log_to_syslog 
-#    - docker_stop_and_remove_container_by_name 
+#    - docker_stop_and_remove_by_name 
+#    - docker_stop_by_name 
 #    - docker_volumes_to_containers_list 
 ## END UTILITY FUNCTIONS: DOCKERS
 
@@ -72,7 +74,7 @@ export -f docker_cleanup
 #
 function docker_container_name_exists {
   
-  CONTAINER_NAME="${1}"
+  local CONTAINER_NAME="${1}"
   # -z - true if the length of string is zero
   # -n - true if the length of string is nonzero
   if [ -z "${CONTAINER_NAME}" ]; then
@@ -80,6 +82,7 @@ function docker_container_name_exists {
       return 2
   fi
 
+  local CONTAINER_ID
   CONTAINER_ID=$(docker inspect --format="{{.Id}}" ${CONTAINER_NAME} 2> /dev/null)
   if [[ "${CONTAINER_ID}" ]]; then
     return 0
@@ -386,7 +389,7 @@ export -f docker_install
 # Category: container
 # Utility function - Check if docker container healthy or not. This checks if the container is actually in the state 'running' vs. restarting
 function docker_is_container_healthy {
-    CONTAINER_NAME="${1}"
+    local CONTAINER_NAME="${1}"
 
     # -z - true if the length of string is zero
     # -n - true if the length of string is nonzero
@@ -466,7 +469,7 @@ export -f docker_is_container_log_to_syslog
 function docker_is_container_running {
 
     # Take argument, check it is not empty
-    CONTAINER_NAME="${1}"
+    local CONTAINER_NAME="${1}"
     [ ! -z "${CONTAINER_NAME}" ] || { error "error_no_container_name_specified"; return 2; }
 
     # Inspect given container, make sure it is in ranning state
@@ -895,10 +898,10 @@ function docker_restart_containers {
     #     error "error_no_container_names_specified"
     #     return 2
     # fi
-    CONTAINERS=(${@})
-    CONTAINERS_TO_RESTART=()
-    for CONTAINER in "${CONTAINERS[@]}"
-    do
+    local CONTAINERS=(${@})
+    local CONTAINERS_TO_RESTART=()
+
+    for CONTAINER in "${CONTAINERS[@]}"; do
         # We only restart a container if it is defined
         if docker_container_name_exists "${CONTAINER}"
         then
@@ -979,15 +982,16 @@ export -f docker_set_log_to_syslog
 # container it will "docker stop" and "docker remove" them.
 # Function return code 0 on success
 #
-function docker_stop_and_remove_container_by_name {
+function docker_stop_and_remove_by_name {
   set_state "${FUNCNAME[0]}" 'started'
 
-  CONTAINER_NAME="${1}"
+  local CONTAINER_NAME="${1}"
 
   # Check the container name isn't blank
   [ "${CONTAINER_NAME}" != "" ] || { set_state "${FUNCNAME[0]}" 'error_bad_arguments'; return 1; }
 
   # Count existing container(s) by given docker name
+  local FOUND_CONTAINERS_COUNT
   FOUND_CONTAINERS_COUNT=$( docker ps -a | grep "${CONTAINER_NAME}" | wc -l )
 
   # Check if we found >1
@@ -1007,10 +1011,13 @@ function docker_stop_and_remove_container_by_name {
       # Sometimes container can be in the broken state, in this case even after stopping and removing it
       # the DOCKER_ID is still visible in the "docker ps" list. In this cas we need to kill -9 corresponding
       # process on the host level:
+      local STILL_PRESENT_DOCKER_ID
       STILL_PRESENT_DOCKER_ID=$( docker ps -a | grep "${DOCKER_ID}" | wc -l )
       if [ "${STILL_PRESENT_DOCKER_ID}" != "" ]; then
         # Yes, we have found "unstoppable" docker. Kill -9 the corresponding process now
+        local PID_TO_KILL_COUNT
         PID_TO_KILL_COUNT=$( sudo ps aux | grep "${DOCKER_ID}" | wc -l )
+        local PID_TO_KILL
         PID_TO_KILL=$( sudo ps aux | grep "${DOCKER_ID}" )
         if [ ${PID_TO_KILL_COUNT} -ne 1 ]; then
           # Something went wrong, we supposed to find exactly ONE pid to terminate.
@@ -1018,7 +1025,7 @@ function docker_stop_and_remove_container_by_name {
           return 1
         fi
 
-        # Send "kill -9" signal to the found process
+        # Send "SIGKILL" signal to the found process
         sudo kill -9 "${PID_TO_KILL}" || { set_state "${FUNCNAME[0]}" 'error_killing_process'; return 1; }
 
         # The "unstoppable" docker terminated, now we can safely remove the container
@@ -1031,7 +1038,49 @@ function docker_stop_and_remove_container_by_name {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f docker_stop_and_remove_container_by_name
+export -f docker_stop_and_remove_by_name
+
+###############################################################################
+# Category: container
+# Utility function - Stops docker containers by given container name pattern
+#
+# Function gets container name (case sensitive) (can be partial match) as the only input argument and
+# tries to find all matching containers (even if they're in a stopped state). Then for every found
+# container it will "docker stop" and "docker remove" them.
+# Function return code 0 on success
+#
+# Example:
+#    docker_stop_by_name control_fron
+#
+function docker_stop_by_name {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  local CONTAINER_NAME="${1}"
+
+  # Check the container name isn't blank
+  [ "${CONTAINER_NAME}" != "" ] || { set_state "${FUNCNAME[0]}" 'error_bad_arguments'; return 1; }
+
+  # Count existing container(s) by given docker name
+  local FOUND_CONTAINERS_COUNT
+  FOUND_CONTAINERS_COUNT=$( docker ps -a | grep "${CONTAINER_NAME}" | wc -l )
+
+  # Check if we have at least 1 container by given name (or simply return success)
+  [ ${FOUND_CONTAINERS_COUNT} -gt 0 ] || { set_state "${FUNCNAME[0]}" 'success'; return 0; }
+
+  # Yes, we found >1 containers
+  for DOCKER_ID in $(docker ps -a | grep "${CONTAINER_NAME}" | awk '{print $1}'); do
+    # Make sure DOCKER_ID is not a blank string
+    [ "${DOCKER_ID}" != "" ] || { set_state "${FUNCNAME[0]}" 'failed_to_get_docker_id'; return 1; }
+      
+    # Try to stop the container
+    docker stop "${DOCKER_ID}"
+  done
+
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f docker_stop_by_name
+
 
 ###############################################################################
 # Category: container

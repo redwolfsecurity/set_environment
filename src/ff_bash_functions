@@ -20,6 +20,7 @@
 #    - command_exists 
 #    - file_toc 
 #    - help 
+#    - help_toc 
 ## END USAGE/HELP FUNCTION
 ## BEGIN APT WRAPPER FUNCTIONS
 #    - apt_dist_upgrade 
@@ -39,7 +40,8 @@
 ## BEGIN UTILITY FUNCTIONS: FILE
 #    - assert_cd 
 #    - assert_makedir 
-#    - does_file_have_eol_at_the_end 
+#    - does_file_have_eol_at_the_end
+#    - ensure_file_contains
 #    - f 
 #    - file_contains_pattern 
 #    - find_file_owner_in_all_packages 
@@ -47,8 +49,8 @@
 #    - get_by_url 
 #    - glob_matches 
 #    - inject_into_file 
-#    - path_to_absolute_path 
 #    - is_writable 
+#    - path_to_absolute_path  
 #    - remove_all_lines_by_regexp 
 #    - replace_all_lines_by_regexp 
 #    - s 
@@ -80,42 +82,44 @@
 ## END UTILITY FUNCTIONS: TERMINAL / SHELL
 ## BEGIN UTILITY FUNCTIONS: PROCESS
 #    - process_is_running_as_me 
+#    - retry_command
 ## END UTILITY FUNCTIONS: PROCESS
 ## BEGIN UTILITY FUNCTIONS: CONTAINERS
 #    - container_name_exists 
+#    - container_remove_by_name
+#    - container_stop_by_name
 #    - docker_cleanup 
 #    - docker_volumes_to_containers_list 
 #    - get_installed_docker_version 
 #    - is_container_healthy 
 #    - is_container_running 
 #    - restart_containers 
-#    - stop_and_remove_container_by_name 
 ## END UTILITY FUNCTIONS: DOCKERS
 ## BEGIN UTILITY FUNCTIONS: STATE/SECRETS
 #    - generate_strong_password 
-#    - get_secret 
 #    - get_state 
-#    - set_secret 
+#    - secret_get 
+#    - secret_set 
 #    - set_state 
 ## END UTILITY FUNCTIONS: STATE/SECRETS
 ## BEGIN UTILITY FUNCTIONS: USER / GROUPS
 #    - can_sudo 
 #    - check_group_exists 
 #    - create_user 
-#    - effectively_root 
+#    - is_effectively_root 
 #    - get_home_directory_for_user 
 #    - get_ppid_cmd 
 #    - is_user_in_group 
 #    - user_exists 
 ## END UTILITY FUNCTIONS: USER / GROUPS
-## BEGIN DISCOVER FUNTIONS
+## BEGIN DISCOVER FUNCTIONS
+#    - ff_agent_get_best_ff_agent_uri 
+#    - ff_agent_get_best_ff_content_url 
+#    - ff_agent_get_best_ff_host 
+#    - ff_agent_get_best_ff_port 
+#    - ff_agent_get_best_namespace 
+#    - ff_agent_get_best_organization 
 #    - ff_uuid 
-#    - get_best_ff_agent_uri 
-#    - get_best_ff_content_url 
-#    - get_best_ff_host 
-#    - get_best_ff_port 
-#    - get_best_namespace 
-#    - get_best_organization 
 #    - discover_environment 
 #    - discover_optional_environment_variable 
 #    - discover_os 
@@ -129,21 +133,23 @@
 #    - get_lsb_release 
 ## END DISCOVER FUNCTIONS
 ## BEGIN SET ENVIRONMENT FUNCTIONS
-#    - check_environment_variables_are_set 
+#    - assert_ff_agent_home_exists
+#    - environment_check_required_variables_are_set 
 #    - ff_agent_check_bin_is_in_the_path 
-#    - check_nodejs_installation 
-#    - check_set_get_secret 
-#    - check_set_get_state 
+#    - nodejs_check_installation 
+#    - secret_check_set_and_get 
+#    - state_check_set_and_get 
 #    - get_current_user 
-#    - choose_ff_agent_home 
-#    - ensure_ff_agent_home_exists 
+#    - get_best_ff_agent_home 
 #    - ff_api_get 
 #    - get_expected_nodejs_version 
-#    - get_ff_agent_username 
 #    - is_framework_api_defined 
-#    - is_set_environment_working 
+#    - set_environment_is_working 
 #    - publish_message 
 ## END SET ENVIRONMENT FUNCTIONS
+
+
+### BEGIN USAGE/HELP FUNCTION
 
 ###############################################################################
 # Ask for value and store it in variable
@@ -287,6 +293,34 @@ function help {
     typeset -F | cut -d' ' -f3
 }
 export -f help
+
+###############################################################################
+# Utility help function: table of content.
+# See also: file_toc()
+#
+function help_toc {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Check FF_AGENT_HOME is set
+  ensure_variable_not_empty 'FF_AGENT_HOME' || {
+    set_state "${FUNCNAME[0]}" 'error_ensure_variable_not_empty_ff_agent_home'
+    return 1
+  }
+
+  # Define path to ff_bash_functions file
+  TARGET_FILE="${FF_AGENT_HOME}/git/redwolfsecurity/set_environment/src/ff_bash_functions"
+  [ ! -f "${TARGET_FILE}" ] && {
+    set_state "${FUNCNAME[0]}" "error_ff_bash_functions_file_missing"
+    return 1
+  }
+
+  # Parse ff_bash_functions and generate table of contents
+  cat "${TARGET_FILE}" | grep '^### BEGIN\|^### END\|^function' | sed 's/^function /\#    - /g' | sed 's/{//g' | sed 's/###/##/g'
+
+  set_state "${FUNCNAME[0]}" 'success'
+}
+export -f help_toc
+
 
 ### END USAGE/HELP FUNCTION
 
@@ -617,7 +651,7 @@ export -f index_of
 #   fi
 #
 #  Expected output:
-#    The ownder of the url 'git://github.com/some-user/my-repo.git' is 'some-user'.
+#    The owner of the url 'git://github.com/some-user/my-repo.git' is 'some-user'.
 #
 # Other example:
 # URLS=(
@@ -794,7 +828,7 @@ function does_file_have_eol_at_the_end {
       return 0
   # -z - true if the length of string is zero
   # -n - true if the length of string is nonzero
-  elif [ -z "$(${SUDO_READ_FILE_PREFIX} cat "${FILENAME}" | tail -c 1)" ]; then
+  elif [ -z "$(${SUDO_READ_FILE_PREFIX} tail -c 1 "${FILENAME}" )" ]; then
       # The file ends with a newline or with a null byte,
       set_state "${FUNCNAME[0]}" 'success'
       return 0
@@ -890,6 +924,7 @@ function ensure_file_contains {
   set_state "${FUNCNAME[0]}" 'unexpected_error' # this should never happen, all EXIT_CODE cases covered above 
   return 1  
 }
+export -f ensure_file_contains
 
 ###############################################################################
 # Utility function f
@@ -1174,9 +1209,6 @@ function get_by_url {
   chmod 664 "${TMP_FILEPATH}" || { set_state "${FUNCNAME[0]}" "error_chmod_tmp_filepath"; return 1; }
 
   # Start actual download
-  # Note: we can not do "local" call with command evaluation in 1-liner,
-  # otherwise our error check will fail (will always indicate "success"
-  # since it will be checking "local" call instead of $(...) expression exit code)
   local HTTP_CODE
   HTTP_CODE=$(curl \
   --silent    \
@@ -1214,6 +1246,7 @@ function get_by_url {
       # We use -f to make mv to overwrite whenever possible without asking for any confirmations
       mv -f "${TMP_FILEPATH}" "${FILEPATH}" || {
         # If failed to move try with sudo
+        local CURRENT_USER
         CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" 'error_getting_current_user'; return 1; }
         if can_sudo "${CURRENT_USER}"; then
           # Have sudo privileges. Try to move using 'sudo'.
@@ -1421,12 +1454,12 @@ export -f glob_matches
 #   echo "creating example target file" > "${FILEPATH}"
 #
 #   # Define pattern to search
-#   PATTERN="source /some/required/dependency"
+#   PATTERN="source \"${FF_AGENT_PROFILE_FILE}\""
 #
 #   INJECT_CONTENT=$(
 #       cat <<EOT
-# # Sourcing XYZ dependency (injected by set_environment -> ff_bash_functions -> ${FUNCNAME[0]} on $(date --utc))
-# source /some/required/dependency
+# # Sourcing custom ff_agent/.bashrc file (injected by set_environment -> ff_bash_functions -> ${FUNCNAME[0]} on $(date --utc))
+# source "${FF_AGENT_PROFILE_FILE}"
 # injected line #3
 # injected line #4
 #
@@ -1630,7 +1663,8 @@ function remove_all_lines_by_regexp {
   # (examaple: bad syntax in the used regex).
   local GREP_OUTPUT
   GREP_OUTPUT=$( ${SUDO_READ_FILE_PREFIX} grep --quiet "${REGEX}" "${FILEPATH}" 2>&1 )
-  local EXIT_CODE=${?}
+  local EXIT_CODE
+  EXIT_CODE=${?}
 
   # Check if the pattern is found
   if [ ${EXIT_CODE} -eq 1 ]; then
@@ -1654,7 +1688,8 @@ function remove_all_lines_by_regexp {
 
   # Check if stream editor error out.
   # Example: bad pattern would return code=1 and error message: sed: -e expression #1, char 8: unterminated address regex
-  local EDITOR_CODE=${?}
+  local EDITOR_CODE
+  EDITOR_CODE=${?}
   if [ ${EDITOR_CODE} -ne 0 ]; then
     # Error: editor return an error (most probably bad regex pattern)
     set_state "${FUNCNAME[0]}" 'failed_to_edit_file'
@@ -1664,6 +1699,7 @@ function remove_all_lines_by_regexp {
   # Count the number of deleted lines
   # Note: sed always return 0, so it won't let us know how many changes were done
   LINE_COUNT_AFTER_CHANGE="$( ${SUDO_READ_FILE_PREFIX} cat "${FILEPATH}" | wc -l )" || { set_state "${FUNCNAME[0]}" 'failed_to_count_lines_after_edit'; return 1; }
+  local DELETED_LINES_COUNT
   DELETED_LINES_COUNT=$(( LINE_COUNT_BEFORE_CHANGE - LINE_COUNT_AFTER_CHANGE ))
 
   # Check the number of deleted lines
@@ -1789,7 +1825,7 @@ function replace_all_lines_by_regexp {
   # Example: bad pattern would return code=1 and error message: sed: -e expression #1, char 8: unterminated address regex
   EDITOR_CODE=${?}
   if [ ${EDITOR_CODE} -ne 0 ]; then
-    # Error: inline editor return an error (most probably bad regex pattern)
+    # Error: inline editor returned an error (most probably bad regex pattern)
     # Pass editor output (error details) to stdout.
     set_state "${FUNCNAME[0]}" 'error_inline_editor_returned_bad_code'
     # Remove temporary file
@@ -2254,7 +2290,6 @@ function terminal_initialize {
   fi
 
   return 0
-
 }
 export -f terminal_initialize
 
@@ -2310,6 +2345,7 @@ function process_is_running_as_me {
     GREP=$( command_exists grep ) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_grep_command'; return 1; }
 
     # Get current user. Note: the ${USER} environment is NOT set when running as 'root' in docker, we must use f-n get_current_user() instead.
+    local CURRENT_USER
     CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
 
     ${PS} -u "${CURRENT_USER}" -U "${CURRENT_USER}" o command | ${GREP} --silent -e "^${COMMAND_PATTERN}"
@@ -2319,6 +2355,77 @@ function process_is_running_as_me {
 }
 export -f process_is_running_as_me
 
+###############################################################################
+# Category: UTILITY FUNCTIONS: PROCESS
+#
+# Auxiliary method to retry a command several times up to the given number of maximum
+# attempts with sleeping given number of seconds between retries.
+#
+# Return code:
+#   0 - command executed successfully
+#   non-zero code - command failed after all attempts or bad arguments (check by "get_state retry_command")
+#                   Note: the error code will be actual command exit code returned on the last failed attempt.
+#
+# Synopsis:
+#       retry_command retry_attempts_max sleep_between_tries_seconds some_command [command_arguments...]
+#
+# Usage example:
+#       # Retry up to 5 times to install_xyz(), sleep 10 seconds between tries
+#       retry_command 5 10 install_xyz || { error "failed_to_install_xyz"; exit 1; }
+# 
+# Note: this function does not have state, i.e. the set_state() is not used
+# to indicate start/success (only for errors or failed attempts).
+function retry_command {
+
+    # Get number of max attempts
+    RETRY_ATTEMPTS_MAX=$1
+    # Shift all arguments to the left (original $1 gets lost)
+    shift
+
+    # Check argument not empty and >0
+    [ "${RETRY_ATTEMPTS_MAX}" != "" ] || { set_state "${FUNCNAME[0]}" 'failed_to_get_retry_attempts_max'; return 1; }
+    [ "${RETRY_ATTEMPTS_MAX}" -gt 0 ] || { set_state "${FUNCNAME[0]}" 'error_retry_attempts_max_must_be_positive_number'; return 1; }
+
+    # Get number of seconds to sleep between attempts
+    SLEEP_SECONDS=$1
+    shift # Shift all arguments to the left (original $1 gets lost)
+
+    # Check argument not empty & >1
+    [ "${SLEEP_SECONDS}" != "" ] || { set_state "${FUNCNAME[0]}" 'failed_to_get_sleep_seconds'; return 1; }
+    [ "${SLEEP_SECONDS}" -gt 0 ] || { set_state "${FUNCNAME[0]}" 'error_sleep_seconds_must_be_postive_number'; return 1; }
+
+    # Get the rest of the arguments as an array
+    local COMMAND_AS_ARRAY=("$@")
+
+    # Check: the command as array must be non-empty
+    [ ! -z "${COMMAND_AS_ARRAY}" ] || { set_state "${FUNCNAME[0]}" 'error_got_empty_command'; return 1; }
+
+    # Attempts loop: we will break out of the loop only if command is succeed or 
+    local ATTEMPT_COUNT=0
+    local FAILED_COMMAND_EXIT_CODE=0
+    while [ ${ATTEMPT_COUNT} -lt ${RETRY_ATTEMPTS_MAX} ]
+    do
+        # Increment attempts counter
+        ATTEMPT_COUNT=$((ATTEMPT_COUNT+1)) 
+
+        # Try the command and break the loop (by return 0) if succeed
+        "${COMMAND_AS_ARRAY[@]}" && return 0
+        
+        # Preserve actual exit code returned by failed command (this will be non-zero value)
+        FAILED_COMMAND_EXIT_CODE=$?
+
+        # Sleep only if not last attempt
+        [ ${ATTEMPT_COUNT} -lt ${RETRY_ATTEMPTS_MAX} ] && sleep ${SLEEP_SECONDS}
+    done
+
+    # Command failed on all attempts
+    set_state "${FUNCNAME[0]}" "failed_after_all_attempts"
+
+    # Return preserved bad code returned by the command
+    return ${FAILED_COMMAND_EXIT_CODE}
+}
+export -f retry_command
+
 ### END UTILITY FUNCTIONS: PROCESS
 
 
@@ -2326,17 +2433,96 @@ export -f process_is_running_as_me
 
 ###############################################################################
 # Utility function
+# Function generates 16 characters long password, which is printed to standard output.
+# Depends on: dd, uudecode, sed, cut.
+#
+# Return code:
+#    0 - success
+#    any other code - error (for example missing dependency)
+#
+# Example of generated passwords:
+#   /1/JvZ15LwXklSxx
+#   Pd/09PmvGhXxMfBz
+#   btRaFaOLs9zGLtVn
+#   OJVT51iMHaE8nc5d
+#   eE75MMQY8oIffoQA
+#   mySB9+mic1mTmls7
+#   l3JWm41xmzXdzQOq
+#   47Fetd0UGs1wk24Q
+#   F8Jak2Wc9JM3CiWb
+#   jYY5yq6nYjK2TOWn
+#
 function generate_strong_password {
     # Works on Linux and Mac
     # Makes password 16 characters long
+    # XXXX
+    local DEPENDENCIES="dd uudecode sed cut"
+    for DEPENDENCY in ${DEPENDENCIES}
+    do
+      if ! command_exists ${DEPENDENCY} >/dev/null; then
+          error "${FUNCNAME[0]}" "error_dependency_not_met_command_${DEPENDENCY}_not_found"
+          return 1
+      fi
+    done
+      
     dd if=/dev/urandom count=1 2> /dev/null | uuencode -m - | sed -ne 2p | cut -c-16
 }
 export -f generate_strong_password
 
 ###############################################################################
+# Function get_state() allows to get state set (by string name).
+# Return value:
+#   - if state found by given state name, print its value to standard output and return code 0
+#   - if state not found, print nothing into standard output and return code 1
+#
+function get_state {
+
+  # Preserve current bash echo settings and enable bash echo setting
+  BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_bash_echo_settings'; return 1; }
+
+  set_bash_echo_off || { set_state "${FUNCNAME[0]}" 'failed_to_set_bash_echo_off'; return 1; } # Disable xtrace to avoid priting secrets
+
+  # Get 1 argument: state name
+  STATE_NAME="${1}"
+
+  # Check state name isn't
+  [ ! -z "${STATE_NAME}" ] || { error "get_state(): blank state name argument"; return 1; }
+
+  # Check if state name contains any prohibited symbols, then error out.
+  [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { error "get_state(): illigal characters in the state name argument: '${BASH_REMATCH[1]}'"; return 1; }
+
+  # Make sure "${FF_AGENT_HOME}" is not empty
+  if [ -z "${FF_AGENT_HOME}" ]; then
+      error "Can not set state. FF_AGENT_HOME variable not defined. State would have been set to ${STATE_NAME}=${VALUE}"
+      set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+      return 1
+  fi
+
+  # Construct path to the state file
+  STATE_DIR="${FF_AGENT_HOME}/state"
+  STATE_FILE="${STATE_DIR}/${STATE_NAME}"
+
+  # Check if state file exists
+  if [ -f "${STATE_FILE}" ]; then
+    # State file found, try to print it's content and preserve result code
+    VALUE="$( cat "${STATE_FILE}" )"
+    EXIT_CODE=${?}
+    # Print value to standard output
+    echo -n "${VALUE}"
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    return ${EXIT_CODE}
+  else
+    # Error: state file not found. Restore xtrace and eturn code 1
+    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    return 1
+  fi
+}
+export -f get_state
+
+###############################################################################
 # Utility function, getting secret value by given secret key name.
-# Note: get_secret() require the FF_AGENT_HOME to be set.
-function get_secret {
+# Note: secret_get() require the FF_AGENT_HOME to be set.
+function secret_get {
   
   # Dependency check: 'tr' is installed
   if ! command_exists tr >/dev/null; then
@@ -2354,7 +2540,7 @@ function get_secret {
   local KEY="${1}"
 
   # Check KEY is not blank
-  [ ! -z "${KEY}" ] || { error "get_secret(): blank KEY argument"; return 1; }
+  [ ! -z "${KEY}" ] || { error "secret_get(): blank KEY argument"; return 1; }
 
   # Check if KEY contains any prohibited symbols, then error out.
   [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { 
@@ -2472,12 +2658,12 @@ function get_secret {
 
   # Case: We're looking for KEY=="FF_AGENT_URI" and we are on a traffic_generator.
   # In this case FF_AGENT_URI was already generated and stored to /etc/ff/configuration/agent_uri
-  # Let's retreive it from there and re-store it by set_secret()
+  # Let's retreive it from there and re-store it by secret_set()
   if [ "${KEY}" == "ff_agent_uri" ] && [ -f /etc/ff/configuration/agent_uri ]; then
     FF_AGENT_URI="$( cat /etc/ff/configuration/agent_uri )"
     # Store "agent" to proper unified place for secrets, so we don't have to look for it in random places again next time.
     if [ ! -z "${FF_AGENT_URI}" ]; then
-      set_secret ff_agent_uri "${FF_AGENT_URI}"
+      secret_set ff_agent_uri "${FF_AGENT_URI}"
       set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
       echo "${FF_AGENT_URI}"
       set_state "${FUNCNAME[0]}" 'success'
@@ -2504,61 +2690,11 @@ function get_secret {
   set_state "${FUNCNAME[0]}" 'failed_to_find_secret_value'
   return 1
 }
-export -f get_secret
-
-###############################################################################
-# Function get_state() allows to get state set (by string name).
-# Return value:
-#   - if state found by given state name, print its value to standard output and return code 0
-#   - if state not found, print nothing into standard output and return code 1
-#
-function get_state {
-
-  # Preserve current bash echo settings and enable bash echo setting
-  BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_bash_echo_settings'; return 1; }
-
-  set_bash_echo_off || { set_state "${FUNCNAME[0]}" 'failed_to_set_bash_echo_off'; return 1; } # Disable xtrace to avoid priting secrets
-
-  # Get 1 argument: state name
-  STATE_NAME="${1}"
-
-  # Check state name isn't
-  [ ! -z "${STATE_NAME}" ] || { error "get_state(): blank state name argument"; return 1; }
-
-  # Check if state name contains any prohibited symbols, then error out.
-  [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { error "get_state(): illigal characters in the state name argument: '${BASH_REMATCH[1]}'"; return 1; }
-
-  # Make sure "${FF_AGENT_HOME}" is not empty
-  if [ -z "${FF_AGENT_HOME}" ]; then
-      error "Can not set state. FF_AGENT_HOME variable not defined. State would have been set to ${STATE_NAME}=${VALUE}"
-      set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-      return 1
-  fi
-
-  # Construct path to the state file
-  STATE_DIR="${FF_AGENT_HOME}/state"
-  STATE_FILE="${STATE_DIR}/${STATE_NAME}"
-
-  # Check if state file exists
-  if [ -f "${STATE_FILE}" ]; then
-    # State file found, try to print it's content and preserve result code
-    VALUE="$( cat "${STATE_FILE}" )"
-    EXIT_CODE=${?}
-    # Print value to standard output
-    echo -n "${VALUE}"
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    return ${EXIT_CODE}
-  else
-    # Error: state file not found. Restore xtrace and eturn code 1
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    return 1
-  fi
-}
-export -f get_state
+export -f secret_get
 
 ###############################################################################
 # Utility function
-function set_secret {
+function secret_set {
 
   # Preserve current bash echo settings and enable bash echo setting
   BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_bash_echo_settings'; return 1; }
@@ -2617,7 +2753,7 @@ function set_secret {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f set_secret
+export -f secret_set
 
 ###############################################################################
 # Utility function
@@ -2729,7 +2865,7 @@ function set_state {
 
   for VARIABLE_NAME in "${ALL_EXPECTED_ENVRIONMENT_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE=$( echo "error_check_environment_variables_are_set_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )
+      local ERROR_CODE=$( echo "error_environment_check_required_variables_are_set_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )
       error "${FUNCNAME[0]}: ${ERROR_CODE}"
       return 1
     }
@@ -2869,14 +3005,14 @@ export -f create_user
 ###############################################################################
 # Category: authorization
 # Utility function - Am I root? Return 0 if I am, 1 if not
-function effectively_root {
+function is_effectively_root {
     if  [ "${EUID}" -eq 0 ]; then
         return 0 # I have root powers
     else
         return 1 # Don't have root powers
     fi
 }
-export -f effectively_root
+export -f is_effectively_root
 
 ###############################################################################
 # Category: identity
@@ -2937,7 +3073,7 @@ export -f user_exists
 
 
 
-### BEGIN DISCOVER FUNTIONS
+### BEGIN DISCOVER FUNCTIONS
 
 ###############################################################################
 #
@@ -2983,12 +3119,12 @@ export -f ff_uuid
 #   - on failure: return code 1
 #
 # Usage example:
-#    FF_AGENT_URI=$( get_best_ff_agent_uri ) || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_agent_uri"; return 1; }
+#    FF_AGENT_URI=$( ff_agent_get_best_ff_agent_uri ) || { set_state "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_agent_uri"; return 1; }
 #
-function get_best_ff_agent_uri {
+function ff_agent_get_best_ff_agent_uri {
   set_state "${FUNCNAME[0]}" 'started'
 
-  # Try to get FF_AGENT_URI from environment or by get_secret()
+  # Try to get FF_AGENT_URI from environment or by secret_get()
   discover_optional_environment_variable "FF_AGENT_URI" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable"; return 1; }
 
   # Check if variable already set. If not set - generate new uuid
@@ -3011,7 +3147,7 @@ function get_best_ff_agent_uri {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f get_best_ff_agent_uri
+export -f ff_agent_get_best_ff_agent_uri
 
 ###############################################################################
 #
@@ -3023,13 +3159,13 @@ export -f get_best_ff_agent_uri
 #   - on failure: return code 1
 #
 # Usage example:
-#  FF_CONTENT_URL=$( get_best_ff_content_url )
-#  [ ${?} -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_content_url"; return 1; }
+#  FF_CONTENT_URL=$( ff_agent_get_best_ff_content_url )
+#  [ ${?} -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_content_url"; return 1; }
 #
-function get_best_ff_content_url {
+function ff_agent_get_best_ff_content_url {
   set_state "${FUNCNAME[0]}" 'started'
 
-  # Try to get FF_CONTENT_URL from environment or by get_secret()
+  # Try to get FF_CONTENT_URL from environment or by secret_get()
   discover_optional_environment_variable "FF_CONTENT_URL" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable"; return 1; }
 
   # Remove trailing slash from FF_CONTENT_URL, so it works correctly when we concatenate
@@ -3045,7 +3181,7 @@ function get_best_ff_content_url {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f get_best_ff_content_url
+export -f ff_agent_get_best_ff_content_url
 
 ###############################################################################
 #
@@ -3057,13 +3193,13 @@ export -f get_best_ff_content_url
 #   - on failure: return code 1
 #
 # Usage example:
-#  UPLOAD_TO=$( get_best_ff_host )
-#  [ ${?} -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_get_best_ff_host"; return 1; }
+#  UPLOAD_TO=$( ff_agent_get_best_ff_host )
+#  [ ${?} -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_host"; return 1; }
 #
-function get_best_ff_host {
+function ff_agent_get_best_ff_host {
   set_state "${FUNCNAME[0]}" 'started'
 
-  # Try to get FF_HOST from environment or by get_secret()
+  # Try to get FF_HOST from environment or by secret_get()
   discover_optional_environment_variable "FF_HOST" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_host"; return 1; } # Note: FF_HOST: FF_HOST will be set to legacy portal hostname if this is a portal.
 
   # Check if variable already set. If not try to get it's value by command 'hostname'
@@ -3077,7 +3213,7 @@ function get_best_ff_host {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f get_best_ff_host
+export -f ff_agent_get_best_ff_host
 
 ###############################################################################
 #
@@ -3088,11 +3224,11 @@ export -f get_best_ff_host
 #   - on success: return code 0 and choosen value printed to standard outout
 #   - on failure: return code 1
 #
-function get_best_ff_port {
+function ff_agent_get_best_ff_port {
   set_state "${FUNCNAME[0]}" 'started'
   FF_PORT_DEFAULT=443
 
-  # Try to get FF_PORT from environment or by get_secret()
+  # Try to get FF_PORT from environment or by secret_get()
   discover_optional_environment_variable "FF_PORT" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_port"; return 1; }
 
   # Check if variable already set. If not then use default
@@ -3103,14 +3239,14 @@ function get_best_ff_port {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f get_best_ff_port
+export -f ff_agent_get_best_ff_port
 
 ###############################################################################
 #
-function get_best_namespace {
+function ff_agent_get_best_namespace {
   set_state "${FUNCNAME[0]}" 'started'
 
-  # Try to get value from environment or by get_secret()
+  # Try to get value from environment or by secret_get()
   discover_optional_environment_variable "NAMESPACE" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_namespace"; return 1; }
 
   # Check if variable already set. If not set it to our default "system.local" namespace: '00000000-0000-0000-0000-000000000000'.
@@ -3124,14 +3260,14 @@ function get_best_namespace {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f get_best_namespace
+export -f ff_agent_get_best_namespace
 
 ###############################################################################
 #
-function get_best_organization {
+function ff_agent_get_best_organization {
   set_state "${FUNCNAME[0]}" 'started'
 
-  # Try to get value from environment or by get_secret()
+  # Try to get value from environment or by secret_get()
   discover_optional_environment_variable "ORGANIZATION" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_organization"; return 1; }
 
   # Check if variable already set. If not set it to our default organization "system.local"
@@ -3145,7 +3281,7 @@ function get_best_organization {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f get_best_organization
+export -f ff_agent_get_best_organization
 
 ###############################################################################
 #
@@ -3158,7 +3294,7 @@ export -f get_best_organization
 #    - FF_HOST
 #
 # Dependencies:
-#    - FF_CONTENT_URL variable must be set either by "set_secrets" or in environment variable
+#    - FF_CONTENT_URL variable must be set either by "secret_set()" or in environment variable
 #
 # Function return code:
 #   0 - on success
@@ -3171,19 +3307,19 @@ function discover_environment {
   #
   # Choose proper user to run as create "ff_agent" folder (known as ${FF_AGENT_HOME}).
   # The proper user is not root but user with sudo that can install packages.
-  # We need to choose_ff_agent_home before we can set/get secrets.
+  # We need to get_best_ff_agent_home before we can set/get secrets.
   # This sets some of environment variables: FF_AGENT_USERNAME, FF_AGENT_HOME.
   # Also creates FF_AGENT_HOME directory.
   # Baseline installer must set the following environment variables:
-  #  [x] FF_AGENT_USERNAME  (see choose_ff_agent_home())
-  #  [x] FF_AGENT_USER_HOME (see choose_ff_agent_home())
-  #  [x] FF_AGENT_HOME      (see choose_ff_agent_home())
-  #  [x] FF_AGENT_URI (see get_best_ff_agent_uri())
-  #  [x] FF_HOST (see get_best_ff_host())
-  #  [x] FF_CONTENT_URL (see get_best_ff_content_url())
-  #  [x] NAMESPACE (see get_best_namespace())
+  #  [x] FF_AGENT_USERNAME  (see get_best_ff_agent_home())
+  #  [x] FF_AGENT_USER_HOME (see get_best_ff_agent_home())
+  #  [x] FF_AGENT_HOME      (see get_best_ff_agent_home())
+  #  [x] FF_AGENT_URI (see ff_agent_get_best_ff_agent_uri())
+  #  [x] FF_HOST (see ff_agent_get_best_ff_host())
+  #  [x] FF_CONTENT_URL (see ff_agent_get_best_ff_content_url())
+  #  [x] NAMESPACE (see ff_agent_get_best_namespace())
   #  [x] N_PREFIX (see install_n())
-  #  [x] ORGANIZATION (see get_best_organization())
+  #  [x] ORGANIZATION (see ff_agent_get_best_organization())
   #  [x] TERM  (see terminal_initialize())
   #
   # Preserving a set of other discussed environment values to add in future:
@@ -3195,35 +3331,35 @@ function discover_environment {
   #  FF_PROXY_USERNAME
   #  FF_PROXY_PASSWORD
   #
-  choose_ff_agent_home || { abort "failed_to_choose_ff_agent_home"; }
-  ensure_ff_agent_home_exists || { abort "failed_to_ensure_ff_agent_home_exists"; }
+  get_best_ff_agent_home || { abort "failed_to_get_best_ff_agent_home"; }
+  assert_ff_agent_home_exists || { abort "failed_to_assert_ff_agent_home_exists"; }
 
-  # Get best values, check errors, export and set_secret().
-  FF_CONTENT_URL=$( get_best_ff_content_url ) || { abort "failed_to_get_best_ff_content_url"; }
-  set_secret ff_content_url "${FF_CONTENT_URL}"
+  # Get best values, check errors, export and secret_set().
+  FF_CONTENT_URL=$( ff_agent_get_best_ff_content_url ) || { abort "failed_to_ff_agent_get_best_ff_content_url"; }
+  secret_set ff_content_url "${FF_CONTENT_URL}"
   export FF_CONTENT_URL
 
   # Similarly for best NAMESPACE
-  NAMESPACE=$( get_best_namespace ) || { abort "failed_to_get_best_namespace"; }
-  set_secret namespace "${NAMESPACE}"
+  NAMESPACE=$( ff_agent_get_best_namespace ) || { abort "failed_to_ff_agent_get_best_namespace"; }
+  secret_set namespace "${NAMESPACE}"
   export NAMESPACE
 
   # Similarly for best ORGANIZATION
-  ORGANIZATION=$( get_best_organization ) || { abort "failed_to_get_best_organization"; }
-  set_secret organization "${ORGANIZATION}"
+  ORGANIZATION=$( ff_agent_get_best_organization ) || { abort "failed_to_ff_agent_get_best_organization"; }
+  secret_set organization "${ORGANIZATION}"
   export ORGANIZATION
 
   # Similarly for FF_AGENT_URI
-  FF_AGENT_URI=$( get_best_ff_agent_uri )     || { abort "failed_to_get_best_ff_agent_uri"; }
-  set_secret ff_agent_uri "${FF_AGENT_URI}"
+  FF_AGENT_URI=$( ff_agent_get_best_ff_agent_uri )     || { abort "failed_to_ff_agent_get_best_ff_agent_uri"; }
+  secret_set ff_agent_uri "${FF_AGENT_URI}"
   export FF_AGENT_URI
 
-  FF_HOST=$( get_best_ff_host )               || { abort "failed_to_get_best_ff_host"; }
-  set_secret ff_host "${FF_HOST}"
+  FF_HOST=$( ff_agent_get_best_ff_host )               || { abort "failed_to_ff_agent_get_best_ff_host"; }
+  secret_set ff_host "${FF_HOST}"
   export FF_HOST
 
-  FF_PORT=$( get_best_ff_port )               || { abort "failed_to_get_best_ff_port"; }
-  set_secret ff_port "${FF_PORT}"
+  FF_PORT=$( ff_agent_get_best_ff_port )               || { abort "failed_to_ff_agent_get_best_ff_port"; }
+  secret_set ff_port "${FF_PORT}"
   export FF_PORT
 
   # ######################################################################
@@ -3286,7 +3422,7 @@ export -f discover_environment
 #
 # F-n checks:
 #    - if such variable already exists function export that variable and exits with no changes to the existing value
-#    - if no such variable exists f-n tries to get previously stored value by calling "get_secret ${NAME}" and export this value (if found)
+#    - if no such variable exists f-n tries to get previously stored value by calling "secret_get ${NAME}" and export this value (if found)
 #    - if no value found on previous steps, then f-n exports this variable with ${DEFAULT_VALUE} (only if default value is not blank)
 #
 # Return code:
@@ -3317,9 +3453,9 @@ function discover_optional_environment_variable {
     return 1
   fi
   
-  # Try to get value by "get_secret()"
+  # Try to get value by "secret_get()"
   local NAME_LOWERCASE="$( echo "${NAME}" | tr '[:upper:]' '[:lower:]' )"
-  local RESTORED_VALUE=$( get_secret "${NAME_LOWERCASE}" )
+  local RESTORED_VALUE=$( secret_get "${NAME_LOWERCASE}" )
   if [ ! -z "${RESTORED_VALUE}" ]; then
       # Got non-empty value, use it to export variable
       export "${NAME}"="${RESTORED_VALUE}"
@@ -3332,7 +3468,7 @@ function discover_optional_environment_variable {
       return 0
   fi
 
-  # Case: can't find variable value neither from "get_secret()" nor from "DEFAULT_VALUE". Not an error.
+  # Case: can't find variable value neither from "secret_get()" nor from "DEFAULT_VALUE". Not an error.
   return 0
 }
 export -f discover_optional_environment_variable
@@ -3652,10 +3788,10 @@ function check_set_get_secret {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f check_set_get_secret
+export -f secret_check_set_and_get
 
 ###############################################################################
-# Utility function check_set_get_state() checks if set_state() and get_state()
+# Utility function state_check_set_and_get() checks if set_state() and get_state()
 # work as expected.
 #
 # On success: reuturn 0
@@ -3663,7 +3799,7 @@ export -f check_set_get_secret
 #
 # Depend on: uuidgen, tr.
 #
-function check_set_get_state {
+function state_check_set_and_get {
   set_state "${FUNCNAME[0]}" 'started'
 
   # Check tr is installed
@@ -3672,7 +3808,7 @@ function check_set_get_state {
     return 1
   fi
 
-  STATE_NAME="check_set_get_state"
+  STATE_NAME="state_check_set_and_get"
   STATE_VALUE=$( ff_uuid | tr -d '-' )
 
   # Check generated STATE_VALUE is not empty
@@ -3697,7 +3833,7 @@ function check_set_get_state {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f check_set_get_state
+export -f state_check_set_and_get
 
 ###############################################################################
 #
@@ -3744,7 +3880,7 @@ export -f get_current_user
 
 ###############################################################################
 #
-# Function choose_ff_agent_home:
+# Function get_best_ff_agent_home:
 #
 # Sets the following environment variables:
 #   FF_AGENT_USERNAME - example: ubuntu
@@ -3764,12 +3900,12 @@ export -f get_current_user
 # Failure to choose the right user would end up in the terminal installation error:
 # "terminal_error_failed_to_discover_environment".
 #
-function choose_ff_agent_home {
+function get_best_ff_agent_home {
 
     # These exports are our "return values"
-    # Note: we should not get value from subprocess and call 'export' on the same 1-line liek this: "export SOMEVAR=$( some_function_call ) || { error "error details"; return 1; } "
+    # Note: we should not get value from subprocess and call 'export' on the same 1-line like this: "export SOMEVAR=$( some_function_call ) || { error "error details"; return 1; } "
     #       because export would hide actual exit call of the "some_function_call" and thus we'll miss an error!
-    FF_AGENT_USERNAME=$( get_ff_agent_username ) || { error "terminal_error_failed_to_choose_user"; return 1; }
+    FF_AGENT_USERNAME="$(get_current_user)" || { error "terminal_error_failed_to_get_current_user"; return 1; }
     export FF_AGENT_USERNAME
 
     # Even if this function run by some other/not-chosen" user, the FF_AGENT_USER_HOME would point to the "right/choosen" home. Example: /home/ubuntu
@@ -3780,59 +3916,7 @@ function choose_ff_agent_home {
     local AGENT_DIR_NAME="ff_agent"
     export FF_AGENT_HOME="${FF_AGENT_USER_HOME}/${AGENT_DIR_NAME}"
 }
-export -f choose_ff_agent_home
-
-###############################################################################
-#
-# Function makes sure ${FF_AGENT_HOME} folder exist. If not - tries to create it.
-#
-# Require environment variables set:
-#   - FF_AGENT_HOME
-#   - FF_AGENT_USERNAME
-#
-# Return:
-#  on success - return 0
-#  on error - return nonzero code
-#
-function ensure_ff_agent_home_exists {
-  set_state "${FUNCNAME[0]}" 'started'
-
-  # Dependency check: 'tr' is installed
-  if ! command_exists tr >/dev/null; then
-    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
-    return 1
-  fi
-
-  # Define required variables
-  local REQUIRED_VARIABLES=(
-    FF_AGENT_HOME
-    FF_AGENT_USERNAME
-  )
-
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-      return 1
-    }
-  done
-
-  # Make sure ${FF_AGENT_HOME} folder exist
-  if [ ! -d "${FF_AGENT_HOME}" ]; then
-      # ${FF_AGENT_HOME} folder is missing: create new one.
-      mkdir -p "${FF_AGENT_HOME}"
-      if [ ${?} -ne 0 ]; then
-        # Failed to create ${FF_AGENT_HOME} - report error and return code 1
-        set_state "${FUNCNAME[0]}" "failed_to_create_ff_agent_home"
-        return 1
-      fi
-  fi
-
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
-}
-export -f ensure_ff_agent_home_exists
+export -f get_best_ff_agent_home
 
 ###############################################################################
 #
@@ -3879,58 +3963,6 @@ export -f get_expected_nodejs_version
 
 ###############################################################################
 #
-# Find out the best user to run as.
-# Return:
-#  on success - return code 0 and print a username to use to standard output.
-#  on error   - log error() and return 1
-#
-# The logic "best user" selection:
-# We don't run as root, or root-like account.
-# We would like an account that can install packages to set the environment up correctly.
-# We check the following user accounts candidates: "ff_agent", "ubuntu" or current user.
-# Selected user should have rights to install packages. Ideally locally, but one step at a time.
-#
-function get_ff_agent_username {
-
-    CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
-
-    POTENTIAL_USERS=( ff_agent ubuntu ${CURRENT_USER} )
-
-    if effectively_root
-    then
-        # Look for a better user.
-        for POTENTIAL_USER in "${POTENTIAL_USERS[@]}"
-        do
-            if user_exists ${POTENTIAL_USER}
-            then
-                if can_sudo "${POTENTIAL_USER}"
-                then
-                    echo "${POTENTIAL_USER}"
-                    return 0
-                fi
-            fi
-        done
-
-        error "Current user ${CURRENT_USER} is effectively root and this script can not run as root."
-        error "Tried to find other users to run as (${POTENTIAL_USERS}) but was not successful."
-        return 1
-
-    else
-        # We aren't root. But can we sudo? We need that to currently install certain packages.
-        if can_sudo "${CURRENT_USER}"
-        then
-            echo "${CURRENT_USER}"
-            return 0
-        else
-            error "User ${CURRENT_USER} can not sudo. Currently sudo is required to install packages. Please run from a non-root account with sudo privileges."
-            return 1
-        fi
-    fi
-}
-export -f get_ff_agent_username
-
-###############################################################################
-#
 # Function checks if we have framework API defined by checking if all of the following is set:
 #    - FF_HOST
 #    - ( FF_API_USERNAME and FF_API_PASSWORDS ) OR ( FF_API_TOKEN )
@@ -3942,45 +3974,69 @@ export -f get_ff_agent_username
 #    fi
 #
 function is_framework_api_defined {
-  # Print 'false' if FF_HOST not set
-  [ -z "${FF_HOST}" ] && { echo 'false'; return; }
+  # Print 'false' and return 1if FF_HOST not set
+  [ -z "${FF_HOST}" ] && { echo 'false'; return 1; }
 
   # Print 'true' if both FF_API_USERNAME and FF_API_PASSWORDS are set
-  [ ! -z "${FF_API_USERNAME}" ] && [ ! -z "${FF_API_PASSWORDS}" ] && { echo 'true'; return; }
+  [ ! -z "${FF_API_USERNAME}" ] && [ ! -z "${FF_API_PASSWORDS}" ] && { echo 'true'; return 0; }
 
   # Print 'true' if FF_API_TOKEN is set
-  [ ! -z "${FF_API_TOKEN}" ] && { echo 'true'; return; }
+  [ ! -z "${FF_API_TOKEN}" ] && { echo 'true'; return 0; }
 
   # Print 'false' in all other cases
   echo 'false'
-  return
+  return 1
 }
 export -f is_framework_api_defined
 
 ###############################################################################
-# Utility function is_set_environment_working() checks if all the aspects of "set_environment"
+# Utility function set_environment_is_working() checks if all the aspects of "set_environment"
 # are in place and functioning as expected
 #
-function is_set_environment_working {
+function set_environment_is_working {
   set_state "${FUNCNAME[0]}" 'started'
 
-  # Check the "command_exists" exists
-  command_exists command_exists >/dev/null || { set_state "${FUNCNAME[0]}" 'failed_dependency_command_exists'; return 1; }
+  local HAS_ERRORS=false
+  local VERBOSE=false
+
+  [ "${1}" == "--verbose" ] && VERBOSE=true
+
+  # Verify expected commands exist
+  COMMANDS=(
+    command_exists
+    set_state
+    environment_check_required_variables_are_set
+    state_check_set_and_get
+    secret_check_set_and_get
+    ff_agent_check_bin_is_in_the_path
+  )
+
+  local ASSERTION='command_exists'
+  for COMMAND in ${COMMANDS[@]}
+  do
+    if command_exists ${COMMAND} >/dev/null ; then
+      [ "${VERBOSE}" == 'true' ] && log "SUCCESS assertion='${ASSERTION}' command='${COMMAND}'"
+    else
+      HAS_ERRORS=true
+      [ "${VERBOSE}" == 'true' ] && error "assertion='${ASSERTION}'  command='${COMMAND}'"
+      set_state "${FUNCNAME[0]}" "error_assertion_failed_${ASSERTION}_command_${COMMAND}"
+    fi
+  done
 
   # Loop through array of f-nested f-ns, on error set flag HAS_ERRORS (don't exit)
-  local HAS_ERRORS=false
+  # MaKE SURE THESE COMMANDS BELOW ARE TESTED ABOVE
   CHECKS=(
     # Check expected environments are in place
-    check_environment_variables_are_set
+    environment_check_required_variables_are_set
 
     # Check nodejs installation
-    check_nodejs_installation
+    nodejs_check_installation
 
     # Check set_state() / get_state() by setting random value to some test state and then retrieving it back
-    check_set_get_state
+    state_check_set_and_get
 
-    # Check set_secret() / get_secret() by setting random value to some test secret and then retrieving it back
-    check_set_get_secret
+    # Check secret_set() / secret_get() by setting random value to some test secret and then retrieving it back
+    secret_check_set_and_get
 
     # Check ff_agent/bin is in the path
     ff_agent_check_bin_is_in_the_path
@@ -3988,17 +4044,20 @@ function is_set_environment_working {
 
   local COMMAND  # Declare variable local, so it does not polute our scope outside this f-n
   for COMMAND in "${CHECKS[@]}"; do
-    if ! command_exists >/dev/null "${COMMAND}"; then
-      # Error: command not found
+    # Run the command. It must return 0 on success
+    if ${COMMAND}; then
+      # Command returns 0, which we take as successfull assertion
+      if [ "${COMMAND}" ]; then
+            [ "${VERBOSE}" == 'true' ] && log "SUCCESS assertion='${COMMAND}'"
+      else 
       HAS_ERRORS=true
-      set_state "error_command_not_found_${COMMAND}"
-    else
-      # Command exists, run it and check result
-      "${COMMAND}" || { HAS_ERRORS=true; set_state "error_command_failed_${COMMAND}"; }
+        [ "${VERBOSE}" == 'true' ] && error "failed assertion='${COMMAND}'"
+        set_state "error_assertion_failed_${COMMAND}"
+      fi
     fi
   done
 
-  # TODO: check docker is installed with >= minimal version (if the docker install was required in given environment)
+  # TODO: check docker is installed with >= minimal version (if install_docker() was required in given environment)
 
   # TODO: check if list of required basic packages is installed
 
@@ -4014,7 +4073,7 @@ function is_set_environment_working {
     return 0
   fi
 }
-export -f is_set_environment_working
+export -f set_environment_is_working
 
 ###############################################################################
 #
@@ -4037,7 +4096,7 @@ function publish_message {
   INPUT_JSON=`cat`
 
   # Check inputs
-  local FF_API_USERNAME=$( get_secret ff_api_username )
+  local FF_API_USERNAME=$( secret_get ff_api_username )
   if [ "${FF_API_USERNAME}" == "" ]; then
     set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     # error: FF_API_USERNAME is missing
@@ -4045,7 +4104,7 @@ function publish_message {
     return 1
   fi
 
-  local FF_API_PASSWORD=$( get_secret ff_api_password )
+  local FF_API_PASSWORD=$( secret_get ff_api_password )
   if [ "${FF_API_PASSWORD}" == "" ]; then
     set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     # error: FF_API_PASSWORD is missing

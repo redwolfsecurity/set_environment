@@ -204,12 +204,13 @@ export -f assert_core_credentials
 function background_install {
 
   # Take the only argument: target username to "run as"
-  USER_TO_RUN_AS="${1}"
+  local USER_TO_RUN_AS="${1}"
 
   # Check argument is not empty string
   [ "${USER_TO_RUN_AS}" != "" ] || { error "background_install error: missing argument"; abort; }
 
   # Get current user. Note: the ${USER} environment is NOT set when running as 'root' in docker, we must use f-n get_current_user() instead.
+  local CURRENT_USER
   CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
 
   # Check if target user can sudo
@@ -283,9 +284,10 @@ function check_if_need_background_install {
       abort
   fi
 
-  DO_BACKGROUND_INSTALL=false
+  local DO_BACKGROUND_INSTALL=false
 
   # Get current user. Note: the ${USER} environment is NOT set when running as 'root' in docker, we must use f-n get_current_user() instead.
+  local CURRENT_USER
   CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
 
   # Suppose I'm not the best user, but I can sudo to become the best! e.g. If I am root - I'm not the best user.
