@@ -173,8 +173,9 @@ function assert_baseline_components {
   # Install pm2
   assert_clean_exit pm2_ensure
 
-  # Install npm package "@ff/ff_agent" -> ff_agent/
-  assert_clean_exit install_ff_agent
+  ## Commented out until the new ff_agent does not use libcurl
+  ## # Install npm package "@ff/ff_agent" -> ff_agent/
+  ## assert_clean_exit install_ff_agent
 
   set_state "${FUNCNAME[0]}" 'success'
 }
@@ -1251,17 +1252,12 @@ export -f install_set_environment_baseline
 # Checks if pm2 is installed
 # Returns 0 if it is, 1 if it isn't
 function pm2_is_installed {
-    set_state "${FUNCNAME[0]}" 'started'
     local STATUS=0
     local PACKAGE="pm2"
     local NPM=$( command_exists npm ) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
 
     # If it not installed, set STATUS=1
     ${NPM} list "${PACKAGE}" --global >/dev/null
-    STATUS=${?}
-
-    set_state "${FUNCNAME[0]}" 'success'
-    return ${STATUS}
 }
 export -f pm2_is_installed
 
