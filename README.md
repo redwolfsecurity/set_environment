@@ -32,7 +32,6 @@ In order to use this environment, you need to download this project from github 
 ```
 # Installing "set environment" baseline:
 TEMP_DIRECTORY=$( mktemp -d ) && \
-mkdir -p "${TEMP_DIRECTORY}" && \
 cd ${TEMP_DIRECTORY} && \
 git clone https://github.com/redwolfsecurity/set_environment.git && \
 cd set_environment && \
