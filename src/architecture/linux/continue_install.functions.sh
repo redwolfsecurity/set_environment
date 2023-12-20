@@ -528,7 +528,7 @@ function install_docker {
   local ARCHITECTURE=$( get_hardware_architecture ) || { set_state "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
 
   # Only Ubuntu for now
-  if [ "${LSB_ID}" != "Ubuntu" ]; then
+  if [ "${LSB_ID}" != "ubuntu" ]; then
       set_state "${FUNCNAME[0]}" "error_docker_install_unsupported_operating_system"
       return 1
   fi

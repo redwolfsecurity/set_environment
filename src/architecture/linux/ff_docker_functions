@@ -274,8 +274,9 @@ function docker_install {
   # OK We install since we don't have the minimum version, or docker is not installed
 
   # Get ID, RELEASE and DISTRO and verify the values are actually set
-  local LSB_ID=$( get_lsb_id ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
-  [ "${LSB_ID}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
+  local LSB_ID
+  LSB_ID=$( get_lsb_id ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # ubuntu
+  [ "${LSB_ID}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; }
 
   local RELEASE=$( get_lsb_release ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }  # 18.04, 20.04, ...
   [ "${RELEASE}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }
@@ -285,8 +286,8 @@ function docker_install {
 
   local ARCHITECTURE=$( get_hardware_architecture ) || { set_state "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
 
-  # Only Ubuntu for now
-  if [ "${LSB_ID}" != "Ubuntu" ]; then
+  # Only Ubuntu for now.
+  if [ "${LSB_ID}" != "ubuntu" ]; then
       set_state "${FUNCNAME[0]}" "error_docker_install_unsupported_operating_system"
       return 1
   fi

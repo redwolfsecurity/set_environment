@@ -3357,6 +3357,8 @@ export -f get_lsb_codename
 # the --short returns 'Ubuntu'. Without --short it would return something like:
 #    Distributor ID:	Ubuntu
 #
+# Note: we lowercase the LSB_ID because otherwise different versions of Ubuntu would differ in case of the 1st letter.
+#
 function get_lsb_id {
     for DEPENDENCY in lsb_release tr
     do
