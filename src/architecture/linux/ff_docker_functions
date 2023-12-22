@@ -26,6 +26,7 @@
 #    - docker_restart 
 #    - docker_restart_containers 
 #    - docker_set_log_to_syslog 
+#    - docker_stop_all_containers
 #    - docker_stop_and_remove_container_by_name 
 #    - docker_volumes_to_containers_list 
 ## END UTILITY FUNCTIONS: DOCKERS
@@ -940,15 +941,15 @@ function docker_set_log_to_syslog {
   docker_is_installed || { set_state "${FUNCNAME[0]}" 'error_docker_is_not_installed'; return 1; }
 
   # Check if docker configuration directory exists
-  local DOCKCER_CONFIGURATION_PATH="/etc/docker"
-  if [ ! -d "${DOCKCER_CONFIGURATION_PATH}" ]; then
+  local DOCKER_CONFIGURATION_PATH="/etc/docker"
+  if [ ! -d "${DOCKER_CONFIGURATION_PATH}" ]; then
     # Error: docker configuration directory does not exist
     set_state "${FUNCNAME[0]}" 'error_docker_configuration_directory_does_not_exist'
     return 1
   fi
 
   # Create docker configuration file (or overwrite existing)
-  local FILEPATH="${DOCKCER_CONFIGURATION_PATH}/daemon.json"
+  local FILEPATH="${DOCKER_CONFIGURATION_PATH}/daemon.json"
 (
 cat <<EOT
 {
@@ -971,6 +972,35 @@ EOT
   set_state "${FUNCNAME[0]}" 'success'
 }
 export -f docker_set_log_to_syslog
+
+###############################################################################
+# Category: container
+# Utility function - Stop all docker containers
+function docker_stop_all_containers {
+
+  # Define dependencies
+  local DEPENDENCIES=(
+    docker
+    wc
+  )
+
+  # Loop through dependencies
+  for DEPENDENCY in "${DEPENDENCIES[@]}"; do
+    if ! command_exists "${DEPENDENCY}" > /dev/null; then
+      error "${FUNCNAME[0]}" "error_dependency_not_met_${DEPENDENCY}"
+      return 1
+    fi
+  done
+
+  # Stop all containers
+  docker stop $(docker ps -aq) > /dev/null || { error "Failed to stop all containers"; return 1; }
+
+  # Postcondition check: all containers are stopped
+  local RUNNING_CONTAINERS_COUNT="$(docker ps -q | wc -l)"
+  [ "${RUNNING_CONTAINERS_COUNT}" -eq 0 ] || { error "Postcondition check failed. Running containers: ${RUNNING_CONTAINERS_COUNT} (expected: 0)"; return 1; }
+}
+export -f docker_stop_all_containers
+
 
 ###############################################################################
 # Category: container
