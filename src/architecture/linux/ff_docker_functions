@@ -27,8 +27,9 @@
 #    - docker_restart 
 #    - docker_restart_containers 
 #    - docker_set_log_to_syslog 
-#    - docker_stop_and_remove_by_name 
-#    - docker_stop_by_name 
+#    - docker_stop_all_containers
+#    - docker_stop_and_remove_container_by_name 
+#    - docker_stop_container_by_name 
 #    - docker_volumes_to_containers_list 
 ## END UTILITY FUNCTIONS: DOCKERS
 
@@ -277,8 +278,9 @@ function docker_install {
   # OK We install since we don't have the minimum version, or docker is not installed
 
   # Get ID, RELEASE and DISTRO and verify the values are actually set
-  local LSB_ID=$( get_lsb_id ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
-  [ "${LSB_ID}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
+  local LSB_ID
+  LSB_ID=$( get_lsb_id ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # ubuntu
+  [ "${LSB_ID}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; }
 
   local RELEASE=$( get_lsb_release ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }  # 18.04, 20.04, ...
   [ "${RELEASE}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }
@@ -288,8 +290,8 @@ function docker_install {
 
   local ARCHITECTURE=$( get_hardware_architecture ) || { set_state "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
 
-  # Only Ubuntu for now
-  if [ "${LSB_ID}" != "Ubuntu" ]; then
+  # Only Ubuntu for now.
+  if [ "${LSB_ID}" != "ubuntu" ]; then
       set_state "${FUNCNAME[0]}" "error_docker_install_unsupported_operating_system"
       return 1
   fi
@@ -942,15 +944,15 @@ function docker_set_log_to_syslog {
   docker_is_installed || { set_state "${FUNCNAME[0]}" 'error_docker_is_not_installed'; return 1; }
 
   # Check if docker configuration directory exists
-  local DOCKCER_CONFIGURATION_PATH="/etc/docker"
-  if [ ! -d "${DOCKCER_CONFIGURATION_PATH}" ]; then
+  local DOCKER_CONFIGURATION_PATH="/etc/docker"
+  if [ ! -d "${DOCKER_CONFIGURATION_PATH}" ]; then
     # Error: docker configuration directory does not exist
     set_state "${FUNCNAME[0]}" 'error_docker_configuration_directory_does_not_exist'
     return 1
   fi
 
   # Create docker configuration file (or overwrite existing)
-  local FILEPATH="${DOCKCER_CONFIGURATION_PATH}/daemon.json"
+  local FILEPATH="${DOCKER_CONFIGURATION_PATH}/daemon.json"
 (
 cat <<EOT
 {
@@ -976,13 +978,42 @@ export -f docker_set_log_to_syslog
 
 ###############################################################################
 # Category: container
+# Utility function - Stop all docker containers
+function docker_stop_all_containers {
+
+  # Define dependencies
+  local DEPENDENCIES=(
+    docker
+    wc
+  )
+
+  # Loop through dependencies
+  for DEPENDENCY in "${DEPENDENCIES[@]}"; do
+    if ! command_exists "${DEPENDENCY}" > /dev/null; then
+      error "${FUNCNAME[0]}" "error_dependency_not_met_${DEPENDENCY}"
+      return 1
+    fi
+  done
+
+  # Stop all containers
+  docker stop $(docker ps -aq) > /dev/null || { error "Failed to stop all containers"; return 1; }
+
+  # Postcondition check: all containers are stopped
+  local RUNNING_CONTAINERS_COUNT="$(docker ps -q | wc -l)"
+  [ "${RUNNING_CONTAINERS_COUNT}" -eq 0 ] || { error "Postcondition check failed. Running containers: ${RUNNING_CONTAINERS_COUNT} (expected: 0)"; return 1; }
+}
+export -f docker_stop_all_containers
+
+
+###############################################################################
+# Category: container
 # Utility function - Restart docker containers
 # Function gets container name (case sensitive) (can be partial) as the only input argument and
 # tries to find all matching containers (even if they're in stopped state). Then for every found
 # container it will "docker stop" and "docker remove" them.
 # Function return code 0 on success
 #
-function docker_stop_and_remove_by_name {
+function docker_stop_and_remove_container_by_name {
   set_state "${FUNCNAME[0]}" 'started'
 
   local CONTAINER_NAME="${1}"
@@ -1038,7 +1069,7 @@ function docker_stop_and_remove_by_name {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f docker_stop_and_remove_by_name
+export -f docker_stop_and_remove_container_by_name
 
 ###############################################################################
 # Category: container
@@ -1050,9 +1081,9 @@ export -f docker_stop_and_remove_by_name
 # Function return code 0 on success
 #
 # Example:
-#    docker_stop_by_name control_fron
+#    docker_stop_container_by_name control_fron
 #
-function docker_stop_by_name {
+function docker_stop_container_by_name {
   set_state "${FUNCNAME[0]}" 'started'
 
   local CONTAINER_NAME="${1}"
@@ -1079,7 +1110,7 @@ function docker_stop_by_name {
   set_state "${FUNCNAME[0]}" 'success'
   return 0
 }
-export -f docker_stop_by_name
+export -f docker_stop_container_by_name
 
 
 ###############################################################################
