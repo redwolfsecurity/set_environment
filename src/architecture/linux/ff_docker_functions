@@ -84,7 +84,6 @@ function docker_container_name_exists {
       return 2
   fi
 
-
   # Note: simple "docker inspect some-name" is ambiguous and can inspect either container or image.
   # To disambiguate we use "--type" (can be one of: container|image|node|network|secret|service|volume|task|plugin).
   # For more details see the official docs: https://docs.docker.com/engine/reference/commandline/inspect/ 
@@ -481,7 +480,11 @@ function docker_is_container_running {
     [ ! -z "${CONTAINER_NAME}" ] || { error "${FUNCNAME[0]}: error_no_container_name_specified"; return 2; }
 
     # Inspect given container, make sure it is in ranning state
-    if [ "$( docker container inspect -f '{{.State.Running}}' ${CONTAINER_NAME} )" == "true" ]; then
+    # Note: simple "docker inspect some-name" is ambiguous and can inspect either container or image.
+    # To disambiguate we use "--type" (can be one of: container|image|node|network|secret|service|volume|task|plugin).
+    # For more details see the official docs: https://docs.docker.com/engine/reference/commandline/inspect/ 
+    # Or alternatively we can use "docker container inspect"
+    if [ "$( docker container inspect asdf -f '{{.State.Running}}' ${CONTAINER_NAME} 2>/dev/null)" == "true" ]; then
         return 0
     else
         return 1
