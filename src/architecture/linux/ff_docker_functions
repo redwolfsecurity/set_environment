@@ -23,7 +23,8 @@
 #    - docker_login 
 #    - docker_login_aws_ecr 
 #    - docker_login_legacy 
-#    - docker_minimal_version_check 
+#    - docker_minimal_version_check
+#    - docker_remove_all_containers
 #    - docker_restart 
 #    - docker_restart_containers 
 #    - docker_set_log_to_syslog 
@@ -79,7 +80,7 @@ function docker_container_name_exists {
   # -z - true if the length of string is zero
   # -n - true if the length of string is nonzero
   if [ -z "${CONTAINER_NAME}" ]; then
-      error "error_no_container_name_specified"
+      error "${FUNCNAME[0]}: error_no_container_name_specified"
       return 2
   fi
 
@@ -113,8 +114,8 @@ function docker_grep {
   # Extract the variable name
   MATCH=$( echo "${SEARCH_TERM}" | cut -d= -f1 )
 
-  [ ! -z "${CONTAINER_IDNAME}" ] || { error "Failed to get the container name from the arguments."; exit 1; }
-  [ ! -z "${MATCH}" ] || { error "Failed to extract match term."; exit 1; }
+  [ ! -z "${CONTAINER_IDNAME}" ] || { error "${FUNCNAME[0]}: Failed to get the container name from the arguments."; exit 1; }
+  [ ! -z "${MATCH}" ] || { error "${FUNCNAME[0]}: Failed to extract match term."; exit 1; }
 
   # Newer call exclude non-ascii files, exclude certain paths, prints filename and line numbers (very fast)
   # Note: had to split to 2 calls: find() and collect to array, later iterate and grep, otherwise
@@ -396,7 +397,7 @@ function docker_is_container_healthy {
     # -z - true if the length of string is zero
     # -n - true if the length of string is nonzero
     if [ -z "${CONTAINER_NAME}" ]; then
-        error "error_no_container_name_specified"
+        error "${FUNCNAME[0]}: error_no_container_name_specified"
         return 2
     fi
     if [ "$( docker container inspect -f '{{.State.Status}}' ${CONTAINER_NAME} )" == "running" ]; then
@@ -472,7 +473,7 @@ function docker_is_container_running {
 
     # Take argument, check it is not empty
     local CONTAINER_NAME="${1}"
-    [ ! -z "${CONTAINER_NAME}" ] || { error "error_no_container_name_specified"; return 2; }
+    [ ! -z "${CONTAINER_NAME}" ] || { error "${FUNCNAME[0]}: error_no_container_name_specified"; return 2; }
 
     # Inspect given container, make sure it is in ranning state
     if [ "$( docker container inspect -f '{{.State.Running}}' ${CONTAINER_NAME} )" == "true" ]; then
@@ -872,6 +873,35 @@ function docker_minimal_version_check {
 export -f docker_minimal_version_check
 
 ###############################################################################
+# Category: container
+# Utility function - remove all docker containers
+function docker_remove_all_containers {
+
+  # Define dependencies
+  local DEPENDENCIES=(
+    docker
+    wc
+  )
+
+  # Loop through dependencies
+  for DEPENDENCY in "${DEPENDENCIES[@]}"; do
+    if ! command_exists "${DEPENDENCY}" > /dev/null; then
+      error "${FUNCNAME[0]}: error_dependency_not_met_${DEPENDENCY}"
+      return 1
+    fi
+  done
+  
+  # Stop all containers
+  docker_stop_all_containers || { error "${FUNCNAME[0]}: Failed to stop all containers"; return 1; }
+  docker rm $(docker ps -aq) > /dev/null || { error "${FUNCNAME[0]}: Failed to remove all containers"; return 1; }
+
+  # Postcondition check: all containers are removed
+  local RUNNING_CONTAINERS_COUNT="$(docker ps -aq | wc -l)"
+  [ "${RUNNING_CONTAINERS_COUNT}" -eq 0 ] || { error "${FUNCNAME[0]}: Postcondition check failed. Number of existing containers: ${RUNNING_CONTAINERS_COUNT} (expected: 0)"; return 1; }
+}
+export -f docker_remove_all_containers
+
+###############################################################################
 #
 # Function restarts docker daemon.
 #
@@ -897,7 +927,7 @@ export -f docker_restart
 function docker_restart_containers {
 
     # if [ -z "${@}" ]; then
-    #     error "error_no_container_names_specified"
+    #     error "${FUNCNAME[0]}: error_no_container_names_specified"
     #     return 2
     # fi
     local CONTAINERS=(${@})
@@ -990,17 +1020,17 @@ function docker_stop_all_containers {
   # Loop through dependencies
   for DEPENDENCY in "${DEPENDENCIES[@]}"; do
     if ! command_exists "${DEPENDENCY}" > /dev/null; then
-      error "${FUNCNAME[0]}" "error_dependency_not_met_${DEPENDENCY}"
+      error "${FUNCNAME[0]}: error_dependency_not_met_${DEPENDENCY}"
       return 1
     fi
   done
 
   # Stop all containers
-  docker stop $(docker ps -aq) > /dev/null || { error "Failed to stop all containers"; return 1; }
+  docker stop $(docker ps -aq) > /dev/null || { error "${FUNCNAME[0]}: Failed to stop all containers"; return 1; }
 
   # Postcondition check: all containers are stopped
   local RUNNING_CONTAINERS_COUNT="$(docker ps -q | wc -l)"
-  [ "${RUNNING_CONTAINERS_COUNT}" -eq 0 ] || { error "Postcondition check failed. Running containers: ${RUNNING_CONTAINERS_COUNT} (expected: 0)"; return 1; }
+  [ "${RUNNING_CONTAINERS_COUNT}" -eq 0 ] || { error "${FUNCNAME[0]}: Postcondition check failed. Number of running containers: ${RUNNING_CONTAINERS_COUNT} (expected: 0)"; return 1; }
 }
 export -f docker_stop_all_containers
 
