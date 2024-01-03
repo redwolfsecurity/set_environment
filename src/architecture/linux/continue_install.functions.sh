@@ -56,14 +56,14 @@
 #
 function add_to_install_if_missing {
 
+  # Take argument ${1} - package name
+  local PACKAGE="${1}"
+  
   # Check inputs: ${1} - must be not empty string (package name to check)
   if [ "${1}" == "" ]; then
     error "${FUNCNAME[0]} bad arguments: package name is not specified (no arguments)"
     return 1
   fi
-
-  # Take argument ${1} - package name
-  local PACKAGE="${1}"
 
   # Take argument ${2} - reference to array
 	declare -n PACKAGES_TO_INSTALL=${2}
@@ -75,7 +75,14 @@ function add_to_install_if_missing {
     return 1
   fi
 
-	# Grep exit code 0=installed, 1=not installed.
+  # Check if given PACKAGE is already present in PACKAGES_TO_INSTALL array
+  if in_array "${PACKAGE}" "${PACKAGES_TO_INSTALL[@]}"; then
+    # Yes, already present, nothing to do
+    return 0
+  fi
+
+	# Check if given package is already installed.
+  # Note: grep exit code 0=installed, 1=not installed.
 	# Note we use grep to cover case "Status: deinstall ok config-files" when package was uninstalled.
 	dpkg --status ${PACKAGE} 2>/dev/null | grep --silent "installed"
 	INSTALLED=${?}
