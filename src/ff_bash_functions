@@ -3819,7 +3819,8 @@ export -f is_framework_api_defined
 function set_environment_is_working {
   set_state "${FUNCNAME[0]}" 'started'
 
-  local HAS_ERRORS=false
+  local ERRORS_COUNT=0
+  local -a FAILED_CHECKS
   local VERBOSE=false
 
   [ "${1}" == "--verbose" ] && VERBOSE=true
@@ -3827,11 +3828,12 @@ function set_environment_is_working {
   # Verify expected commands exist
   COMMANDS=(
     command_exists
-    set_state
     environment_check_required_variables_are_set
-    state_check_set_and_get
-    secret_check_set_and_get
     ff_agent_check_bin_is_in_the_path
+    nodejs_check_installation
+    secret_check_set_and_get
+    set_state
+    state_check_set_and_get
   )
 
   local ASSERTION='command_exists'
@@ -3840,29 +3842,30 @@ function set_environment_is_working {
     if command_exists ${COMMAND} >/dev/null ; then
       [ "${VERBOSE}" == 'true' ] && log "SUCCESS assertion='${ASSERTION}' command='${COMMAND}'"
     else
-      HAS_ERRORS=true
+      (( ERRORS_COUNT++ ))
+      FAILED_CHECKS+=( "${COMMAND} does not exist" )
       [ "${VERBOSE}" == 'true' ] && error "assertion='${ASSERTION}'  command='${COMMAND}'"
       set_state "${FUNCNAME[0]}" "error_assertion_failed_${ASSERTION}_command_${COMMAND}"
     fi
   done
 
-  # Loop through array of f-nested f-ns, on error set flag HAS_ERRORS (don't exit)
-  # MaKE SURE THESE COMMANDS BELOW ARE TESTED ABOVE
+  # Loop through an array of functions, call them, on error increase ERRORS_COUNT (don't exit)
+  # Make sure these commands below are tested above.
   CHECKS=(
     # Check expected environments are in place
     environment_check_required_variables_are_set
 
+    # Check ff_agent/bin is in the path
+    ff_agent_check_bin_is_in_the_path
+
     # Check nodejs installation
     nodejs_check_installation
-
-    # Check set_state() / get_state() by setting random value to some test state and then retrieving it back
-    state_check_set_and_get
 
     # Check secret_set() / secret_get() by setting random value to some test secret and then retrieving it back
     secret_check_set_and_get
 
-    # Check ff_agent/bin is in the path
-    ff_agent_check_bin_is_in_the_path
+    # Check set_state() / get_state() by setting random value to some test state and then retrieving it back
+    state_check_set_and_get
   )
 
   local COMMAND  # Declare variable local, so it does not polute our scope outside this f-n
@@ -3870,13 +3873,13 @@ function set_environment_is_working {
     # Run the command. It must return 0 on success
     if ${COMMAND}; then
       # Command returns 0, which we take as successfull assertion
-      if [ "${COMMAND}" ]; then
-            [ "${VERBOSE}" == 'true' ] && log "SUCCESS assertion='${COMMAND}'"
-      else 
-        HAS_ERRORS=true
-        [ "${VERBOSE}" == 'true' ] && error "failed assertion='${COMMAND}'"
-        set_state "${FUNCNAME[0]}" "error_assertion_failed_${COMMAND}"
-      fi
+      [ "${VERBOSE}" == 'true' ] && log "SUCCESS assertion='${COMMAND}'"
+    else
+      # Command failed, increase errors count and set state
+      (( ERRORS_COUNT++ ))
+      FAILED_CHECKS+=( "${COMMAND} failed" )
+      set_state "${FUNCNAME[0]}" "error_assertion_failed_${COMMAND}"
+      [ "${VERBOSE}" == 'true' ] && error "failed assertion='${COMMAND}'"
     fi
   done
 
@@ -3887,9 +3890,10 @@ function set_environment_is_working {
   # TODO: instead of "cherry-picking" what to check we should have 1:1 "doer/instaler" and corresponding "checker" functions defined, which we'll call here by list.
 
   # Check if we have any errors
-  if [ "${HAS_ERRORS}" == "true" ]; then
+  if [ ${ERRORS_COUNT} -gt 0 ]; then
     # We have errors
     #set_state "${FUNCNAME[0]}" 'failed'  # commented since set_state was already called by concrete check with better (more precise) error code
+    error "${FUNCNAME[0]}" "failed with errors count: ${ERRORS_COUNT}. Details on failed checks: ${FAILED_CHECKS[@]}"
     return 1
   else
     set_state "${FUNCNAME[0]}" 'success'
