@@ -1475,6 +1475,8 @@ export -f truncate_file
 # Utility abort / exit function - called when terminal conditions
 function abort {
     error "abort called - aborting ${@}"
+
+    # Check if the SERVICE is set (not blank string), then also set corresponding state
     if [ ! -z "${SERVICE}" ]; then
         set_state ${SERVICE} abort
     fi
@@ -3873,7 +3875,7 @@ function set_environment_is_working {
       else 
         HAS_ERRORS=true
         [ "${VERBOSE}" == 'true' ] && error "failed assertion='${COMMAND}'"
-        set_state "error_assertion_failed_${COMMAND}"
+        set_state "${FUNCNAME[0]}" "error_assertion_failed_${COMMAND}"
       fi
     fi
   done
