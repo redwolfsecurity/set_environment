@@ -11,14 +11,10 @@
 #    - apt_install_basic_packages 
 #    - assert_baseline_components 
 #    - assert_core_credentials 
-#    - background_install 
-#    - check_if_need_background_install 
-#    - docker_is_running 
+#    - service_is_running 
 #    - set_environment_ensure_ff_agent_bin_exists 
-#    - set_environment_ensure_ff_agent_home_exists 
 #    - set_environment_ensure_install_exists 
 #    - install_build_tools 
-#    - install_docker 
 #    - install_ff_agent 
 #    - install_ff_agent_bashrc 
 #    - install_go 
@@ -168,9 +164,6 @@ function assert_baseline_components {
   # Install NTP and make sure timesyncd is disabled (not working in parallel)
   # assert_clean_exit replace_timesyncd_with_ntpd
 
-  # Install docker (not using "apt") - COMMENTED OUT: docker is not part of baseline (it is part of "build" and/or "development", but not "baseline")
-  #assert_clean_exit install_docker
-
   # Ensure file "ff_agent/.profile" created and sourced from ~/.bashrc (Note: this must be done before install node)
   assert_clean_exit install_ff_agent_bashrc
 
@@ -205,135 +198,19 @@ export -f assert_core_credentials
 
 ###############################################################################
 #
-# background_install: run installer again under different user.
-#
-# Background install involves:
-#   - Writing a copy of the set_environment into temporary location and changing permissions to the target user.
-#   - Running that script as correct target user.
-#
-function background_install {
-
-  # Take the only argument: target username to "run as"
-  USER_TO_RUN_AS="${1}"
-
-  # Check argument is not empty string
-  [ "${USER_TO_RUN_AS}" != "" ] || { error "background_install error: missing argument"; abort; }
-
-  # Get current user. Note: the ${USER} environment is NOT set when running as 'root' in docker, we must use f-n get_current_user() instead.
-  CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
-
-  # Check if target user can sudo
-  can_sudo "${USER_TO_RUN_AS}" || { error "background_install needs to sudo to user ${USER_TO_RUN_AS} but user ${CURRENT_USER} does not have sudo privileges"; abort; }
-
-  # Create temporary folder
-  TEMP_DIR=$( mktemp -d ) || { error "background_install tried to create directory ${TEMP_DIR}."; abort; }
-
-  # Check if folder created
-  [ -d "${TEMP_DIR}" ] || { error "background_install tried to create directory ${TEMP_DIR}."; abort; }
-
-  # Copy set_environment project into the target temporary folder
-  cp -a ../set_environment "${TEMP_DIR}" || {
-    error "background_install failed to copy project to temporary folder '${TEMP_DIR}'"
-    # Clean-up: remove temp directory we've just created
-    rm -fr "${TEMP_DIR}"
-    abort
-  }
-
-  # Change ownership of the temporary folder to the target user
-  chown -R "${FF_AGENT_USERNAME}:$(id -gn ${FF_AGENT_USERNAME})" "${TEMP_DIR}" || {
-    error "background_install error: missing argument";
-    # Clean-up: remove temp directory we've just created
-    rm -fr "${TEMP_DIR}"
-    abort;
-  }
-
-  # Pass control to the newly created set_environment copy (run by the target user) and exit
-  sudo --set-home --user="${USER_TO_RUN_AS}" bash -c "${TEMP_DIR}/set_environment/install.sh"
-
-  # Clean-up: remove temp directory we've just created
-  rm -fr "${TEMP_DIR}"
-}
-export -f background_install
-
-###############################################################################
-#
-# Function analyzes currently selected user and might call "background_install()" to
-# re-run the installer under a different user.
-#
-# We may need, for various reasons, to launch a background install.
-#
-# Return value:
-#    - function prints "true" to standard output only if we need to background_install as "${FF_AGENT_USERNAME}"
-#    - function returns/prints nothing if no need to background install
-#    - on error function aborts (no need to errorcheck by the caller)
-#
-#
-# Dependency:
-#   FF_AGENT_USERNAME - must be set
-#
-function check_if_need_background_install {
-
-  # Define required variables
-  local REQUIRED_VARIABLES=(
-    FF_AGENT_USERNAME
-  )
-
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-      return 1
-    }
-  done
-
-  # It might already exist, but not be writable due to chmod changes
-  if [ -f "${FF_AGENT_HOME}" ] && [ ! -w "${FF_AGENT_HOME}" ]; then
-      error "FF_AGENT_HOME at ${FF_AGENT_HOME} is not writable by user $( whoami ). Aborting."
-      abort
-  fi
-
-  DO_BACKGROUND_INSTALL=false
-
-  # Get current user. Note: the ${USER} environment is NOT set when running as 'root' in docker, we must use f-n get_current_user() instead.
-  CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
-
-  # Suppose I'm not the best user, but I can sudo to become the best! e.g. If I am root - I'm not the best user.
-  if [ "${CURRENT_USER}" != "${FF_AGENT_USERNAME}" ]; then
-      if can_sudo "${CURRENT_USER}"; then
-          DO_BACKGROUND_INSTALL=true
-      fi
-  fi
-
-  # Am I effectively root?
-  if [ "${EUID}" -eq 0 ]; then
-      DO_BACKGROUND_INSTALL=true
-  fi
-
-  if [ "${DO_BACKGROUND_INSTALL}" == "true" ]; then
-    echo "true"
-    ## background_install "${FF_AGENT_USERNAME}"
-    ## We can not exit, since "set_environment" installer is sourced: ". ./install.sh"
-    ##exit 0
-  fi
-
-  # Otherwise we continue happily through this instance of the script. No need to change user.
-  # i.e. I am not root, and I have sudo priveleges.
-}
-export -f check_if_need_background_install
-
-###############################################################################
-#
-# Function checks if dockerd is running (return code 0 = yes, other code = no).
+# Function checks if service by given name is running (return code 0 = yes, 
+# other code = no).
 # Usage example:
-#   if docker_is_running; then echo yes; else echo no; fi
+#   if service_is_running docker; then echo yes; else echo no; fi
 #   yes
 #
-function docker_is_running {
-  docker info | grep -q 'Running: 1'
-  return $?
+function service_is_running {
+  local SERVICE_NAME="$1"
+  # Check inputs (must be non-empty string)
+  [ ! -z "${SERVICE_NAME}" ] || { set_state "${FUNCNAME[0]}" 'error_empty_argument'; return 1; }
+  systemctl is-active --quiet "${SERVICE_NAME}"
 }
-export -f docker_is_running
+export -f service_is_running
 
 ###############################################################################
 #
@@ -342,6 +219,19 @@ export -f docker_is_running
 function set_environment_ensure_ff_agent_bin_exists {
 
   set_state "${FUNCNAME[0]}" 'started'
+
+  # Define dependencies
+  local DEPENDENCIES=(
+    tr
+  )
+
+  # Loop through dependencies
+  for DEPENDENCY in "${DEPENDENCIES[@]}"; do
+    if ! command_exists "${DEPENDENCY}"; then
+      error "${FUNCNAME[0]}" "error_dependency_not_met_${DEPENDENCY}"
+      return 1
+    fi
+  done
 
   # Define required variables
   local REQUIRED_VARIABLES=(
@@ -372,54 +262,10 @@ export -f set_environment_ensure_ff_agent_bin_exists
 
 ###############################################################################
 #
-# Function makes sure ${FF_AGENT_HOME} folder exist. If not - tries to create it.
-#
-# Require environment variables set:
-#   - FF_AGENT_HOME
-#
-# Return:
-#  on success - return 0
-#  on error - return nonzero code
-#
-function set_environment_ensure_ff_agent_home_exists {
-  set_state "${FUNCNAME[0]}" 'started'
-
-  # Dependency check: 'tr' is installed
-  if ! command_exists tr >/dev/null; then
-    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
-    return 1
-  fi
-
-  # Define required variables
-  local REQUIRED_VARIABLES=(
-    FF_AGENT_HOME
-  )
-
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-      return 1
-    }
-  done
-
-  # Make sure ${FF_AGENT_HOME} folder exist
-  if [ ! -d "${FF_AGENT_HOME}" ]; then
-      # The folder is missing: create a new one
-      mkdir -p "${FF_AGENT_HOME}" || { set_state "${FUNCNAME[0]}" "failed_to_create_ff_agent_home"; return 1; }
-  fi
-
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
-}
-export -f set_environment_ensure_ff_agent_home_exists
-
-###############################################################################
-#
-# Function makes sure the symlink to "set environment" installer exists in the FF_AGENT_HOME/bin/ folder.
+# Function makes sure the symlink "set_environment_install" exists in the ${FF_AGENT_HOME}/bin/ folder.
 # If symlink is missing it will be created:
 #    ${FF_AGENT_HOME}/bin/set_environment_install -> ${FF_AGENT_HOME}/git/redwolfsecurity/set_environment/install
+# The installed command "set_environment_install" can also be run to update set_environment.
 #
 function set_environment_ensure_install_exists {
 
@@ -463,7 +309,7 @@ export -f set_environment_ensure_install_exists
 
 ###############################################################################
 #
-# Function installs docker. 
+# Function installs "build_tools" project. 
 function install_build_tools {
   set_state "${FUNCNAME[0]}" 'started'
 
@@ -478,152 +324,6 @@ function install_build_tools {
   set_state "${FUNCNAME[0]}" 'success'
 }
 export -f install_build_tools
-
-###############################################################################
-#
-# Function installs docker. It takes 1 argement "minimum version", if not provided,
-# then by default version 19 will be used.
-#
-# Supports Ubuntu 16.04, 18.04, 20.04
-#
-# Require environment variables set:
-#   - FF_AGENT_USERNAME
-#
-function install_docker {
-
-  set_state "${FUNCNAME[0]}" 'started'
-
-  # Define required variables
-  local REQUIRED_VARIABLES=(
-    FF_AGENT_USERNAME
-  )
-
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-      return 1
-    }
-  done
-
-  # Take MINIMUM_VERSION argument, if empty, then set default value
-  MINIMUM_VERSION="${1}"
-  if [ -z "${MINIMUM_VERSION}" ]; then
-      MINIMUM_VERSION=19
-  fi
-
-  # Check if docker is installed and has version >= minimally required
-  ACTUAL_VERSION="$( get_installed_docker_version )"
-  if [ ! -z "${ACTUAL_VERSION}" ] && [ "${ACTUAL_VERSION}" -ge "${MINIMUM_VERSION}" ]; then
-      set_state "${FUNCNAME[0]}" "no_action_already_installed"
-      return 0
-  fi
-
-  # OK We install since we don't have the minimum version, or docker is not installed
-
-  # Get ID, RELEASE and DISTRO and verify the values are actually set
-  local LSB_ID=$( get_lsb_id ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
-  [ "${LSB_ID}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
-
-  local RELEASE=$( get_lsb_release ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }  # 18.04, 20.04, ...
-  [ "${RELEASE}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }
-
-  local DISTRO=$( get_lsb_codename ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; }  # bionic, focal, ...
-  [ "${DISTRO}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; }
-
-  local ARCHITECTURE=$( get_hardware_architecture ) || { set_state "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
-
-  # Only Ubuntu for now
-  if [ "${LSB_ID}" != "ubuntu" ]; then
-      set_state "${FUNCNAME[0]}" "error_docker_install_unsupported_operating_system"
-      return 1
-  fi
-
-  # Add GPG key for download.docker.com
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-  [ ${?} -ne 0 ] && { set_state "${FUNCNAME[0]}" "failed_to_add_gpg_key"; return 1; }
-
-  # Add repository
-  sudo add-apt-repository "deb [arch=${ARCHITECTURE}] https://download.docker.com/linux/ubuntu ${DISTRO} stable"
-  [ ${?} -ne 0 ] && { set_state "${FUNCNAME[0]}" "failed_to_add_repository"; return 1; }
-
-  # Update apt
-  apt_update
-
-  # Install docker
-  apt_install docker-ce || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_ce"; return 1; }
-  apt_install docker-compose || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_compose"; return 1; }
-  # containerd is available as a daemon for Linux and Windows. It manages the complete container lifecycle of its host system, from image transfer and storage to container execution and supervision to low-level storage to network attachments and beyond.
-  apt_install containerd.io || { set_state "${FUNCNAME[0]}" "failed_to_install_containerd_io"; return 1; }
-
-  # Add ourselves as a user to be able to run docker
-  GROUP="docker"
-  # Check the 'docker' group exists.
-  if ! check_group_exists "${GROUP}"; then
-    set_state "${FUNCNAME[0]}" "error_group_docker_does_not_exist"
-    return 1
-  fi
-
-  # We might not have sudo, so we should request command to be run.
-  # Check if user is in this group. If not, add them
-  if ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}"; then
-    # Not in group
-    sudo usermod -aG "${GROUP}" "${FF_AGENT_USERNAME}"
-    if [ ${?} -ne 0 ]; then set_state "${FUNCNAME[0]}" "failed_to_modify_docker_user_group"; return 1; fi
-    # Now check that we actually are in the group. This will work in current shell because it reads the groups file directly
-    if ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}"; then
-      set_state "${FUNCNAME[0]}" "failed_postcondition_user_in_group"
-      return 1
-    fi
-  fi
-
-  # Postcondition checks
-  # Verify docker is properly set up
-  # Note we are running via sudo, and if we added user to the ${GROUP} then it won't be applied in this shell.
-  secret_set docker_release "$( docker --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_to_get_release"; return 1; }
-  secret_set docker_compose_relase "$( docker-compose --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_compose_to_get_release"; return 1; }
-
-  # Check if installed docker version is less than minimally required
-  if [ "$( get_installed_docker_version )" -lt "${MINIMUM_VERSION}" ]; then
-    set_state "${FUNCNAME[0]}" "failed_to_install_did_not_pass_version_check"
-    return 1
-  fi
-
-  # Set up logging by creating file "/etc/docker/daemon.json"
-  FILEPATH="/etc/docker/daemon.json"
-(
-cat <<EOT
-{
-  "log-driver": "syslog",
-  "log-opts": {"tag": "{{.Name}}/{{.ID}}"}
-}
-EOT
-  ) | sudo tee ${FILEPATH} > /dev/null
-
-  # Check exit code of setting up logging
-  if [ "${?}" -ne 0 ]; then
-      set_state "${FUNCNAME[0]}" "failed_to_install_docker_logging_configuration"
-      return 1
-  fi
-
-  # Restart docker to apply logging configuration (to syslog) only if docker is running
-  if docker_is_running; then
-    # Restart docker
-    sudo systemctl restart docker
-
-    # Since docker is running we can check it is logging to syslog
-    local EXPECTED_DOCKER_LOGGING="syslog"
-    local ACTUAL_DOCKER_LOGGING=$( docker info --format '{{.LoggingDriver}}' )
-    if [ "${EXPECTED_DOCKER_LOGGING}" != "${ACTUAL_DOCKER_LOGGING}" ]; then
-        set_state "${FUNCNAME[0]}" "failed_to_confirm_logging_configuration_applied"
-        return 1
-    fi
-  fi
-
-  set_state "${FUNCNAME[0]}" 'success'
-}
-export -f install_docker
 
 ###############################################################################
 #
@@ -852,10 +552,10 @@ function install_go {
   # Check if go is already installed and has expected vesrion
   if command_exists go >/dev/null; then
       # Yes, 'go' is installed. Check if installed version matches expected one.
-      GET_VERSION_OUTPUT="$( go version )" || { set_state "${FUNCNAME[0]}" 'failed_to_get_existing_version_number'; return 1; }
+      INSTALLED_VERSION="$( go version )" || { set_state "${FUNCNAME[0]}" 'failed_to_get_existing_version_number'; return 1; }
 
       # Compare to expected version
-      if [[ "${GET_VERSION_OUTPUT}" =~ ${EXPECTED_VERSION} ]]; then
+      if [[ "${INSTALLED_VERSION}" =~ ${EXPECTED_VERSION} ]]; then
         # Match. Version is up to date, nothing to do.
         set_state "${FUNCNAME[0]}" 'success'
         return 0
@@ -960,10 +660,10 @@ EOT
   fi
 
   # Check installed 'go' version
-  GET_VERSION_OUTPUT="$( go version )" || { set_state "${FUNCNAME[0]}" 'failed_to_get_installed_version_number'; return 1; }
+  INSTALLED_VERSION="$( go version )" || { set_state "${FUNCNAME[0]}" 'failed_to_get_installed_version_number'; return 1; }
 
   # Compare to the expected version
-  if [[ "${GET_VERSION_OUTPUT}" =~ ${EXPECTED_VERSION} ]]; then
+  if [[ "${INSTALLED_VERSION}" =~ ${EXPECTED_VERSION} ]]; then
     # Good - expected version installed.
     set_state "${FUNCNAME[0]}" 'success'
     return 0
@@ -1094,7 +794,7 @@ EOT
       return 1
   }
 
-  # ------------------ Export N_PREFIX and inject that export into FF_AGENT_PROFILE_FILE (begin) ----------------
+  # ------------------ Export N_PREFIX and inject that export into FF_AGENT_PROFILE_FILE (end) ----------------
 
 
   # ------------------ Export NODE_PATH and inject that export into FF_AGENT_PROFILE_FILE (begin) ----------------
@@ -1230,18 +930,9 @@ function install_set_environment_baseline {
 
   # Discover environment (choose user, make sure it's home folder exists, check FF_CONTENT_URL is set etc.)
   discover_environment || { abort "terminal_error_failed_to_discover_environment"; }
-  set_environment_ensure_ff_agent_home_exists || { abort "failed_to_set_environment_ensure_ff_agent_home_exists"; }
 
   # Now we can set_state()
   set_state "${FUNCNAME[0]}" 'started'
-
-  # Analyzes currently selected user and might call "background_install()" to re-run the installer under a different user
-  # Note: it have a dependency: variable FF_AGENT_USERNAME - must be set (by get_best_ff_agent_home())
-  if [ "$( check_if_need_background_install )" == "true" ]; then
-    background_install "${FF_AGENT_USERNAME}"
-    return 0
-    # Note: we can not "exit 0" here since installer might be sourced by "root"
-  fi
 
   # Put logs in best location
   setup_logging || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_setup_logging"; abort; }
@@ -1419,7 +1110,7 @@ function pm2_is_running_as_me {
 
     # Check if process is running as local user.
     process_is_running_as_me "${PATTERN}"
-    STATUS=${?}
+    local STATUS=${?}
 
     set_state "${FUNCNAME[0]}" 'success'
 
