@@ -15,6 +15,7 @@
 #    - set_environment_ensure_ff_agent_bin_exists 
 #    - set_environment_ensure_install_exists 
 #    - install_build_tools 
+#    - install_docker
 #    - install_ff_agent 
 #    - install_ff_agent_bashrc 
 #    - install_go 
@@ -259,6 +260,51 @@ function set_environment_ensure_ff_agent_bin_exists {
   set_state "${FUNCNAME[0]}" 'success'
 }
 export -f set_environment_ensure_ff_agent_bin_exists
+
+###############################################################################
+#
+# Function makes sure ${FF_AGENT_HOME} folder exist. If not - tries to create it.
+#
+# Require environment variables set:
+#   - FF_AGENT_HOME
+#
+# Return:
+#  on success - return 0
+#  on error - return nonzero code
+#
+function set_environment_ensure_ff_agent_home_exists {
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Dependency check: 'tr' is installed
+  if ! command_exists tr >/dev/null; then
+    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
+    return 1
+  fi
+
+  # Define required variables
+  local REQUIRED_VARIABLES=(
+    FF_AGENT_HOME
+  )
+
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || {
+      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
+      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      return 1
+    }
+  done
+
+  # Make sure ${FF_AGENT_HOME} folder exist
+  if [ ! -d "${FF_AGENT_HOME}" ]; then
+      # The folder is missing: create a new one
+      mkdir -p "${FF_AGENT_HOME}" || { set_state "${FUNCNAME[0]}" "failed_to_create_ff_agent_home"; return 1; }
+  fi
+
+  set_state "${FUNCNAME[0]}" 'success'
+  return 0
+}
+export -f set_environment_ensure_ff_agent_home_exists
 
 ###############################################################################
 #
