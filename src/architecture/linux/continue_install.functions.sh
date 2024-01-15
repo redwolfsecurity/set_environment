@@ -263,51 +263,6 @@ export -f set_environment_ensure_ff_agent_bin_exists
 
 ###############################################################################
 #
-# Function makes sure ${FF_AGENT_HOME} folder exist. If not - tries to create it.
-#
-# Require environment variables set:
-#   - FF_AGENT_HOME
-#
-# Return:
-#  on success - return 0
-#  on error - return nonzero code
-#
-function set_environment_ensure_ff_agent_home_exists {
-  set_state "${FUNCNAME[0]}" 'started'
-
-  # Dependency check: 'tr' is installed
-  if ! command_exists tr >/dev/null; then
-    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
-    return 1
-  fi
-
-  # Define required variables
-  local REQUIRED_VARIABLES=(
-    FF_AGENT_HOME
-  )
-
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-      return 1
-    }
-  done
-
-  # Make sure ${FF_AGENT_HOME} folder exist
-  if [ ! -d "${FF_AGENT_HOME}" ]; then
-      # The folder is missing: create a new one
-      mkdir -p "${FF_AGENT_HOME}" || { set_state "${FUNCNAME[0]}" "failed_to_create_ff_agent_home"; return 1; }
-  fi
-
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
-}
-export -f set_environment_ensure_ff_agent_home_exists
-
-###############################################################################
-#
 # Function makes sure the symlink "set_environment_install" exists in the ${FF_AGENT_HOME}/bin/ folder.
 # If symlink is missing it will be created:
 #    ${FF_AGENT_HOME}/bin/set_environment_install -> ${FF_AGENT_HOME}/git/redwolfsecurity/set_environment/install
@@ -373,6 +328,152 @@ export -f install_build_tools
 
 ###############################################################################
 #
+# Function installs docker. It takes 1 argement "minimum version", if not provided,
+# then by default version 19 will be used.
+#
+# Supports Ubuntu 16.04, 18.04, 20.04
+#
+# Require environment variables set:
+#   - FF_AGENT_USERNAME
+#
+function install_docker {
+
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Define required variables
+  local REQUIRED_VARIABLES=(
+    FF_AGENT_USERNAME
+  )
+
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || {
+      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
+      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      return 1
+    }
+  done
+
+  # Take MINIMUM_VERSION argument, if empty, then set default value
+  MINIMUM_VERSION="${1}"
+  if [ -z "${MINIMUM_VERSION}" ]; then
+      MINIMUM_VERSION=19
+  fi
+
+  # Check if docker is installed and has version >= minimally required
+  ACTUAL_VERSION="$( get_installed_docker_version )"
+  if [ ! -z "${ACTUAL_VERSION}" ] && [ "${ACTUAL_VERSION}" -ge "${MINIMUM_VERSION}" ]; then
+      set_state "${FUNCNAME[0]}" "no_action_already_installed"
+      return 0
+  fi
+
+  # OK We install since we don't have the minimum version, or docker is not installed
+
+  # Get ID, RELEASE and DISTRO and verify the values are actually set
+  local LSB_ID=$( get_lsb_id ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
+  [ "${LSB_ID}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_id"; return 1; } # Ubuntu
+
+  local RELEASE=$( get_lsb_release ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }  # 18.04, 20.04, ...
+  [ "${RELEASE}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_release"; return 1; }
+
+  local DISTRO=$( get_lsb_codename ) || { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; }  # bionic, focal, ...
+  [ "${DISTRO}" == "" ] && { set_state "${FUNCNAME[0]}" "failed_to_get_lsb_codename"; return 1; }
+
+  local ARCHITECTURE=$( get_hardware_architecture ) || { set_state "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
+
+  # Only Ubuntu for now
+  if [ "${LSB_ID}" != "ubuntu" ]; then
+      set_state "${FUNCNAME[0]}" "error_docker_install_unsupported_operating_system"
+      return 1
+  fi
+
+  # Add GPG key for download.docker.com
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+  [ ${?} -ne 0 ] && { set_state "${FUNCNAME[0]}" "failed_to_add_gpg_key"; return 1; }
+
+  # Add repository
+  sudo add-apt-repository "deb [arch=${ARCHITECTURE}] https://download.docker.com/linux/ubuntu ${DISTRO} stable"
+  [ ${?} -ne 0 ] && { set_state "${FUNCNAME[0]}" "failed_to_add_repository"; return 1; }
+
+  # Update apt
+  apt_update
+
+  # Install docker
+  apt_install docker-ce || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_ce"; return 1; }
+  apt_install docker-compose || { set_state "${FUNCNAME[0]}" "failed_to_install_docker_compose"; return 1; }
+  # containerd is available as a daemon for Linux and Windows. It manages the complete container lifecycle of its host system, from image transfer and storage to container execution and supervision to low-level storage to network attachments and beyond.
+  apt_install containerd.io || { set_state "${FUNCNAME[0]}" "failed_to_install_containerd_io"; return 1; }
+
+  # Add ourselves as a user to be able to run docker
+  GROUP="docker"
+  # Check the 'docker' group exists.
+  if ! check_group_exists "${GROUP}"; then
+    set_state "${FUNCNAME[0]}" "error_group_docker_does_not_exist"
+    return 1
+  fi
+
+  # We might not have sudo, so we should request command to be run.
+  # Check if user is in this group. If not, add them
+  if ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}"; then
+    # Not in group
+    sudo usermod -aG "${GROUP}" "${FF_AGENT_USERNAME}"
+    if [ ${?} -ne 0 ]; then set_state "${FUNCNAME[0]}" "failed_to_modify_docker_user_group"; return 1; fi
+    # Now check that we actually are in the group. This will work in current shell because it reads the groups file directly
+    if ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}"; then
+      set_state "${FUNCNAME[0]}" "failed_postcondition_user_in_group"
+      return 1
+    fi
+  fi
+
+  # Postcondition checks
+  # Verify docker is properly set up
+  # Note we are running via sudo, and if we added user to the ${GROUP} then it won't be applied in this shell.
+  secret_set docker_release "$( docker --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_to_get_release"; return 1; }
+  secret_set docker_compose_relase "$( docker-compose --version )" || { set_state "${FUNCNAME[0]}" "failed_to_run_docker_compose_to_get_release"; return 1; }
+
+  # Check if installed docker version is less than minimally required
+  if [ "$( get_installed_docker_version )" -lt "${MINIMUM_VERSION}" ]; then
+    set_state "${FUNCNAME[0]}" "failed_to_install_did_not_pass_version_check"
+    return 1
+  fi
+
+  # Set up logging by creating file "/etc/docker/daemon.json"
+  FILEPATH="/etc/docker/daemon.json"
+(
+cat <<EOT
+{
+  "log-driver": "syslog",
+  "log-opts": {"tag": "{{.Name}}/{{.ID}}"}
+}
+EOT
+  ) | sudo tee ${FILEPATH} > /dev/null
+
+  # Check exit code of setting up logging
+  if [ "${?}" -ne 0 ]; then
+      set_state "${FUNCNAME[0]}" "failed_to_install_docker_logging_configuration"
+      return 1
+  fi
+
+  # Restart docker to apply logging configuration (to syslog) only if docker is running
+  if docker_is_running; then
+    # Restart docker
+    sudo systemctl restart docker
+
+    # Since docker is running we can check it is logging to syslog
+    local EXPECTED_DOCKER_LOGGING="syslog"
+    local ACTUAL_DOCKER_LOGGING=$( docker info --format '{{.LoggingDriver}}' )
+    if [ "${EXPECTED_DOCKER_LOGGING}" != "${ACTUAL_DOCKER_LOGGING}" ]; then
+        set_state "${FUNCNAME[0]}" "failed_to_confirm_logging_configuration_applied"
+        return 1
+    fi
+  fi
+
+  set_state "${FUNCNAME[0]}" 'success'
+}
+export -f install_docker
+
+###############################################################################
+#
 # Install npm package "@ff/ff_agent" -> ff_agent/
 #
 function install_ff_agent {
@@ -433,7 +534,7 @@ function install_ff_agent_bashrc {
 
   # Make sure ${FF_AGENT_HOME} folder exists
   if [ ! -d "${FF_AGENT_HOME}" ]; then
-    # ${FF_AGENT_HOME} folder is missing. Don't try to create it (it is responsibility of set_environment_ensure_ff_agent_home_exists()).
+    # ${FF_AGENT_HOME} folder is missing. Don't try to create it (it is not our responsibility)
     # Report an error and abort.
     set_state "${FUNCNAME[0]}" 'terminal_error_ff_agent_home_folder_does_not_exist'
     error "FF_AGENT_HOME='${FF_AGENT_HOME}' directory Does not exist. Aborting."
