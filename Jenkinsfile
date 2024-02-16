@@ -9,6 +9,23 @@ pipeline {
       }
   }
 
+  // If you add the triggers section with the upstream trigger to an existing Jenkinsfile, it won't
+  // override or interfere with the existing logic that triggers builds on changes pushed to GitHub
+  // for individual projects. The upstream trigger will work in conjunction with the existing triggers
+  // and conditions.
+  //
+  // The upstream trigger is specifically configured to trigger the build of the current project
+  // when the upstream project completes a successful build.
+  //
+  // The existing logic that triggers builds on changes pushed to GitHub for the individual projects
+  // will continue to work as usual. The upstream trigger is an additional condition that specifies
+  // when the build should be triggered based on the success of the upstream project.
+  //
+  // See official docs: https://www.jenkins.io/doc/book/pipeline/syntax/#triggers
+  triggers {
+      upstream(upstreamProjects: 'redwolfsecurity/fancy_framework/master', threshold: hudson.model.Result.SUCCESS)
+  }
+
   stages {
     stage('Install') {
       environment {
