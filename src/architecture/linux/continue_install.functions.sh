@@ -11,8 +11,6 @@
 #    - apt_install_basic_packages 
 #    - assert_baseline_components 
 #    - assert_core_credentials 
-#    - background_install 
-#    - check_if_need_background_install 
 #    - service_is_running
 #    - set_environment_ensure_ff_agent_bin_exists 
 #    - set_environment_ensure_install_exists 
@@ -54,26 +52,33 @@
 #
 function add_to_install_if_missing {
 
-  # Check inputs: ${1} - must be not empty string (package name to check)
-  if [ "${1}" == "" ]; then
+  # Take argument ${1} - package name
+  local PACKAGE="${1}"
+  
+  # Check inputs: ${PACKAGE} - must be not empty string (package name to check)
+  if [ "${PACKAGE}" == "" ]; then
     error "${FUNCNAME[0]} bad arguments: package name is not specified (no arguments)"
     return 1
   fi
 
-  # Take argument ${1} - package name
-  local PACKAGE="${1}"
-
   # Take argument ${2} - reference to array
-	declare -n PACKAGES_TO_INSTALL=${2}
+  declare -n PACKAGES_TO_INSTALL=${2}
 
-  # Check inputs: ${2} - must be a reference to an array
+  # Check inputs: ${PACKAGES_TO_INSTALL} - must be a reference to an array
   if [ "${PACKAGES_TO_INSTALL@a}" != "a" ]; then
     # Error: passed reference does not point to array
     error "${FUNCNAME[0]} bad arguments: 2nd argument must be reference to array"
     return 1
   fi
 
-	# Grep exit code 0=installed, 1=not installed.
+  # Check if given PACKAGE is already present in PACKAGES_TO_INSTALL array
+  if in_array "${PACKAGE}" "${PACKAGES_TO_INSTALL[@]}"; then
+    # Yes, already present, nothing to do
+    return 0
+  fi
+
+	# Check if given package is already installed.
+  # Note: grep exit code 0=installed, 1=not installed.
 	# Note we use grep to cover case "Status: deinstall ok config-files" when package was uninstalled.
 	dpkg --status ${PACKAGE} 2>/dev/null | grep --silent "installed"
 	INSTALLED=${?}
@@ -159,9 +164,6 @@ function assert_baseline_components {
   # Install NTP and make sure timesyncd is disabled (not working in parallel)
   # assert_clean_exit replace_timesyncd_with_ntpd
 
-  # Install docker (not using "apt") - COMMENTED OUT: docker is not part of baseline (it is part of "build" and/or "development", but not "baseline")
-  #assert_clean_exit docker_install
-
   # Ensure file "ff_agent/.profile" created and sourced from ~/.bashrc (Note: this must be done before install node)
   assert_clean_exit install_ff_agent_bashrc
 
@@ -171,8 +173,9 @@ function assert_baseline_components {
   # Install pm2
   assert_clean_exit pm2_ensure
 
-  # Install npm package "@ff/ff_agent" -> ff_agent/
-  assert_clean_exit install_ff_agent
+  ## Commented out until the new ff_agent does not use libcurl
+  ## # Install npm package "@ff/ff_agent" -> ff_agent/
+  ## assert_clean_exit install_ff_agent
 
   set_state "${FUNCNAME[0]}" 'success'
 }
@@ -195,127 +198,6 @@ export -f assert_core_credentials
 
 ###############################################################################
 #
-# background_install: run installer again under different user.
-#
-# Background install involves:
-#   - Writing a copy of the set_environment into temporary location and changing permissions to the target user.
-#   - Running that script as correct target user.
-#
-function background_install {
-
-  # Take the only argument: target username to "run as"
-  local USER_TO_RUN_AS="${1}"
-
-  # Check argument is not empty string
-  [ "${USER_TO_RUN_AS}" != "" ] || { error "background_install error: missing argument"; abort; }
-
-  # Get current user. Note: the ${USER} environment is NOT set when running as 'root' in docker, we must use f-n get_current_user() instead.
-  local CURRENT_USER
-  CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
-
-  # Check if target user can sudo
-  can_sudo "${USER_TO_RUN_AS}" || { error "background_install needs to sudo to user ${USER_TO_RUN_AS} but user ${CURRENT_USER} does not have sudo privileges"; abort; }
-
-  # Create temporary folder
-  TEMP_DIR=$( mktemp -d ) || { error "background_install tried to create directory ${TEMP_DIR}."; abort; }
-
-  # Check if folder created
-  [ -d "${TEMP_DIR}" ] || { error "background_install tried to create directory ${TEMP_DIR}."; abort; }
-
-  # Copy set_environment project into the target temporary folder
-  cp -a ../set_environment "${TEMP_DIR}" || {
-    error "background_install failed to copy project to temporary folder '${TEMP_DIR}'"
-    # Clean-up: remove temp directory we've just created
-    rm -fr "${TEMP_DIR}"
-    abort
-  }
-
-  # Change ownership of the temporary folder to the target user
-  chown -R "${FF_AGENT_USERNAME}:$(id -gn ${FF_AGENT_USERNAME})" "${TEMP_DIR}" || {
-    error "background_install error: missing argument";
-    # Clean-up: remove temp directory we've just created
-    rm -fr "${TEMP_DIR}"
-    abort;
-  }
-
-  # Pass control to the newly created set_environment copy (run by the target user) and exit
-  sudo --set-home --user="${USER_TO_RUN_AS}" bash -c "${TEMP_DIR}/set_environment/install.sh"
-
-  # Clean-up: remove temp directory we've just created
-  rm -fr "${TEMP_DIR}"
-}
-export -f background_install
-
-###############################################################################
-#
-# Function analyzes currently selected user and might call "background_install()" to
-# re-run the installer under a different user.
-#
-# We may need, for various reasons, to launch a background install.
-#
-# Return value:
-#    - function prints "true" to standard output only if we need to background_install as "${FF_AGENT_USERNAME}"
-#    - function returns/prints nothing if no need to background install
-#    - on error function aborts (no need to errorcheck by the caller)
-#
-#
-# Dependency:
-#   FF_AGENT_USERNAME - must be set
-#
-function check_if_need_background_install {
-
-  # Define required variables
-  local REQUIRED_VARIABLES=(
-    FF_AGENT_USERNAME
-  )
-
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-      return 1
-    }
-  done
-
-  # It might already exist, but not be writable due to chmod changes
-  if [ -f "${FF_AGENT_HOME}" ] && [ ! -w "${FF_AGENT_HOME}" ]; then
-      error "FF_AGENT_HOME at ${FF_AGENT_HOME} is not writable by user $( whoami ). Aborting."
-      abort
-  fi
-
-  local DO_BACKGROUND_INSTALL=false
-
-  # Get current user. Note: the ${USER} environment is NOT set when running as 'root' in docker, we must use f-n get_current_user() instead.
-  local CURRENT_USER
-  CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
-
-  # Suppose I'm not the best user, but I can sudo to become the best! e.g. If I am root - I'm not the best user.
-  if [ "${CURRENT_USER}" != "${FF_AGENT_USERNAME}" ]; then
-      if can_sudo "${CURRENT_USER}"; then
-          DO_BACKGROUND_INSTALL=true
-      fi
-  fi
-
-  # Am I effectively root?
-  if [ "${EUID}" -eq 0 ]; then
-      DO_BACKGROUND_INSTALL=true
-  fi
-
-  if [ "${DO_BACKGROUND_INSTALL}" == "true" ]; then
-    echo "true"
-    ## background_install "${FF_AGENT_USERNAME}"
-    ## We can not exit, since "set_environment" installer is sourced: ". ./install.sh"
-    ##exit 0
-  fi
-
-  # Otherwise we continue happily through this instance of the script. No need to change user.
-  # i.e. I am not root, and I have sudo priveleges.
-}
-export -f check_if_need_background_install
-
-###############################################################################
-#
 # Function checks if service by given name is running (return code 0 = yes, 
 # other code = no).
 # Usage example:
@@ -326,7 +208,7 @@ function service_is_running {
   local SERVICE_NAME="$1"
   # Check inputs (must be non-empty string)
   [ ! -z "${SERVICE_NAME}" ] || { set_state "${FUNCNAME[0]}" 'error_empty_argument'; return 1; }
-  systemctl is-active --quiet docker
+  systemctl is-active --quiet "${SERVICE_NAME}"
 }
 export -f service_is_running
 
@@ -338,11 +220,18 @@ function set_environment_ensure_ff_agent_bin_exists {
 
   set_state "${FUNCNAME[0]}" 'started'
 
-  # Dependency check: 'tr' is installed
-  if ! command_exists tr >/dev/null; then
-    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
-    return 1
-  fi
+  # Define dependencies
+  local DEPENDENCIES=(
+    tr
+  )
+
+  # Loop through dependencies
+  for DEPENDENCY in "${DEPENDENCIES[@]}"; do
+    if ! command_exists "${DEPENDENCY}"; then
+      error "${FUNCNAME[0]}" "error_dependency_not_met_${DEPENDENCY}"
+      return 1
+    fi
+  done
 
   # Define required variables
   local REQUIRED_VARIABLES=(
@@ -373,8 +262,10 @@ export -f set_environment_ensure_ff_agent_bin_exists
 
 ###############################################################################
 #
-# Function makes sure symlink exists (or create new one if missing).
+# Function makes sure the symlink "set_environment_install" exists in the ${FF_AGENT_HOME}/bin/ folder.
+# If symlink is missing it will be created:
 #    ${FF_AGENT_HOME}/bin/set_environment_install -> ${FF_AGENT_HOME}/git/redwolfsecurity/set_environment/install
+# The installed command "set_environment_install" can also be run to update set_environment.
 #
 function set_environment_ensure_install_exists {
 
@@ -496,7 +387,7 @@ function install_ff_agent_bashrc {
 
   # Make sure ${FF_AGENT_HOME} folder exists
   if [ ! -d "${FF_AGENT_HOME}" ]; then
-    # ${FF_AGENT_HOME} folder is missing. Don't try to create it (it is responsibility of set_environment_ensure_ff_agent_home_exists()).
+    # ${FF_AGENT_HOME} folder is missing. Don't try to create it (it is not our responsibility)
     # Report an error and abort.
     set_state "${FUNCNAME[0]}" 'terminal_error_ff_agent_home_folder_does_not_exist'
     error "FF_AGENT_HOME='${FF_AGENT_HOME}' directory Does not exist. Aborting."
@@ -677,7 +568,7 @@ function install_go {
 
   # Check temporary folder created and we can write to it
   if ! is_writable "${TEMP_DIR}"; then
-    set_state "${FUNCNAME[0]}" "error_temp_dir_isnt_writable"
+    set_state "${FUNCNAME[0]}" "error_temp_dir_is_not_writable"
     return 1
   fi
 
@@ -967,12 +858,15 @@ EOT
   fi
   # ------------------ Inject "ff_agent/.n/bin" into PATH and inject that export into FF_AGENT_PROFILE_FILE (end) ----------------
 
+  #
+  VERSION=$( get_desired_nodejs_version )
+  [ -z "${VERSION}" ] && { set_state "${FUNCNAME[0]}" 'failed_to_get_desired_nodejs_version'; abort; }
 
   # Install 'n_lts' using dowloaded into TMPDIR 'n' ('n_lts' will be installed into ff_agent/.n)
-  retry_command 5 15 bash n lts || {
+  retry_command 5 15 bash n "${VERSION}" || {
     # Error: clean up tmp folder, report an error and return error code 1
     popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
-    set_state "${FUNCNAME[0]}" 'error_installing_n_lts'; return 1;
+    set_state "${FUNCNAME[0]}" 'error_installing_n'; return 1;
   }
 
   # Install 'n' into ff_agent/.n  (yes, we have downloaded 'n' into TMPDIR,
@@ -998,27 +892,16 @@ export -f install_n
 function install_nodejs {
   set_state "${FUNCNAME[0]}" 'started'
 
-  local APPROACH='n'
+  # Get desired nodejs version
+  local VERSION="$( get_desired_nodejs_version )"
+  [ -z "${VERSION}" ] && { set_state "${FUNCNAME[0]}" 'failed_to_get_desired_nodejs_version'; abort; }
 
-  # Get expected nodejs version
-  local VERSION="$( get_expected_nodejs_version )"
-  [ -z "${VERSION}" ] && { set_state "${FUNCNAME[0]}" 'failed_to_get_expected_nodejs_version'; abort; }
 
-  case ${APPROACH} in
-      nvm)
-          install_nvm_ubuntu
-          export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
-          [ -s "${NVM_DIR}/nvm.sh" ] && \. "${NVM_DIR}/nvm.sh"
-          nvm install lts/*
-      ;;
-      n)
-          # # We need to stop pm2 before replacing location of nodejs, otherwise any pm2 command would faild
-          # stop_pm2
-          # uninstall_n_outside_ff_agent_home  || { set_state "${FUNCNAME[0]}" 'terminal_error_uninstall_n_outside_ff_agent_home'; abort; }
-          install_n || { set_state "${FUNCNAME[0]}" 'terminal_error_install_n'; abort; }
-          n install "${VERSION}" || { set_state "${FUNCNAME[0]}" 'terminal_error_switching_node_version'; abort; }
-      ;;
-  esac
+  # # We need to stop pm2 before replacing location of nodejs, otherwise any pm2 command would faild
+  # stop_pm2
+  # uninstall_n_outside_ff_agent_home  || { set_state "${FUNCNAME[0]}" 'terminal_error_uninstall_n_outside_ff_agent_home'; abort; }
+  install_n || { set_state "${FUNCNAME[0]}" 'terminal_error_install_n'; abort; }
+  n install "${VERSION}" || { set_state "${FUNCNAME[0]}" 'terminal_error_switching_node_version'; abort; }
 
   set_state "${FUNCNAME[0]}" 'success'
   return 0
@@ -1051,14 +934,6 @@ function install_set_environment_baseline {
   # Now we can set_state()
   set_state "${FUNCNAME[0]}" 'started'
 
-  # Analyzes currently selected user and might call "background_install()" to re-run the installer under a different user
-  # Note: it have a dependency: variable FF_AGENT_USERNAME - must be set (by get_best_ff_agent_home())
-  if [ "$( check_if_need_background_install )" == "true" ]; then
-    background_install "${FF_AGENT_USERNAME}"
-    return 0
-    # Note: we can not "exit 0" here since installer might be sourced by "root"
-  fi
-
   # Put logs in best location
   setup_logging || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_setup_logging"; abort; }
 
@@ -1075,17 +950,12 @@ export -f install_set_environment_baseline
 # Checks if pm2 is installed
 # Returns 0 if it is, 1 if it isn't
 function pm2_is_installed {
-    set_state "${FUNCNAME[0]}" 'started'
     local STATUS=0
     local PACKAGE="pm2"
     local NPM=$( command_exists npm ) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
 
     # If it not installed, set STATUS=1
     ${NPM} list "${PACKAGE}" --global >/dev/null
-    STATUS=${?}
-
-    set_state "${FUNCNAME[0]}" 'success'
-    return ${STATUS}
 }
 export -f pm2_is_installed
 

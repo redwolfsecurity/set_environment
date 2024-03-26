@@ -142,7 +142,8 @@
 #    - get_current_user 
 #    - get_best_ff_agent_home 
 #    - ff_api_get 
-#    - get_expected_nodejs_version 
+#    - get_desired_nodejs_version 
+#    - get_ff_agent_username
 #    - is_framework_api_defined 
 #    - set_environment_is_working 
 #    - publish_message 
@@ -260,9 +261,6 @@ function command_exists {
     # Otherwise we return what we resolved, which might be a bash function, or the path to a command
     echo "${COMMAND_RESOLVED}"
   fi
-
-  return 0
-
 }
 export -f command_exists
 
@@ -329,7 +327,6 @@ export -f help_toc
 ###############################################################################
 # Utility wrapper around apt dist-upgrade for safer headless operation
 function apt_dist_upgrade {
-  set_state "${FUNCNAME[0]}" 'started'
   local APT_COMMAND=dist-upgrade
 
   #        --force-yes is deprecetaed now.
@@ -338,24 +335,20 @@ function apt_dist_upgrade {
   #       replaced by --allow-unauthenticated , --allow-downgrades , --allow-remove-essential , --allow-change-held-packages in 1.1.
   local FORCE_YES="--allow-unauthenticated --allow-downgrades --allow-remove-essential --allow-change-held-packages"
 
-  apt_update  || { set_state "${FUNCNAME[0]}" "failed_to_apt_update"; return 1; }
-  apt_upgrade || { set_state "${FUNCNAME[0]}" "failed_to_apt_upgrade"; return 1; }
+  apt_update  || { error "${FUNCNAME[0]}" "failed_to_apt_update"; return 1; }
+  apt_upgrade || { error "${FUNCNAME[0]}" "failed_to_apt_upgrade"; return 1; }
   sudo DEBIAN_FRONTEND=noninteractive \
     apt-get \
       -yq \
       -o Dpkg::Options::="--force-confdef" \
       -o Dpkg::Options::="--force-confold" \
       ${FORCE_YES} ${APT_COMMAND} || { set_state "${FUNCNAME[0]}" "failed_to_apt_dist_upgrade"; return 1; }
-
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f apt_dist_upgrade
 
 ###############################################################################
 # Utility wrapper around apt install for safer headless operation
 function apt_install {
-  set_state "${FUNCNAME[0]}" 'started'
   PACKAGES=${@}
   APT_COMMAND=install
 
@@ -369,11 +362,8 @@ function apt_install {
         --no-install-recommends \
         --no-install-suggests \
         -o Acquire::ForceIPv4=true \
-        ${APT_COMMAND} ${PACKAGE} > /dev/null || { set_state "${FUNCNAME[0]}" "failed_to_apt_install"; return 1; }
+        ${APT_COMMAND} ${PACKAGE} > /dev/null || { error "${FUNCNAME[0]}" "failed_to_apt_install"; return 1; }
   done
-
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f apt_install
 
@@ -390,12 +380,11 @@ export -f apt_install
 #    apt_list libjansson-dev
 #
 function apt_list {
-  set_state "${FUNCNAME[0]}" 'started'
 
   # Check inputs:
   local PACKAGE_NAME="${1}"
   if [ "${PACKAGE_NAME}" == "" ]; then
-    set_state "${FUNCNAME[0]}" "bad_arguments_missing_package_name"
+    error "${FUNCNAME[0]}" "bad_arguments_missing_package_name"
     return 1
   fi
 
@@ -410,7 +399,7 @@ function apt_list {
 
   # Check errors
   if [ ${?} -ne 0 ]; then
-    set_state "${FUNCNAME[0]}" "failed_to_find_package_uris"
+    error "${FUNCNAME[0]}" "failed_to_find_package_uris"
     return 1
   fi
 
@@ -422,12 +411,9 @@ function apt_list {
 
   # Check we got files list
   if [ "${PACKAGE_FILES}" == "" ]; then
-    set_state "${FUNCNAME[0]}" "failed_to_list_package_files"
+    error "${FUNCNAME[0]}" "failed_to_list_package_files"
     return 1
   fi
-
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f apt_list
 
@@ -437,15 +423,14 @@ function apt_reinstall {
     PACKAGES=${@}
     APT_COMMAND=reinstall
 
-    for PACKAGE in "${PACKAGES}"
-    do
+    for PACKAGE in "${PACKAGES}"; do
         sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} ${PACKAGE}
         if [ ${?} -ne 0 ]; then
             error "Error reinstalling packages: ${PACKAGE}"
             return 1
         fi
     done
-    return 0
+
 }
 export -f apt_reinstall
 
@@ -482,7 +467,6 @@ function apt_update {
        error "updating packages"
        return 1
     fi
-    return 0
 }
 export -f apt_update
 
@@ -502,7 +486,6 @@ function apt_upgrade {
        error "Error upgrading packages"
        return 1
     fi
-    return 0
 }
 export -f apt_upgrade
 
@@ -521,38 +504,37 @@ export -f apt_upgrade
 #   1 - on error
 #
 # Usage examples:
-#   # Note: we can not do "local" call with command evaluation in 1-liner,
-#   # otherwise our error check will fail (will always indicate "success"
-#   # since it will be checking "local" call instead of $(...) expression exit code)
-#   local VERSION
-#   VERSION="12.34.56"
-#   local MAJOR
-#   MAJOR=$( get_version_component major "${VERSION}" ) || { set_state "${FUNCNAME[0]}" 'falied_to_extract_major_version'; return 1; }
-#   local MINOR
-#   MINOR=$( get_version_component minor "${VERSION}" ) || { set_state "${FUNCNAME[0]}" 'falied_to_extract_minor_version'; return 1; }
-#   local PATCH
-#   PATCH=$( get_version_component patch "${VERSION}" ) || { set_state "${FUNCNAME[0]}" 'falied_to_extract_patch_version'; return 1; }
 #
+#   # Say we have the following example version:
+#   local VERSION="12.34.56"
+#
+#   MAJOR=$( get_version_component major "${VERSION}" ) || { abort "${FUNCNAME[0]}" 'falied_to_extract_major_version'; }
+#   MINOR=$( get_version_component minor "${VERSION}" ) || { abort "${FUNCNAME[0]}" 'falied_to_extract_minor_version'; }
+#   PATCH=$( get_version_component patch "${VERSION}" ) || { abort "${FUNCNAME[0]}" 'falied_to_extract_patch_version'; }
+#
+#   # Print result
+#   echo "Extracted version components: MAJOR:${MAJOR}, MINOR:${MINOR}, PATCH:${PATCH}"
+#   # Expected output:
+#   #   Extracted version components: MAJOR:12, MINOR:34, PATCH:56
 function get_version_component {
-  set_state "${FUNCNAME[0]}" 'started'
 
   # Check we get exactly 2 arguments
-  [ $# -eq 2 ] || { set_state "${FUNCNAME[0]}" 'error_wrong_number_of_arguments'; return 1; }
+  [ $# -eq 2 ] || { error "${FUNCNAME[0]}" 'error_wrong_number_of_arguments'; return 1; }
 
   # Get arguments
   local VERSION_COMPONENT_NAME="$1"
   local FULL_VERSION="$2"
 
   # Check we got non-empty arguments
-  [ ! -z ${VERSION_COMPONENT_NAME} ] || { set_state "${FUNCNAME[0]}" 'error_empty_argument_component_name'; return 1; }
-  [ ! -z ${FULL_VERSION} ] || { set_state "${FUNCNAME[0]}" 'error_empty_argument_full_version'; return 1; }
+  [ ! -z ${VERSION_COMPONENT_NAME} ] || { error "${FUNCNAME[0]}" 'error_empty_argument_component_name'; return 1; }
+  [ ! -z ${FULL_VERSION} ] || { error "${FUNCNAME[0]}" 'error_empty_argument_full_version'; return 1; }
 
   # Define an array of all supported version component names
   local SUPPORTED_VERSION_COMPONENT_NAMES=("major" "minor" "patch")
 
   # Check argument: must be 1 of 3 supported: major, minor, patch
   if ! in_array "${VERSION_COMPONENT_NAME}" "${SUPPORTED_VERSION_COMPONENT_NAMES[@]}"; then
-    set_state "${FUNCNAME[0]}" 'error_unsupported_version_component_name'
+    error "${FUNCNAME[0]}" 'error_unsupported_version_component_name'
     return 1
   fi
 
@@ -574,19 +556,16 @@ function get_version_component {
   *)
     # We already checked (the value is in SUPPORTED_VERSION_COMPONENT_NAMES),
     # but what if "case()" was not updated, then we must error out in our "default" case.
-    set_state "${FUNCNAME[0]}" 'error_unsupported_version_component_name_case'
+    error "${FUNCNAME[0]}" 'error_unsupported_version_component_name_case'
     return 1
     ;;
   esac
   
   # Check extracted EXTRACTED_COMPONENT_VERSION is not blank
-  [ ! -z "${EXTRACTED_COMPONENT_VERSION}" ] || { set_state "${FUNCNAME[0]}" 'error_got_empty_component_version'; return 1; }
+  [ ! -z "${EXTRACTED_COMPONENT_VERSION}" ] || { error "${FUNCNAME[0]}" 'error_got_empty_component_version'; return 1; }
 
   # Print result to standard output
   echo -n "${EXTRACTED_COMPONENT_VERSION}"
-
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f get_version_component
 
@@ -769,8 +748,6 @@ function assert_cd {
      log "SUGGEST: check user ID and directory permissions."
      abort
   fi
-
-  return 0
 }
 export -f assert_cd
 
@@ -783,39 +760,56 @@ function assert_makedir {
   else
      assert_clean_exit mkdir "${1}"
   fi
-  return 0
 }
 export -f assert_makedir
 
 ###############################################################################
 # Category: file
-# Utility function - checks if given file has "EOL" at the end of the file. It gets the path to the file as the only argument and:
-#   - returns value 0 if file has EOL at the end (or file is empty)
-#   - returns nonzero value in case file doesn't have EOL at the end
+# Utility function - checks if given file has "EOL" at the end of the file. It gets the path to the file as the only argument.
+# Return codes:
+#    0 - EOL present or file is empty
+#    1 - EOL missing
+#    2 - Bad arguments
+#    3 - File does not exist or can not read even with "sudo"
 #
 # Usage example:
-#   does_file_have_eol_at_the_end /path/to/file.txt
+#
+#   # Call function and preserve its return code
+#   does_file_have_eol_at_the_end "${FILEPATH}"
+#   does_file_have_eol_at_the_end_code=$?
+#
+#   # Check if function returned an error
+#   if [ ${does_file_have_eol_at_the_end_code} -gt 1 ]; then
+#       error "Function does_file_have_eol_at_the_end() returned error code ${does_file_have_eol_at_the_end_code}.""
+#       return 1
+#   fi
+#   
+#   # Check if EOL is present
+#   if does_file_have_eol_at_the_end_code /path/to/file.txt; then
+#       echo "Yes, EOL is present."
+#       . . .
 #
 # Note: function does not check if file exist and does not return errors (return binary outcome: code 0 = yes, EOL is present or empty file, code 1 = EOL is missing in last line)
 #
-# Function is used to avoid concatination of more than one name/vale pairs into configuration files (be it yaml or .env files).
+# Function is used to avoid concatination of more than one name/value pairs into configuration files (be it yaml or .env files).
 #
 function does_file_have_eol_at_the_end {
-  # Indicate: function started
-  set_state "${FUNCNAME[0]}" 'started'
+
+  # Define exit codes (both success and errors)
+  local EOL_PRESENT_OR_EMPTY_FILE=0
+  local EOL_MISSING=1
+  local ERROR_BAD_ARGUMENTS=2
+  local ERROR_FILE_DOES_NOT_EXIST_OR_CAN_NOT_READ_EVEN_WITH_SUDO=3
 
   # Take arguments
   FILENAME="${1}"
 
   # Check required arguments are not empty
-  [ ! -z "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" "error_target_filepath_is_blank"; return 1; }
+  [ ! -z "${FILEPATH}" ] || { error "${FUNCNAME[0]}" "error_target_filepath_is_blank"; return ${ERROR_BAD_ARGUMENTS}; }
 
   # Get "sudo read / write" prefixes
-  # Note: we can not do "local" call with command evaluation in 1-liner,
-  # otherwise our error check will fail (will always indicate "success"
-  # since it will be checking "local" call instead of $(...) expression exit code)
   local SUDO_READ_FILE_PREFIX
-  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 1; }
+  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { error "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return ${ERROR_FILE_DOES_NOT_EXIST_OR_CAN_NOT_READ_EVEN_WITH_SUDO}; }
 
   # Check if file is empty
   if ${SUDO_READ_FILE_PREFIX} [ ! -s "${FILENAME}" ]; then
@@ -824,18 +818,15 @@ function does_file_have_eol_at_the_end {
       # Note: function does_file_have_eol_at_the_end() got empty file.
       # For our needs (to avoid concatination of name/value lines)
       # we consider empty file as having EOL (i.e. safe to append more name/values)
-      set_state "${FUNCNAME[0]}" 'success'
       return 0
   # -z - true if the length of string is zero
   # -n - true if the length of string is nonzero
   elif [ -z "$(${SUDO_READ_FILE_PREFIX} tail -c 1 "${FILENAME}" )" ]; then
       # The file ends with a newline or with a null byte,
-      set_state "${FUNCNAME[0]}" 'success'
-      return 0
+      return ${EOL_PRESENT_OR_EMPTY_FILE}
   else
       # The file does not end with a newline nor with a null byte.
-      set_state "${FUNCNAME[0]}" 'success'
-      return 1
+      return ${EOL_MISSING}
   fi
 }
 export -f does_file_have_eol_at_the_end
@@ -885,9 +876,6 @@ function ensure_file_contains {
   done
 
   # Check if we need to use "sudo" prefix to read / write / readwrite (or check file existence) given file
-  # Note: we can not do "local" call with command evaluation in 1-liner,
-  # otherwise our error check will fail (will always indicate "success"
-  # since it will be checking "local" call instead of $(...) expression exit code)
   local SUDO_READ_FILE_PREFIX
   SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 1; }
   
@@ -956,27 +944,24 @@ export -f f
 #
 # Note: function will use "sudo" to read the file if needed to escalate privileges 
 #
-# Return code:
-#   0 - success (file exist, pattern found)
-#   1 - error or pattern not found (file does not exist, bad arguments, pattern not found)
+# Return codes:
+#   0 - Pattern found
+#   1 - Pattern not found
+#   2 - File does not exist
+#   3 - Bad arguments (one or both arguments are not set)
+#   4 - Failed to get sudo read file prefix
 #
 # Usage example:
 #   file_contains_pattern /path/to/file.txt 'regex patt.rn'
 #
-# ----------------------------------------------------------------------------
-# Note: When pattern is not found f-n return code 1 along with set_state "success" - this is strange.
-# TODO: (all) f-ns must be able to indicate success/error separately from result found/not found.
-# One way to solve this would be to use exit code for signaling errors, but return search result
-# via standard output, then the caller will have both $? and output to check them separately.
-#
-# Another alternative to use >2 return codes (example: 0=found, 1=not found, 2..N=error(s))
-#
-# More general question: how do we return error from boolean "is_xxx()" functions?
-# ----------------------------------------------------------------------------
-#
 function file_contains_pattern {
-  # Indicate: function started
-  set_state "${FUNCNAME[0]}" 'started'
+
+  # Define exit codes for different outcomes
+  local PATTERN_FOUND=0
+  local PATTERN_NOT_FOUND=1
+  local ERROR_FILE_DOES_NOT_EXIST=2
+  local ERROR_BAD_ARGUMENTS=3
+  local ERROR_FAILED_TO_GET_SUDO_PREFIX=4
 
   # Take arguments
   local FILEPATH="${1}"
@@ -991,23 +976,18 @@ function file_contains_pattern {
   # Check required environment variables are set
   for VARIABLE_NAME in "${ALL_EXPECTED_ENVRIONMENT_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE=$( echo "error_argument_not_set_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-      return 1
+      error "${FUNCNAME[0]}" "Argument not set: ${VARIABLE_NAME,,}" # Using ,, for lowercase conversion
+      return ${ERROR_BAD_ARGUMENTS}
     }
   done
 
-  # Check if we need to use "sudo" prefix to read / write / readwrite (or check file existence) given file
-  # Note: we can not do "local" call with command evaluation in 1-liner,
-  # otherwise our error check will fail (will always indicate "success"
-  # since it will be checking "local" call instead of $(...) expression exit code)
+  # Check if we need to use "sudo" prefix to read / write / readwrite (or check file existence) for a given file
   local SUDO_READ_FILE_PREFIX
-  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 1; }
+  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return ${ERROR_FAILED_TO_GET_SUDO_PREFIX}; }
 
   # Check the target file exists
   if ${SUDO_READ_FILE_PREFIX} [ ! -e "${FILEPATH}" ]; then
-    set_state "${FUNCNAME[0]}" 'error_file_does_not_exist'
-    return 1
+    return ${ERROR_FILE_DOES_NOT_EXIST}
   fi
 
   # Search pattern in the file
@@ -1016,12 +996,10 @@ function file_contains_pattern {
   # Analyze search exit code
   if [ $? -eq 0 ]; then
     # Pattern found
-    set_state "${FUNCNAME[0]}" 'success'
-    return 0
+    return ${PATTERN_FOUND}
   else
     # Pattern not found
-    set_state "${FUNCNAME[0]}" 'success'  # "bad" code along with "success" - this is strange. TODO: (all) f-ns must be able to indicate success/error separately from result found/not found.
-    return 1
+    return ${PATTERN_NOT_FOUND}
   fi
 }
 export -f file_contains_pattern
@@ -1199,9 +1177,6 @@ function get_by_url {
   # The "XXX" in the "mktemp" arguments are template - these will be replaced
   # with random characters.
 
-  # Note: we can not do "local" call with command evaluation in 1-liner,
-  # otherwise our error check will fail (will always indicate "success"
-  # since it will be checking "local" call instead of $(...) expression exit code)
   local TMP_FILEPATH
   TMP_FILEPATH=$(mktemp -t ${FUNCNAME[0]}.XXXXXXX) || { set_state "${FUNCNAME[0]}" "error_generating_tmp_filepath"; return 1; }
 
@@ -1273,7 +1248,7 @@ export -f get_by_url
 # Category: file
 # Utility function - Easy way to check if a sudo prefix needed to read given file.
 # Function prints to standard ouput "sudo" if root privileges required.
-# Return code:
+# Return codes:
 #   0 - success
 #   1 - error (examples: file does not exist, can not read even with "sudo")
 #
@@ -1297,9 +1272,6 @@ function get_sudo_read_file_prefix {
   local SUDO_READ_FILE_PREFIX=""
   [ -r "${FILEPATH}" ] || {
     # The FILEPATH is not readable by the current user, check if current user can_sudo
-    # Note: we can not do "local" call with command evaluation in 1-liner,
-    # otherwise our error check will fail (will always indicate "success"
-    # since it will be checking "local" call instead of $(...) expression exit code)
     local CURRENT_USER
     CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" "failed_to_get_current_user"; return 1; }
     if can_sudo "${CURRENT_USER}"; then
@@ -1323,7 +1295,7 @@ export -f get_sudo_read_file_prefix
 # Category: file
 # Utility function - Easy way to check if a sudo prefix needed to write given file.
 # Function prints to standard ouput "sudo" if root privileges required.
-# Return code:
+# Return codes:
 #   0 - success
 #   1 - error (examples: file does not exist, can not write even with "sudo")
 #
@@ -1347,9 +1319,6 @@ function get_sudo_write_file_prefix {
   local SUDO_WRITE_FILE_PREFIX=""
   [ -w "${FILEPATH}" ] || {
     # The FILEPATH is not writable by the current user, check if current user can_sudo
-    # Note: we can not do "local" call with command evaluation in 1-liner,
-    # otherwise our error check will fail (will always indicate "success"
-    # since it will be checking "local" call instead of $(...) expression exit code)
     local CURRENT_USER
     CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" "failed_to_get_current_user"; return 1; }
     if can_sudo "${CURRENT_USER}"; then
@@ -1376,7 +1345,7 @@ export -f get_sudo_write_file_prefix
 #
 # Use case example: for inline-editor "sed -i" we must be able to both read and write.
 #
-# Return code:
+# Return codes:
 #   0 - success
 #   1 - error (examples: file does not exist, can not read-write even with "sudo")
 #
@@ -1396,9 +1365,6 @@ function get_sudo_readwrite_file_prefix {
 ##  [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 1; }
   
   # Get "sudo read / write" prefixes
-  # Note: we can not do "local" call with command evaluation in 1-liner,
-  # otherwise our error check will fail (will always indicate "success"
-  # since it will be checking "local" call instead of $(...) expression exit code)
   local SUDO_READ_FILE_PREFIX
   SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 1; }
   
@@ -1435,10 +1401,10 @@ export -f glob_matches
 #
 # Function serch regular expression PATTERN in the existing file by the given FILEPATH and if missing, then
 # the INJECT_CONTENT got injected at the end of the given file.
-# Return:
-#  code 0 - succesful injection (or PATTERN already present in the file)
-#  code 1 - failed to inject (not enough permissions, target file does not exist etc.)
-#           In case of error: the error will be reported by error() function (to standard output and into logger)
+# Return codes:
+#  0 - succesful injection (or PATTERN already present in the file)
+#  1 - failed to inject (not enough permissions, target file does not exist etc.)
+#      In case of error: the error will be reported by error() function (to standard output and into logger)
 #
 # Note: if existing file have missing EOL in last line, extra EOL will be injected before injectint the content.
 #
@@ -1500,9 +1466,6 @@ function inject_into_file {
   done
 
   # Check if we need to use "sudo" prefix to read / write / readwrite (or check file existence) given file
-  # Note: we can not do "local" call with command evaluation in 1-liner,
-  # otherwise our error check will fail (will always indicate "success"
-  # since it will be checking "local" call instead of $(...) expression exit code)
   local SUDO_READ_FILE_PREFIX
   SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 4; }
   
@@ -1520,11 +1483,23 @@ function inject_into_file {
   if ! file_contains_pattern "${FILEPATH}" "${PATTERN}"; then
     # Expected pattern is missing. Inject text.
 
+
+    # Call function and preserve its return code
+    does_file_have_eol_at_the_end "${FILEPATH}"
+    does_file_have_eol_at_the_end_code=$?
+
+    # Check if function returned an error
+    if [ ${does_file_have_eol_at_the_end_code} -gt 1 ]; then
+        error "Function does_file_have_eol_at_the_end() returned error code ${does_file_have_eol_at_the_end_code}."
+        return 1
+    fi
+
     # Inject extra EOL if last line of the file missing EOL and file is not empty
-    if ! does_file_have_eol_at_the_end "${FILEPATH}"; then
+    if [ ${does_file_have_eol_at_the_end_code} -ne 0 ]; then
+      # The ${FILEPATH} file does not have EOL at the end.
       # Add EOL to the end of the file (so our injected line starts from the new line)
       echo "" | ${SUDO_READ_FILE_PREFIX} tee -a "${FILEPATH}" || {
-        set_state "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'
+        error "${FUNCNAME[0]}" "Failed to add missing EOL to the end of the file: ${FILEPATH}"
         return 1
       }
     fi
@@ -1567,7 +1542,6 @@ export -f path_to_absolute_path
 #  0 - if file/directory writable
 #  1 - otherwise
 #
-# TODO: this must also check if "can_sudo" and if need to escalate privileges.
 function is_writable {
   # Get argument
   local TARGET="${1}"
@@ -1604,9 +1578,6 @@ export -f is_writable
 #
 function remove_all_lines_by_regexp {
 
-  # Indicate: function started
-  set_state "${FUNCNAME[0]}" 'started'
-
   # Get regexp argument
   local FILEPATH="${1}"
   local REGEX="${2}"
@@ -1621,39 +1592,33 @@ function remove_all_lines_by_regexp {
   # Check required environment variables are set
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE="$( echo "error_empty_argument_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      error "${FUNCNAME[0]}" "Got empty required argument: '${VARIABLE_NAME,,}'"
       return 1
     }
   done
 
   # Check if we need to use "sudo" prefix to read / write / readwrite (or check file existence) given file
-  # Note: we can not do "local" call with command evaluation in 1-liner,
-  # otherwise our error check will fail (will always indicate "success"
-  # since it will be checking "local" call instead of $(...) expression exit code)
   local SUDO_READ_FILE_PREFIX
-  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 4; }
+  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { error "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 4; }
   
   local SUDO_WRITE_FILE_PREFIX
-  SUDO_WRITE_FILE_PREFIX=$(get_sudo_write_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
+  SUDO_WRITE_FILE_PREFIX=$(get_sudo_write_file_prefix "${FILEPATH}") || { error "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
   
   local SUDO_READWRITE_FILE_PREFIX
-  SUDO_READWRITE_FILE_PREFIX=$(get_sudo_readwrite_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
+  SUDO_READWRITE_FILE_PREFIX=$(get_sudo_readwrite_file_prefix "${FILEPATH}") || { error "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
 
   # Check the target file exists
-  ${SUDO_READ_FILE_PREFIX} [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" "error_target_file_does_not_exist: '${FILEPATH}'"; return 1; }
+  ${SUDO_READ_FILE_PREFIX} [ -f "${FILEPATH}" ] || { error "${FUNCNAME[0]}" "error_target_file_does_not_exist: '${FILEPATH}'"; return 1; }
 
   # Check if target file is readable
   if ${SUDO_READ_FILE_PREFIX} [ ! -r "${FILEPATH}" ]; then
     # Error: not enough permissions to read target file
-    set_state "${FUNCNAME[0]}" 'failed_to_read_target_file'
     return 4
   fi
 
   # Check if target file is writable
   if ${SUDO_WRITE_FILE_PREFIX} [ ! -w "${FILEPATH}" ]; then
     # Error: not enough permissions to write target file
-    set_state "${FUNCNAME[0]}" 'failed_to_write_target_file'
     return 5
   fi
 
@@ -1669,18 +1634,18 @@ function remove_all_lines_by_regexp {
   # Check if the pattern is found
   if [ ${EXIT_CODE} -eq 1 ]; then
     # The pattern match not found
-    set_state "${FUNCNAME[0]}" 'error_pattern_match_not_found'
+    error "${FUNCNAME[0]}" 'error_pattern_match_not_found'
     return 6
   fi
   if [ ${EXIT_CODE} -gt 1 ]; then
     # Error: 7 - failed to search by given pattern.
-    set_state "${FUNCNAME[0]}" 'failed_to_search_by_given_pattern'
+    error "${FUNCNAME[0]}" 'failed_to_search_by_given_pattern'
     return 7
   fi
 
   # Take a note on the current number of lines
   local LINE_COUNT_BEFORE_CHANGE
-  LINE_COUNT_BEFORE_CHANGE="$( ${SUDO_READ_FILE_PREFIX} cat "${FILEPATH}" | wc -l )" || { set_state "${FUNCNAME[0]}" 'failed_to_count_lines_before_edit'; return 1; }
+  LINE_COUNT_BEFORE_CHANGE="$( ${SUDO_READ_FILE_PREFIX} cat "${FILEPATH}" | wc -l )" || { error "${FUNCNAME[0]}" 'failed_to_count_lines_before_edit'; return 1; }
 
   # Found line in the target file. Edit file:
   local EDITOR_OUTPUT
@@ -1692,24 +1657,24 @@ function remove_all_lines_by_regexp {
   EDITOR_CODE=${?}
   if [ ${EDITOR_CODE} -ne 0 ]; then
     # Error: editor return an error (most probably bad regex pattern)
-    set_state "${FUNCNAME[0]}" 'failed_to_edit_file'
+    error "${FUNCNAME[0]}" 'failed_to_edit_file'
     return 8
   fi
 
   # Count the number of deleted lines
   # Note: sed always return 0, so it won't let us know how many changes were done
-  LINE_COUNT_AFTER_CHANGE="$( ${SUDO_READ_FILE_PREFIX} cat "${FILEPATH}" | wc -l )" || { set_state "${FUNCNAME[0]}" 'failed_to_count_lines_after_edit'; return 1; }
+  LINE_COUNT_AFTER_CHANGE="$( ${SUDO_READ_FILE_PREFIX} cat "${FILEPATH}" | wc -l )" || { error "${FUNCNAME[0]}" 'failed_to_count_lines_after_edit'; return 1; }
   local DELETED_LINES_COUNT
   DELETED_LINES_COUNT=$(( LINE_COUNT_BEFORE_CHANGE - LINE_COUNT_AFTER_CHANGE ))
 
   # Check the number of deleted lines
   if [ ${DELETED_LINES_COUNT} -gt 0 ]; then
     # Success
-    set_state "${FUNCNAME[0]}" 'success'
+    error "${FUNCNAME[0]}" 'success'
     return 0
   else
     # Somehow the number of lines did't change even though we found the pattern (obviously an error).
-    set_state "${FUNCNAME[0]}" 'error_number_of_lines_after_edit_did_not_change'
+    error "${FUNCNAME[0]}" 'error_number_of_lines_after_edit_did_not_change'
     return 9
   fi
 }
@@ -1745,8 +1710,6 @@ export -f remove_all_lines_by_regexp
 #  13 - Failed to calculate difference after edit
 #
 function replace_all_lines_by_regexp {
-  # Indicate: function started
-  set_state "${FUNCNAME[0]}" 'started'
 
   # Take arguments
   local FILEPATH="${1}"
@@ -1763,27 +1726,23 @@ function replace_all_lines_by_regexp {
   # Check required environment variables are set
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE="$( echo "error_empty_argument_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      error "${FUNCNAME[0]}" "Got empty required argument: '${VARIABLE_NAME,,}'"
       return 1
     }
   done
 
   # Check if we need to use "sudo" prefix to read / write / readwrite (or check file existence) given file
-  # Note: we can not do "local" call with command evaluation in 1-liner,
-  # otherwise our error check will fail (will always indicate "success"
-  # since it will be checking "local" call instead of $(...) expression exit code)
   local SUDO_READ_FILE_PREFIX
-  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 4; }
+  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { error "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 4; }
   
   # local SUDO_WRITE_FILE_PREFIX
-  # SUDO_WRITE_FILE_PREFIX=$(get_sudo_write_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
+  # SUDO_WRITE_FILE_PREFIX=$(get_sudo_write_file_prefix "${FILEPATH}") || { error "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
   
   local SUDO_READWRITE_FILE_PREFIX
-  SUDO_READWRITE_FILE_PREFIX=$(get_sudo_readwrite_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
+  SUDO_READWRITE_FILE_PREFIX=$(get_sudo_readwrite_file_prefix "${FILEPATH}") || { error "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
 
   # Check the target file exists
-  ${SUDO_READ_FILE_PREFIX} [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 3; }
+  ${SUDO_READ_FILE_PREFIX} [ -f "${FILEPATH}" ] || { error "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 3; }
 
   # Try to find by given regexp
   GREP_OUTPUT=$( ${SUDO_READ_FILE_PREFIX} grep --quiet "${REGEX}" "${FILEPATH}" 2>&1 )
@@ -1792,29 +1751,29 @@ function replace_all_lines_by_regexp {
   # Check if the pattern is found
   if [ ${EXIT_CODE} -eq 1 ]; then
     # The pattern was not found
-    set_state "${FUNCNAME[0]}" 'error_pattern_was_not_found'
+    error "${FUNCNAME[0]}" 'error_pattern_was_not_found'
     return 6
   fi
   if [ ${EXIT_CODE} -gt 1 ]; then
     # Error: 7 - failed to search by given pattern.
     # Pass grep output through stdout.
-    set_state "${FUNCNAME[0]}" 'failed_to_search_by_given_pattern'
+    error "${FUNCNAME[0]}" 'failed_to_search_by_given_pattern'
     return 7
   fi
 
   # Make a temporary copy of the edited file (the only reason: we need to count number of modified lines by the editor)
   ORIGINAL_FILE_COPY="$( mktemp 2>&1 )"
   if [ ${?} -ne 0 ] || [ ! -f "${ORIGINAL_FILE_COPY}" ]; then
-    # "failed to create temporary file. Details: ${ORIGINAL_FILE_COPY}"
-    set_state "${FUNCNAME[0]}" 'error_failed_to_create_temporary_file'
+    # Failed to create temporary file. Details: ${ORIGINAL_FILE_COPY}
+    error "${FUNCNAME[0]}" 'error_failed_to_create_temporary_file'
     return 10
   fi
 
   # Create a temporary copy of the target file before editing it
   ${SUDO_READ_FILE_PREFIX} cp "${FILEPATH}" "${ORIGINAL_FILE_COPY}"
   if [ ${?} -ne 0 ]; then
-    # "failed to copy file ${FILEPATH} to temporary file ${ORIGINAL_FILE_COPY}"
-    set_state "${FUNCNAME[0]}" 'failed_to_copy_target_to_temporary_file'
+    # Failed to copy file ${FILEPATH} to temporary file ${ORIGINAL_FILE_COPY}
+    error "${FUNCNAME[0]}" 'failed_to_copy_target_to_temporary_file'
     return 11
   fi
 
@@ -1827,30 +1786,30 @@ function replace_all_lines_by_regexp {
   if [ ${EDITOR_CODE} -ne 0 ]; then
     # Error: inline editor returned an error (most probably bad regex pattern)
     # Pass editor output (error details) to stdout.
-    set_state "${FUNCNAME[0]}" 'error_inline_editor_returned_bad_code'
+    error "${FUNCNAME[0]}" 'error_inline_editor_returned_bad_code'
     # Remove temporary file
-    rm "${ORIGINAL_FILE_COPY}" || { set_state "${FUNCNAME[0]}" 'error_removing_temporary_file'; return 12; }
+    rm "${ORIGINAL_FILE_COPY}" || { error "${FUNCNAME[0]}" 'error_removing_temporary_file'; return 12; }
     return 8
   fi
 
   # Count the number of modified lines
   # Note: sed always return 0, so it won't let us know how many changes were done unless we count "before" and "after"
-  MODIFIED_LINES_COUNT=$( ${SUDO_READ_FILE_PREFIX} diff "${FILEPATH}" "${ORIGINAL_FILE_COPY}" | grep '^<' | wc -l ) || { set_state "${FUNCNAME[0]}" 'failed_to_calculate_difference_after_edit'; return 13; }
+  MODIFIED_LINES_COUNT=$( ${SUDO_READ_FILE_PREFIX} diff "${FILEPATH}" "${ORIGINAL_FILE_COPY}" | grep '^<' | wc -l ) || { error "${FUNCNAME[0]}" 'failed_to_calculate_difference_after_edit'; return 13; }
 
   # Remove temporary file
-  rm "${ORIGINAL_FILE_COPY}" || { set_state "${FUNCNAME[0]}" 'error_removing_temporary_file'; return 12; }
+  rm "${ORIGINAL_FILE_COPY}" || { error "${FUNCNAME[0]}" 'error_removing_temporary_file'; return 12; }
 
   # Check the number of modified lines is > 0
   if [ ${MODIFIED_LINES_COUNT} -gt 0 ]; then
     # Success. Pass the number of modified lines through stdout.
     echo "${MODIFIED_LINES_COUNT}"
     # Indicate: function succeed
-    set_state "${FUNCNAME[0]}" 'success'
+    error "${FUNCNAME[0]}" 'success'
     return 0
   else
     # Somehow the number of lines did't change even though we found the pattern (obviously an error).
     # Pass editor output (error details) to stdout.
-    set_state "${FUNCNAME[0]}" 'error_zero_lines_changed'
+    error "${FUNCNAME[0]}" 'error_zero_lines_changed'
     return 9
   fi
 }
@@ -1940,8 +1899,6 @@ function truncate_file {
     # Error: File is not empty after truncation
     return 6
   fi
-
-  return 0
 }
 export -f truncate_file
 
@@ -1958,6 +1915,8 @@ export -f truncate_file
 # Utility abort / exit function - called when terminal conditions
 function abort {
     error "abort called - aborting ${@}"
+
+    # Check if the SERVICE is set (not blank string), then also set corresponding state
     if [ ! -z "${SERVICE}" ]; then
         set_state ${SERVICE} abort
     fi
@@ -2288,8 +2247,6 @@ function terminal_initialize {
         FONT_STYLE_NORMAL="$(tput sgr0)"
     fi
   fi
-
-  return 0
 }
 export -f terminal_initialize
 
@@ -2335,9 +2292,6 @@ function process_is_running_as_me {
     [ ! -z "${COMMAND_PATTERN}" ] || { set_state "${FUNCNAME[0]}" 'error_require_pattern_to_search_for'; return 1; }
 
     # We require PS and GREP commands
-    # Note: we can not do "local" call with command evaluation in 1-liner,
-    # otherwise our error check will fail (will always indicate "success"
-    # since it will be checking "local" call instead of $(...) expression exit code)
     local PS
     PS=$( command_exists ps ) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_ps_command'; return 1; }
 
@@ -2371,7 +2325,7 @@ export -f process_is_running_as_me
 #
 # Usage example:
 #       # Retry up to 5 times to install_xyz(), sleep 10 seconds between tries
-#       retry_command 5 10 install_xyz || { error "failed_to_install_xyz"; exit 1; }
+#       retry_command 5 10 install_xyz || { abort "failed_to_install_xyz"; }
 # 
 # Note: this function does not have state, i.e. the set_state() is not used
 # to indicate start/success (only for errors or failed attempts).
@@ -2697,11 +2651,9 @@ export -f secret_get
 function secret_set {
 
   # Preserve current bash echo settings and enable bash echo setting
-  BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_bash_echo_settings'; return 1; }
+  BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { error "${FUNCNAME[0]}" 'failed_to_get_bash_echo_settings'; return 1; }
 
-  set_state "${FUNCNAME[0]}" 'started'
-
-  set_bash_echo_off || { set_state "${FUNCNAME[0]}" 'failed_to_set_bash_echo_off'; return 1; } # Disable xtrace to avoid priting secrets
+  set_bash_echo_off || { error "${FUNCNAME[0]}" 'failed_to_set_bash_echo_off'; return 1; } # Disable xtrace to avoid priting secrets
 
   # Get arguments
   local URI="${1}"
@@ -2710,28 +2662,28 @@ function secret_set {
   # Check FF_AGENT_HOME is set
   [ ! -z "${FF_AGENT_HOME}" ] || {
     set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    set_state "${FUNCNAME[0]}" 'error_envirnment_not_set_ff_agent_home'
+    error "${FUNCNAME[0]}" 'error_envirnment_not_set_ff_agent_home'
     return 1
   }
 
   # Check URI is not blank
   [ ! -z "${URI}" ] || {
     set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    set_state "${FUNCNAME[0]}" 'error_blank_uri_argument'
+    error "${FUNCNAME[0]}" 'error_blank_uri_argument'
     return 1
   }
 
   # Check if URI contains any prohibited symbols, then error out.
   [[ ! "${URI}" =~ ([^a-z0-9_]+) ]] || {
     set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    set_state "${FUNCNAME[0]}" 'error_illigal_characters_in_uri_argument'
+    error "${FUNCNAME[0]}" 'error_illigal_characters_in_uri_argument'
     return 1
   }
 
   # Check SECRET is not empty
   if [ -z "${SECRET}" ]; then
       set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-      set_state "${FUNCNAME[0]}" 'error_bad_argument_secret'
+      error "${FUNCNAME[0]}" 'error_bad_argument_secret'
       return 1
   fi
 
@@ -2739,19 +2691,17 @@ function secret_set {
   local SECRET_DIRECTORY="${FF_AGENT_HOME}/secrets"
   mkdir -p "${SECRET_DIRECTORY}" || {
     set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    set_state "${FUNCNAME[0]}" 'failed_to_create_secrets_directory'
+    error "${FUNCNAME[0]}" 'failed_to_create_secrets_directory'
     return 1
   }
 
   # Store secret
   echo "${SECRET}" >"${SECRET_DIRECTORY}/${URI}" || { 
-    set_state "${FUNCNAME[0]}" 'failed_to_write_secret'
+    error "${FUNCNAME[0]}" 'failed_to_write_secret'
     return 1
   }
 
   set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f secret_set
 
@@ -2841,9 +2791,6 @@ function set_state {
 
   # Compose "state/chate" JSON and pipe it to publish_message()
   # Note: we POST "state/change" JSON to ff_host. (from portal to self, from 'traffic generator' to portal, from 'inside docker' to (agent?)).
-  # Note: we can not do "local" call with command evaluation in 1-liner,
-  # otherwise our error check will fail (will always indicate "success"
-  # since it will be checking "local" call instead of $(...) expression exit code)
   local UUID
   UUID="$( ff_uuid )" || { error "${FUNCNAME[0]}" 'failed_generate_uuid'; return 1; }
 
@@ -2921,9 +2868,6 @@ EOF
     # Report metric: start:1    tags: service:ipsec_tunnel  (+public_ip, organization)
     ff_metric --metric-name="${STATE_NAME}" --metric-value=1 --tag=state:"${STATE_VALUE}" --tag=is_error:"${IS_ERROR}"
   fi
-
-  # Return with success code 0
-  return 0
 }
 export -f set_state
 
@@ -3064,7 +3008,7 @@ function user_exists {
     if [ -z "$(getent passwd ${1})" ]; then
         return 1 # User does not exist
     else
-        return 0 # Exists
+        return 0 # User exists
     fi
 }
 export -f user_exists
@@ -3093,13 +3037,17 @@ function ff_uuid {
 
   # Check dependency: "uuidgen" we need to make sure it is installed ('uuidgen' is part of 'uuid-runtime' package)
   if ! command_exists uuidgen >/dev/null; then
+
     # Try to install missing dependency
-    assert_clean_exit apt_update >/dev/null
-    assert_clean_exit apt_install uuid-runtime >/dev/null  # Note: we mute output of apt-install otherwise it will be mixed into the ff_uuid() function result!
+    apt_update >/dev/null
+    [ $? -ne 0 ] || { error "uuidgen is missing and failed to apt_update"; return 1; }
+
+    apt_install uuid-runtime >/dev/null  # Note: we mute output of apt-install otherwise it will be mixed into the ff_uuid() function result!
+    [ $? -ne 0 ] || { error "uuidgen is missing and failed to apt_install it"; return 1; }
 
     # Check again
     if ! command_exists uuidgen >/dev/null; then
-      # Still failing to find
+      # Still failing to find uuidgen, return error
       return 1
     fi
   fi
@@ -3122,30 +3070,24 @@ export -f ff_uuid
 #    FF_AGENT_URI=$( ff_agent_get_best_ff_agent_uri ) || { set_state "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_agent_uri"; return 1; }
 #
 function ff_agent_get_best_ff_agent_uri {
-  set_state "${FUNCNAME[0]}" 'started'
 
   # Try to get FF_AGENT_URI from environment or by secret_get()
-  discover_optional_environment_variable "FF_AGENT_URI" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable"; return 1; }
+  discover_optional_environment_variable "FF_AGENT_URI" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable"; return 1; }
 
   # Check if variable already set. If not set - generate new uuid
   if [ -z "${FF_AGENT_URI}" ]; then
       # Generate new uuid, check errors, export new value
-      # Note: we can not do "local" call with command evaluation in 1-liner,
-      # otherwise our error check will fail (will always indicate "success"
-      # since it will be checking "local" call instead of $(...) expression exit code)
       local UUID
-      UUID="$( ff_uuid )" || { set_state "${FUNCNAME[0]}" "failed_to_generate_new_uuid"; return 1; }
+      UUID="$( ff_uuid )" || { error "${FUNCNAME[0]}" "failed_to_generate_new_uuid"; return 1; }
       FF_AGENT_URI="/agent/agent_uuid/${UUID}"
   fi
 
   # At this point we must have not empty FF_AGENT_URI value.
   # Make sure the variable is now not empty or error out.
-  ensure_variable_not_empty 'FF_AGENT_URI' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_agent_uri"; return 1; }
+  ensure_variable_not_empty 'FF_AGENT_URI' || { error "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_agent_uri"; return 1; }
 
   # Print result to standard output, set state to 'success' and return success code.
   echo "${FF_AGENT_URI}"
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f ff_agent_get_best_ff_agent_uri
 
@@ -3163,23 +3105,20 @@ export -f ff_agent_get_best_ff_agent_uri
 #  [ ${?} -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_content_url"; return 1; }
 #
 function ff_agent_get_best_ff_content_url {
-  set_state "${FUNCNAME[0]}" 'started'
 
   # Try to get FF_CONTENT_URL from environment or by secret_get()
-  discover_optional_environment_variable "FF_CONTENT_URL" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable"; return 1; }
+  discover_optional_environment_variable "FF_CONTENT_URL" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable"; return 1; }
 
   # Remove trailing slash from FF_CONTENT_URL, so it works correctly when we concatenate
   # FF_CONTENT_URL with other path components (e.g.: ${}/subfolder/file.txt)
   # Note: its save to call trim_slash() even if FF_CONTENT_URL is empty at this step.
-  FF_CONTENT_URL="$( trim_slash "${FF_CONTENT_URL}" )" || { set_state "${FUNCNAME[0]}" "error_trim_slash_from_ff_content_url"; return 1; }
+  FF_CONTENT_URL="$( trim_slash "${FF_CONTENT_URL}" )" || { error "${FUNCNAME[0]}" "error_trim_slash_from_ff_content_url"; return 1; }
 
   # Make sure the variable is now not empty or error out.
-  ensure_variable_not_empty 'FF_CONTENT_URL' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_content_url"; return 1; }
+  ensure_variable_not_empty 'FF_CONTENT_URL' || { error "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_content_url"; return 1; }
 
   # Print result to standard output, set state to 'success' and return success code.
   echo "${FF_CONTENT_URL}"
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f ff_agent_get_best_ff_content_url
 
@@ -3197,21 +3136,18 @@ export -f ff_agent_get_best_ff_content_url
 #  [ ${?} -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_host"; return 1; }
 #
 function ff_agent_get_best_ff_host {
-  set_state "${FUNCNAME[0]}" 'started'
 
   # Try to get FF_HOST from environment or by secret_get()
-  discover_optional_environment_variable "FF_HOST" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_host"; return 1; } # Note: FF_HOST: FF_HOST will be set to legacy portal hostname if this is a portal.
+  discover_optional_environment_variable "FF_HOST" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_host"; return 1; } # Note: FF_HOST: FF_HOST will be set to legacy portal hostname if this is a portal.
 
   # Check if variable already set. If not try to get it's value by command 'hostname'
   [ -z "${FF_HOST}" ] && { FF_HOST="$( hostname )"; }
 
   # Make sure the variable is now not empty or error out.
-  ensure_variable_not_empty 'FF_HOST' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_host"; return 1; }
+  ensure_variable_not_empty 'FF_HOST' || { error "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_host"; return 1; }
 
   # Print result to standard output, set state to 'success' and return success code.
   echo "${FF_HOST}"
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f ff_agent_get_best_ff_host
 
@@ -3225,61 +3161,52 @@ export -f ff_agent_get_best_ff_host
 #   - on failure: return code 1
 #
 function ff_agent_get_best_ff_port {
-  set_state "${FUNCNAME[0]}" 'started'
   FF_PORT_DEFAULT=443
 
   # Try to get FF_PORT from environment or by secret_get()
-  discover_optional_environment_variable "FF_PORT" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_port"; return 1; }
+  discover_optional_environment_variable "FF_PORT" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_port"; return 1; }
 
   # Check if variable already set. If not then use default
   [ -z "${FF_PORT}" ] && { FF_PORT="${FF_PORT_DEFAULT}"; }
 
   # Print result to standard output, set state to 'success' and return success code.
   echo "${FF_PORT}"
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f ff_agent_get_best_ff_port
 
 ###############################################################################
 #
 function ff_agent_get_best_namespace {
-  set_state "${FUNCNAME[0]}" 'started'
 
   # Try to get value from environment or by secret_get()
-  discover_optional_environment_variable "NAMESPACE" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_namespace"; return 1; }
+  discover_optional_environment_variable "NAMESPACE" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_namespace"; return 1; }
 
   # Check if variable already set. If not set it to our default "system.local" namespace: '00000000-0000-0000-0000-000000000000'.
   [ -z "${NAMESPACE}" ] && { NAMESPACE='00000000-0000-0000-0000-000000000000'; }
 
   # Make sure the variable is now not empty or error out.
-  ensure_variable_not_empty 'NAMESPACE' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_namespace"; return 1; }
+  ensure_variable_not_empty 'NAMESPACE' || { error "${FUNCNAME[0]}" "error_ensure_variable_not_empty_namespace"; return 1; }
 
   # Print result to standard output, set state to 'success' and return success code.
   echo "${NAMESPACE}"
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f ff_agent_get_best_namespace
 
 ###############################################################################
 #
 function ff_agent_get_best_organization {
-  set_state "${FUNCNAME[0]}" 'started'
 
   # Try to get value from environment or by secret_get()
-  discover_optional_environment_variable "ORGANIZATION" || { set_state "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_organization"; return 1; }
+  discover_optional_environment_variable "ORGANIZATION" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_organization"; return 1; }
 
   # Check if variable already set. If not set it to our default organization "system.local"
   [ -z "${ORGANIZATION}" ] && { ORGANIZATION='system.local'; }
 
   # Make sure the variable is now not empty or error out.
-  ensure_variable_not_empty 'ORGANIZATION' || { set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty_organization"; return 1; }
+  ensure_variable_not_empty 'ORGANIZATION' || { error "${FUNCNAME[0]}" "error_ensure_variable_not_empty_organization"; return 1; }
 
   # Print result to standard output, set state to 'success' and return success code.
   echo "${ORGANIZATION}"
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f ff_agent_get_best_organization
 
@@ -3366,7 +3293,6 @@ function discover_environment {
   # # Discover set of "ff environment" variables
   # discover_ff_environment || { set_state "${FUNCNAME[0]}" "failed_to_discover_ff_environment"; return 1; }
 
-  return 0
 }
 export -f discover_environment
 
@@ -3530,8 +3456,6 @@ function discover_required_environment_variable {
       # Variable '${NAME}' is not defined, but required. Return an error.
       return 1
   fi
-
-  return 0
 }
 export -f discover_required_environment_variable
 
@@ -3567,7 +3491,6 @@ function get_os_name {
   fi
 
   echo "${OS_NAME}"
-  return 0
 }
 export -f get_os_name
 
@@ -3621,11 +3544,10 @@ export -f get_lsb_release
 # On failure: return 1
 #
 function check_environment_variables_are_set {
-  set_state "${FUNCNAME[0]}" 'started'
 
   # Dependency check: 'tr' is installed
   if ! command_exists tr >/dev/null; then
-    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
+    error "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
     return 1
   fi
 
@@ -3643,14 +3565,10 @@ function check_environment_variables_are_set {
   # Check required environment variables are set
   for VARIABLE_NAME in "${ALL_EXPECTED_ENVRIONMENT_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE=$( echo "error_check_environment_variables_are_set_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      error "${FUNCNAME[0]}" "Expected variable is not set: '${VARIABLE_NAME}'"
       return 1
     }
   done
-
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f check_environment_variables_are_set
 
@@ -3660,18 +3578,13 @@ export -f check_environment_variables_are_set
 # On failure: 1
 #
 function ff_agent_check_bin_is_in_the_path {
-  set_state "${FUNCNAME[0]}" 'started'
 
   local FF_AGENT_BIN="${FF_AGENT_HOME}/bin"
   printenv PATH | grep --quiet "${FF_AGENT_BIN}"
   [ ${?} -ne 0 ] && {
     # Error
-    set_state "${FUNCNAME[0]}" 'failed_to_find_expected_path'
     return 1
   }
-
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f ff_agent_check_bin_is_in_the_path
 
@@ -3750,7 +3663,6 @@ function check_nodejs_installation {
   fi
 
   set_state "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f check_nodejs_installation
 
@@ -3762,31 +3674,24 @@ export -f check_nodejs_installation
 # On failure: return 1 and prints error to standard error stream
 #
 function check_set_get_secret {
-  set_state "${FUNCNAME[0]}" 'started'
   
   SECRET_NAME="check_set_get_secret"
-  SECRET_VALUE=$( ff_uuid ) || { set_state "${FUNCNAME[0]}" 'failed_generate_uuid'; return 1; }
+  SECRET_VALUE=$( ff_uuid ) || { error "${FUNCNAME[0]}" 'failed_generate_uuid'; return 1; }
 
-  set_secret "${SECRET_NAME}" "${SECRET_VALUE}" || { set_state "${FUNCNAME[0]}" 'failed_set_secret'; return 1; }
+  set_secret "${SECRET_NAME}" "${SECRET_VALUE}" || { error "${FUNCNAME[0]}" 'failed_set_secret'; return 1; }
 
-  # Note: we can not do "local" call with command evaluation in 1-liner,
-  # otherwise our error check will fail (will always indicate "success"
-  # since it will be checking "local" call instead of $(...) expression exit code)
   local RETRIEVED_VALUE
   RETRIEVED_VALUE=$( get_secret "${SECRET_NAME}" ) || {
-    set_state "${FUNCNAME[0]}" 'failed_retrieve_secret'
+    error "${FUNCNAME[0]}" 'failed_retrieve_secret'
     return 1
   }
 
   # Compare retrieved state with expected
   if [ "${RETRIEVED_VALUE}" != "${SECRET_VALUE}" ]; then
     # Mismatch (error)
-    set_state "${FUNCNAME[0]}" 'error_retrieved_value_mismatch'
+    error "${FUNCNAME[0]}" 'error_retrieved_value_mismatch'
     return 1
   fi
-
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f secret_check_set_and_get
 
@@ -3800,11 +3705,10 @@ export -f secret_check_set_and_get
 # Depend on: uuidgen, tr.
 #
 function state_check_set_and_get {
-  set_state "${FUNCNAME[0]}" 'started'
 
   # Check tr is installed
   if ! command_exists tr >/dev/null; then
-    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
+    error "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
     return 1
   fi
 
@@ -3812,26 +3716,20 @@ function state_check_set_and_get {
   STATE_VALUE=$( ff_uuid | tr -d '-' )
 
   # Check generated STATE_VALUE is not empty
-  [ ! -z "${STATE_VALUE}" ] || { set_state "${FUNCNAME[0]}" 'failed_generate_random_state_value'; return 1; }
+  [ ! -z "${STATE_VALUE}" ] || { error "${FUNCNAME[0]}" 'failed_generate_random_state_value'; return 1; }
 
   # Set state and try to retrieve value
-  set_state "${STATE_NAME}" "${STATE_VALUE}" || { return 1; }
+  error "${STATE_NAME}" "${STATE_VALUE}" || { return 1; }
 
-  # Note: we can not do "local" call with command evaluation in 1-liner,
-  # otherwise our error check will fail (will always indicate "success"
-  # since it will be checking "local" call instead of $(...) expression exit code)
   local RETRIEVED_VALUE
-  RETRIEVED_VALUE=$( get_state "${STATE_NAME}" ) || { set_state "${FUNCNAME[0]}" 'failed_retrieve_state'; return 1; }
+  RETRIEVED_VALUE=$( get_state "${STATE_NAME}" ) || { error "${FUNCNAME[0]}" 'failed_retrieve_state'; return 1; }
 
   # Compare retrieved and expected values
   if [ "${RETRIEVED_VALUE}" != "${STATE_VALUE}" ]; then
     # Mismatch (error)
-    set_state "${FUNCNAME[0]}" 'error_retrieved_value_mismatch'
+    error "${FUNCNAME[0]}" 'error_retrieved_value_mismatch'
     return 1
   fi
-
-  set_state "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f state_check_set_and_get
 
@@ -3865,16 +3763,12 @@ function get_current_user {
     fi
 
     # Try to get current username by 'whoami'
-    USER="$( whoami )" || { echo "ERROR whoami command failed"; return 1; }
-    [ ! -z "${USER}" ] || { echo "failed_to_get_current_user"; return 1; }
+    USER="$( whoami )" || { error "ERROR whoami command failed"; return 1; }
+    [ ! -z "${USER}" ] || { error "failed_to_get_current_user"; return 1; }
   fi
 
   # Print username to standard output
   echo "${USER}"
-
-  # Return success
-  # set_state "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f get_current_user
 
@@ -3949,7 +3843,6 @@ function ff_api_get {
     fi
 
     echo ${RESULT}
-    return 0
 }
 export -f ff_api_get
 
@@ -3994,7 +3887,6 @@ export -f is_framework_api_defined
 # are in place and functioning as expected
 #
 function set_environment_is_working {
-  set_state "${FUNCNAME[0]}" 'started'
 
   local HAS_ERRORS=false
   local VERBOSE=false
@@ -4004,7 +3896,6 @@ function set_environment_is_working {
   # Verify expected commands exist
   COMMANDS=(
     command_exists
-    set_state
     environment_check_required_variables_are_set
     state_check_set_and_get
     secret_check_set_and_get
@@ -4019,7 +3910,7 @@ function set_environment_is_working {
     else
       HAS_ERRORS=true
       [ "${VERBOSE}" == 'true' ] && error "assertion='${ASSERTION}'  command='${COMMAND}'"
-      set_state "${FUNCNAME[0]}" "error_assertion_failed_${ASSERTION}_command_${COMMAND}"
+      error "${FUNCNAME[0]}" "error_assertion_failed_${ASSERTION}_command_${COMMAND}"
     fi
   done
 
@@ -4052,7 +3943,7 @@ function set_environment_is_working {
       else 
       HAS_ERRORS=true
         [ "${VERBOSE}" == 'true' ] && error "failed assertion='${COMMAND}'"
-        set_state "error_assertion_failed_${COMMAND}"
+        error "error_assertion_failed_${COMMAND}"
       fi
     fi
   done
@@ -4068,9 +3959,6 @@ function set_environment_is_working {
     # We have errors
     #set_state "${FUNCNAME[0]}" 'failed'  # commented since set_state was already called by concrete check with better (more precise) error code
     return 1
-  else
-    set_state "${FUNCNAME[0]}" 'success'
-    return 0
   fi
 }
 export -f set_environment_is_working
@@ -4172,9 +4060,7 @@ EOF
   )
 
   # Run command, capture server response as ${RESULT} and curl exit code as ${STATUS}
-  # Note: we can not do "local" call with command evaluation in 1-liner,
-  # otherwise our error check will fail (will always indicate "success"
-  # since it will be checking "local" call instead of $(...) expression exit code)
+
   local RESULT
   RESULT=$(
     curl \
@@ -4204,7 +4090,6 @@ EOF
 
   # Return success
   set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-  return 0
 }
 export -f publish_message
 

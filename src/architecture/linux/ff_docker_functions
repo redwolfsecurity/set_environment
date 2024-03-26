@@ -84,8 +84,12 @@ function docker_container_name_exists {
       return 2
   fi
 
+  # Note: simple "docker inspect some-name" is ambiguous and can inspect either container or image.
+  # To disambiguate we use "--type" (can be one of: container|image|node|network|secret|service|volume|task|plugin).
+  # For more details see the official docs: https://docs.docker.com/engine/reference/commandline/inspect/ 
+  #
   local CONTAINER_ID
-  CONTAINER_ID=$(docker inspect --format="{{.Id}}" ${CONTAINER_NAME} 2> /dev/null)
+  CONTAINER_ID=$(docker inspect --type container --format="{{.Id}}" ${CONTAINER_NAME} 2> /dev/null)
   if [[ "${CONTAINER_ID}" ]]; then
     return 0
   else
@@ -476,7 +480,11 @@ function docker_is_container_running {
     [ ! -z "${CONTAINER_NAME}" ] || { error "${FUNCNAME[0]}: error_no_container_name_specified"; return 2; }
 
     # Inspect given container, make sure it is in ranning state
-    if [ "$( docker container inspect -f '{{.State.Running}}' ${CONTAINER_NAME} )" == "true" ]; then
+    # Note: simple "docker inspect some-name" is ambiguous and can inspect either container or image.
+    # To disambiguate we use "--type" (can be one of: container|image|node|network|secret|service|volume|task|plugin).
+    # For more details see the official docs: https://docs.docker.com/engine/reference/commandline/inspect/ 
+    # Or alternatively we can use "docker container inspect"
+    if [ "$( docker container inspect -f '{{.State.Running}}' ${CONTAINER_NAME} 2>/dev/null)" == "true" ]; then
         return 0
     else
         return 1
@@ -618,7 +626,7 @@ function docker_login {
   local FQDN="$1"
 
   # Get secrets
-  FQDN=$( get_secret "${FQDN}" ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_secret_fqdn'; return 1; }
+  FQDN=$( secret_get "${FQDN}" ) || { set_state "${FUNCNAME[0]}" 'failed_to_secret_get_fqdn'; return 1; }
 
   # Decide if we need docker_login_aws_ecr or docker_login_legacy
   # Check if FQDN ends with "amazonaws.com"
@@ -684,8 +692,8 @@ function docker_login_aws_ecr {
   done
 
   # Get secrets
-  FQDN=$( get_secret "${FQDN}" ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_secret_fqdn'; return 1; }
-  REGION=$( get_secret "${REGION}" ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_secret_region'; return 1; }
+  FQDN=$( secret_get "${FQDN}" ) || { set_state "${FUNCNAME[0]}" 'failed_to_secret_get_fqdn'; return 1; }
+  REGION=$( secret_get "${REGION}" ) || { set_state "${FUNCNAME[0]}" 'failed_to_secret_get_region'; return 1; }
 
   # Get 2 optional arguments:
   #   - AWS_ACCESS_KEY_ID
@@ -698,8 +706,8 @@ function docker_login_aws_ecr {
     local SELECTED_AWS_SECRET_ACCESS_KEY="$4"
 
     # Get secrets
-    SELECTED_AWS_ACCESS_KEY_ID=$( get_secret "${SELECTED_AWS_ACCESS_KEY_ID}" ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_secret_aws_access_key_id'; return 1; }
-    SELECTED_AWS_SECRET_ACCESS_KEY=$( get_secret "${SELECTED_AWS_SECRET_ACCESS_KEY}" ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_secret_aws_secret_access_key'; return 1; }
+    SELECTED_AWS_ACCESS_KEY_ID=$( secret_get "${SELECTED_AWS_ACCESS_KEY_ID}" ) || { set_state "${FUNCNAME[0]}" 'failed_to_secret_get_aws_access_key_id'; return 1; }
+    SELECTED_AWS_SECRET_ACCESS_KEY=$( secret_get "${SELECTED_AWS_SECRET_ACCESS_KEY}" ) || { set_state "${FUNCNAME[0]}" 'failed_to_secret_get_aws_secret_access_key'; return 1; }
 
   else
     # AWS secrets were not provided as arguments.
@@ -792,10 +800,10 @@ function docker_login_legacy {
     }
   done
 
-  # Retrieve actual values by "get_secret()"
-  FQDN=$( get_secret "${FQDN}" ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_secret_fqdn'; return 1; }
-  USERNAME=$( get_secret "${USERNAME}" ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_secret_username'; return 1; }
-  PASSWORD=$( get_secret "${PASSWORD}" ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_secret_password'; return 1; }
+  # Retrieve actual values by "secret_get()"
+  FQDN=$( secret_get "${FQDN}" ) || { set_state "${FUNCNAME[0]}" 'failed_to_secret_get_fqdn'; return 1; }
+  USERNAME=$( secret_get "${USERNAME}" ) || { set_state "${FUNCNAME[0]}" 'failed_to_secret_get_username'; return 1; }
+  PASSWORD=$( secret_get "${PASSWORD}" ) || { set_state "${FUNCNAME[0]}" 'failed_to_secret_get_password'; return 1; }
   
   # Check if we got non-empty values for container registry: FQDN, username and password
   # TODO: DRY violation: list attributes as array, iterate, check..
