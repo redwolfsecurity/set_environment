@@ -32,6 +32,7 @@
 #    - apt_upgrade 
 ## END APT WRAPPER FUNCTIONS
 ## BEGIN UTILITY FUNCTIONS: STRINGS
+#    - get_version_component 
 #    - in_array 
 #    - index_of 
 #    - parse_github_repository_url 
@@ -40,17 +41,20 @@
 ## BEGIN UTILITY FUNCTIONS: FILE
 #    - assert_cd 
 #    - assert_makedir 
-#    - does_file_have_eol_at_the_end
-#    - ensure_file_contains
+#    - does_file_have_eol_at_the_end 
+#    - ensure_file_contains 
 #    - f 
 #    - file_contains_pattern 
 #    - find_file_owner_in_all_packages 
 #    - find_file_owner_in_installed_packages 
 #    - get_by_url 
+#    - get_sudo_read_file_prefix 
+#    - get_sudo_write_file_prefix 
+#    - get_sudo_readwrite_file_prefix 
 #    - glob_matches 
 #    - inject_into_file 
 #    - is_writable 
-#    - path_to_absolute_path  
+#    - path_to_absolute_path 
 #    - remove_all_lines_by_regexp 
 #    - replace_all_lines_by_regexp 
 #    - s 
@@ -82,19 +86,8 @@
 ## END UTILITY FUNCTIONS: TERMINAL / SHELL
 ## BEGIN UTILITY FUNCTIONS: PROCESS
 #    - process_is_running_as_me 
-#    - retry_command
+#    - retry_command 
 ## END UTILITY FUNCTIONS: PROCESS
-## BEGIN UTILITY FUNCTIONS: CONTAINERS
-#    - container_name_exists 
-#    - container_remove_by_name
-#    - container_stop_by_name
-#    - docker_cleanup 
-#    - docker_volumes_to_containers_list 
-#    - get_installed_docker_version 
-#    - is_container_healthy 
-#    - is_container_running 
-#    - restart_containers 
-## END UTILITY FUNCTIONS: DOCKERS
 ## BEGIN UTILITY FUNCTIONS: STATE/SECRETS
 #    - generate_strong_password 
 #    - get_state 
@@ -133,17 +126,15 @@
 #    - get_lsb_release 
 ## END DISCOVER FUNCTIONS
 ## BEGIN SET ENVIRONMENT FUNCTIONS
-#    - assert_ff_agent_home_exists
-#    - environment_check_required_variables_are_set 
+#    - check_environment_variables_are_set 
 #    - ff_agent_check_bin_is_in_the_path 
-#    - nodejs_check_installation 
-#    - secret_check_set_and_get 
+#    - check_nodejs_installation 
+#    - check_set_get_secret 
 #    - state_check_set_and_get 
 #    - get_current_user 
 #    - get_best_ff_agent_home 
 #    - ff_api_get 
-#    - get_desired_nodejs_version 
-#    - get_ff_agent_username
+#    - get_expected_nodejs_version 
 #    - is_framework_api_defined 
 #    - set_environment_is_working 
 #    - publish_message 
@@ -1525,17 +1516,6 @@ export -f inject_into_file
 
 ###############################################################################
 # Category: file
-# Utility function - Convenience methoud wrapping "realpath" call (realpath is a part of coreutils apt package, which we install as a baseline)
-# Takes a path argument and returns it as an absolute path. 
-#
-function path_to_absolute_path {
-  local TARGET="$1"
-  realpath --canonicalize-missing "${TARGET}"
-}
-export -f path_to_absolute_path
-
-###############################################################################
-# Category: file
 # Utility function - checks if given file or directory is writable by the current user.
 #
 # Function return code:
@@ -1556,6 +1536,17 @@ function is_writable {
   return 1
 }
 export -f is_writable
+
+###############################################################################
+# Category: file
+# Utility function - Convenience methoud wrapping "realpath" call (realpath is a part of coreutils apt package, which we install as a baseline)
+# Takes a path argument and returns it as an absolute path. 
+#
+function path_to_absolute_path {
+  local TARGET="$1"
+  realpath --canonicalize-missing "${TARGET}"
+}
+export -f path_to_absolute_path
 
 ###############################################################################
 # Category: file
@@ -3021,44 +3012,6 @@ export -f user_exists
 
 ###############################################################################
 #
-# Function ff_uuid() generates UUID and prints it to the standard output.
-# Dependency: uuidgen
-# Note: function will try to install dependency if missing.
-#
-# Function return code:
-#   0 - success
-#   1 - failure
-#
-# Usage example:
-#    NEW_UUID=$( ff_uuid )
-#    [ ${?} -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_ff_uuid"; return 1; }
-#
-function ff_uuid {
-
-  # Check dependency: "uuidgen" we need to make sure it is installed ('uuidgen' is part of 'uuid-runtime' package)
-  if ! command_exists uuidgen >/dev/null; then
-
-    # Try to install missing dependency
-    apt_update >/dev/null
-    [ $? -ne 0 ] || { error "uuidgen is missing and failed to apt_update"; return 1; }
-
-    apt_install uuid-runtime >/dev/null  # Note: we mute output of apt-install otherwise it will be mixed into the ff_uuid() function result!
-    [ $? -ne 0 ] || { error "uuidgen is missing and failed to apt_install it"; return 1; }
-
-    # Check again
-    if ! command_exists uuidgen >/dev/null; then
-      # Still failing to find uuidgen, return error
-      return 1
-    fi
-  fi
-
-  # Generate uuid and return it's exit code as a return code
-  uuidgen
-}
-export -f ff_uuid
-
-###############################################################################
-#
 # Auxiliary function wraps the logic of choosing the best value for: 'FF_AGENT_URI'
 # Note: this function uses get/set secrets and state, thus it can be called only after "choose proper user" step is complete.
 #
@@ -3209,6 +3162,44 @@ function ff_agent_get_best_organization {
   echo "${ORGANIZATION}"
 }
 export -f ff_agent_get_best_organization
+
+###############################################################################
+#
+# Function ff_uuid() generates UUID and prints it to the standard output.
+# Dependency: uuidgen
+# Note: function will try to install dependency if missing.
+#
+# Function return code:
+#   0 - success
+#   1 - failure
+#
+# Usage example:
+#    NEW_UUID=$( ff_uuid )
+#    [ ${?} -eq 0 ] || { set_state "${FUNCNAME[0]}" "failed_to_ff_uuid"; return 1; }
+#
+function ff_uuid {
+
+  # Check dependency: "uuidgen" we need to make sure it is installed ('uuidgen' is part of 'uuid-runtime' package)
+  if ! command_exists uuidgen >/dev/null; then
+
+    # Try to install missing dependency
+    apt_update >/dev/null
+    [ $? -ne 0 ] || { error "uuidgen is missing and failed to apt_update"; return 1; }
+
+    apt_install uuid-runtime >/dev/null  # Note: we mute output of apt-install otherwise it will be mixed into the ff_uuid() function result!
+    [ $? -ne 0 ] || { error "uuidgen is missing and failed to apt_install it"; return 1; }
+
+    # Check again
+    if ! command_exists uuidgen >/dev/null; then
+      # Still failing to find uuidgen, return error
+      return 1
+    fi
+  fi
+
+  # Generate uuid and return it's exit code as a return code
+  uuidgen
+}
+export -f ff_uuid
 
 ###############################################################################
 #
