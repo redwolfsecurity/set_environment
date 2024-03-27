@@ -42,7 +42,6 @@
 #    - assert_cd 
 #    - assert_makedir 
 #    - does_file_have_eol_at_the_end 
-#    - ensure_file_contains 
 #    - f 
 #    - file_contains_pattern 
 #    - find_file_owner_in_all_packages 
@@ -823,89 +822,6 @@ function does_file_have_eol_at_the_end {
 export -f does_file_have_eol_at_the_end
 
 ###############################################################################
-# Category: file
-# Utility function - makes sure given content is present in the file.
-#
-# Synopsis:
-#     ensure_file_contains "${FILEPATH}" "${REGEX}" "${INJECT_CONTENT}"
-#
-# Function logic:
-#   - Take 3 arguments: target file, regex pattern and desired content
-#   - Search for given pattern
-#   - If no match found: call inject_into_file()
-#   - If match found: call replace_all_lines_by_regexp(), which will replace all occurrences
-#   - Use "sudo" if/when needed (and available)
-#   - Return proper code (0=success) and use set_state()
-#
-# Usage example (1st will modify existing line, 2nd will inject a new line):
-#   ensure_file_contains "/etc/ssh/sshd_config" '^PermitRootLogin.*' "PermitRootLogin no"
-#   ensure_file_contains "/etc/ssh/sshd_config" '^PasswordAuthentication.*' "PasswordAuthentication no"
-#
-function ensure_file_contains {
-  # Indicate: function started
-  set_state "${FUNCNAME[0]}" 'started'
-
-  # Take arguments
-  local FILEPATH="${1}"
-  local REGEX="${2}"
-  local INJECT_CONTENT="${3}"
-
-  # Check required arguments are not empty (note: ${INJECT_CONTENT} can be empty)
-  # Define required variables
-  local REQUIRED_VARIABLES=(
-    FILEPATH
-    REGEX
-  )
-
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE="$( echo "error_empty_argument_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-      return 1
-    }
-  done
-
-  # Check if we need to use "sudo" prefix to read / write / readwrite (or check file existence) given file
-  local SUDO_READ_FILE_PREFIX
-  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 1; }
-  
-  # Check the target file exists
-  ${SUDO_READ_FILE_PREFIX} [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 1; }
-
-  # Try to find by given regexp
-  GREP_OUTPUT=$( ${SUDO_READ_FILE_PREFIX} grep --quiet "${REGEX}" "${FILEPATH}" 2>&1 )
-  EXIT_CODE=${?}
-
-  # Check if the pattern is found
-  if [ ${EXIT_CODE} -eq 1 ]; then
-    # The pattern was not found, call inject_into_file
-    inject_into_file "${@}" || { set_state "${FUNCNAME[0]}" 'failed_to_inject_into_file'; return 1; }
-    set_state "${FUNCNAME[0]}" 'success'
-    return 0
-  fi
-
-  if [ ${EXIT_CODE} -gt 1 ]; then
-    # Error: 7 - failed to search by given pattern.
-    set_state "${FUNCNAME[0]}" 'failed_to_search_by_given_pattern'
-    return 1
-  fi
-
-  if [ ${EXIT_CODE} -eq 0 ]; then
-    # Pattern found, call replace_all_lines_by_regexp
-    replace_all_lines_by_regexp "${@}" || { set_state "${FUNCNAME[0]}" 'failed_to_replace_all_lines_by_regexp'; return 1; }
-
-    # Return success
-    set_state "${FUNCNAME[0]}" 'success'
-    return 0
-  fi
-
-  set_state "${FUNCNAME[0]}" 'unexpected_error' # this should never happen, all EXIT_CODE cases covered above 
-  return 1  
-}
-export -f ensure_file_contains
-
-###############################################################################
 # Utility function f
 # Search recursively from current location for files or directories starting with a prefix prefix, case insensitive
 # @param ${1} string package name
@@ -1390,10 +1306,19 @@ export -f glob_matches
 # Category: file
 # Utility function - injects text into the end of existing file.
 #
-# Function serch regular expression PATTERN in the existing file by the given FILEPATH and if missing, then
-# the INJECT_CONTENT got injected at the end of the given file.
+# Synopsis:
+#     inject_into_file "${FILEPATH}" "${REGEX}" "${INJECT_CONTENT}"
+#
+# Function logic:
+#   - Take 3 arguments: target file, regex pattern and desired content
+#   - Search for given pattern
+#   - If no match found: the INJECT_CONTENT got injected at the end of the given file
+#   - If match found: call replace_all_lines_by_regexp(), which will replace all occurrences
+#   - Use "sudo" if/when needed (and available)
+#   - Return proper code (0=success) and use set_state()
+#
 # Return codes:
-#  0 - succesful injection (or PATTERN already present in the file)
+#  0 - success: the INJECT_CONTENT got injected or PATTERN already present in the file
 #  1 - failed to inject (not enough permissions, target file does not exist etc.)
 #      In case of error: the error will be reported by error() function (to standard output and into logger)
 #
@@ -1431,8 +1356,6 @@ export -f glob_matches
 #   fi
 #
 function inject_into_file {
-  # Indicate: function started
-  set_state "${FUNCNAME[0]}" 'started'
 
   # Take arguments
   local FILEPATH="${1}"
@@ -1451,23 +1374,23 @@ function inject_into_file {
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
       local ERROR_CODE="$( echo "error_empty_argument_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      error "${FUNCNAME[0]}" "${ERROR_CODE}"
       return 1
     }
   done
 
   # Check if we need to use "sudo" prefix to read / write / readwrite (or check file existence) given file
   local SUDO_READ_FILE_PREFIX
-  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 4; }
+  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { error "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 4; }
   
   local SUDO_WRITE_FILE_PREFIX
-  SUDO_WRITE_FILE_PREFIX=$(get_sudo_write_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
+  SUDO_WRITE_FILE_PREFIX=$(get_sudo_write_file_prefix "${FILEPATH}") || { error "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
   
   local SUDO_READWRITE_FILE_PREFIX
-  SUDO_READWRITE_FILE_PREFIX=$(get_sudo_readwrite_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
+  SUDO_READWRITE_FILE_PREFIX=$(get_sudo_readwrite_file_prefix "${FILEPATH}") || { error "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
 
   # Check the target file exists
-  ${SUDO_READ_FILE_PREFIX} [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" "error_target_file_does_not_exist: '${FILEPATH}'"; return 1; }
+  ${SUDO_READ_FILE_PREFIX} [ -f "${FILEPATH}" ] || { error "${FUNCNAME[0]}" "error_target_file_does_not_exist: '${FILEPATH}'"; return 1; }
 
   # Check if target file contains the PATTERN.
   # Note: the file_contains_pattern() will take care of "sudo" prefix
@@ -1497,20 +1420,17 @@ function inject_into_file {
 
     # Append INJECT_CONTENT to the end of the target file
     echo "${INJECT_CONTENT}" | ${SUDO_READ_FILE_PREFIX} tee -a "${FILEPATH}" >/dev/null || {
-      set_state "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'
+      error "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'
       return 1
     }
 
     # Post condition: verify that the expected pattern can be found after injection.
     if ! file_contains_pattern "${FILEPATH}" "${PATTERN}"; then
       # Expected pattern is still missing. Report an error.
-      set_state "${FUNCNAME[0]}" 'failed_postcondition_check_expected_pattern_is_missing_after_injection'
+      error "${FUNCNAME[0]}" 'failed_postcondition_check_expected_pattern_is_missing_after_injection'
       return 1
     fi
   fi
-
-  # Indicate: function succeed
-  set_state "${FUNCNAME[0]}" 'success'
 }
 export -f inject_into_file
 
