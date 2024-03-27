@@ -29,7 +29,7 @@ Set Environment has following goals:
 ### Installing
 
 In order to use this environment, you need to download this project from github and run installer by teh following commands:
-``` 
+```
 # Installing "set environment" baseline:
 TEMP_DIRECTORY=$( mktemp -d ) && \
 cd ${TEMP_DIRECTORY} && \
