@@ -143,17 +143,30 @@
 ### BEGIN USAGE/HELP FUNCTION
 
 ###############################################################################
-# Ask for value and store it in variable
-# @param ${1} reference Variable
-# @param ${2} string Question
-# @param ${3} string Prompt tooltip
-# @param ${4} string Default value
-# @return  Success (0) if user enter Y, Failure (1)
-# Usage:
-# SOME_VAR=""
-# ask_for_value SOME_VAR "Set value for SOME_VAR" "SOME_VAR="
-# ask_for_value SOME_VAR "Update value for SOME_VAR" "SOME_VAR=" "${SOME_VALUE}"
+# CATEGORY
+#   USAGE/HELP FUNCTION
 #
+# NAME
+#   ask_for_value - Ask for a value and store it in a variable.
+#
+# SYNOPSIS
+#   ask_for_value VARIABLE QUESTION TOOLTIP DEFAULT_VALUE
+#
+# DESCRIPTION
+#   Prompts the user with a QUESTION, using TOOLTIP as the input prompt. If DEFAULT_VALUE
+#   is provided, it will be used as the default input when the user presses Enter.
+#   The response is stored in the variable name passed as VARIABLE.
+#
+# EXAMPLE
+#   SOME_VAR=""
+#   ask_for_value SOME_VAR "Set value for SOME_VAR" "Enter SOME_VAR value: "
+#   ask_for_value SOME_VAR "Update value for SOME_VAR" "Enter new SOME_VAR value: " "${SOME_VALUE}"
+#
+# EXIT STATUS
+#   0 - Success, user input was obtained and stored.
+#   1 - Failure, unable to store the input in the variable.
+#
+###############################################################################
 function ask_for_value {
     local VALUE=""
 
@@ -182,11 +195,32 @@ function ask_for_value {
 export -f ask_for_value
 
 ###############################################################################
-# Ask for question and read user input Y/n
-# @param ${1} string Question
-# @return  Success (0) if user enter Y, Failure (1) on n
-# Usage: ask_for_yn "Does vim rox the house?"
+# CATEGORY
+#   USAGE/HELP FUNCTION
 #
+# NAME
+#   ask_for_yn - Ask a yes/no question and read user input.
+#
+# SYNOPSIS
+#   ask_for_yn QUESTION
+#
+# DESCRIPTION
+#   Presents the user with a QUESTION and expects a 'y' or 'n' in response. The function
+#   returns 0 for 'y' and 1 for 'n'.
+#
+# EXAMPLE
+#   if ask_for_yn "Does vim rock the house?"; then
+#       echo "User agreed!"
+#   else
+#       echo "User disagreed."
+#   fi
+#
+# EXIT STATUS
+#   0 - User answered 'y'.
+#   1 - User answered 'n'.
+#
+###############################################################################
+
 function ask_for_yn {
     local QUESTION=${1}
     local ANSWER=""
@@ -205,23 +239,32 @@ function ask_for_yn {
 export -f ask_for_yn
 
 ###############################################################################
-# Check if a command exists. A command could be a function, something in path, a direct path to a command
-# This will return in stdout the path to the command, and will return 0 if the command exists, otherwise 1
-# This is better option than "which" command since it also understands:
-#    - aliases
-#    - bash functions
+# CATEGORY
+#   USAGE/HELP FUNCTION
 #
-# Usage examples:
-#   Simple if-then check
-#      if command_exists tput >/dev/null; then echo "yes, command exists"; fi
+# NAME
+#   command_exists - Check if a command exists.
 #
-#   Use with other commands "chained" by &&
-#      command_exists tty >/dev/null && tty -s && return 0 || return 1
+# SYNOPSIS
+#   command_exists COMMAND_NAME
 #
-#   Check if return not empty string
-#     PM2=$( command_exists pm2 )
-#     if [ -z "${PM2}" ]; then  echo "yes, command exists"; fi
+# DESCRIPTION
+#   Checks if a given command, which could be a function, an alias, or a binary in the path,
+#   exists on the system. Unlike 'which', it correctly identifies aliases and functions. The
+#   function outputs the resolved path or alias definition of the command if it exists.
 #
+# EXAMPLE
+#   if command_exists tput; then
+#       echo "tput command exists."
+#   else
+#       echo "tput command does not exist."
+#   fi
+#
+# EXIT STATUS
+#   0 - Command exists.
+#   1 - Command does not exist.
+#
+###############################################################################
 function command_exists {
   local COMMAND=${1}
 
@@ -255,10 +298,28 @@ function command_exists {
 export -f command_exists
 
 ###############################################################################
-# Auxilary function to make bash file "Table of contents" (TOC).
-# Usage example:
-#    file_toc /path/to/some/bashfile.sh
+# CATEGORY
+#   USAGE/HELP FUNCTION
 #
+# NAME
+#   file_toc - Generate a Table of Contents for a bash file.
+#
+# SYNOPSIS
+#   file_toc FILE_PATH
+#
+# DESCRIPTION
+#   Parses a given bash script file at FILE_PATH, identifying sections and functions
+#   to create a table of contents. It lists the beginnings and ends of sections along
+#   with function names, formatted for readability.
+#
+# EXAMPLE
+#   file_toc /path/to/my_script.sh
+#
+# EXIT STATUS
+#   0 - Successfully generated the table of contents.
+#   1 - File does not exist or another error occurred.
+#
+###############################################################################
 function file_toc {
 
   # Define path to ff_bash_functions file
@@ -274,8 +335,27 @@ function file_toc {
 export -f file_toc
 
 ###############################################################################
-# Utility help function
-# This will list all the defined bash functions *build in" and our "custom" ones.
+# CATEGORY
+#   USAGE/HELP FUNCTION
+#
+# NAME
+#   help - List all defined bash functions.
+#
+# SYNOPSIS
+#   help
+#
+# DESCRIPTION
+#   Displays a list of all builtin and custom-defined bash functions available in
+#   the current shell environment.
+#
+# EXAMPLE
+#   help
+#
+# EXIT STATUS
+#   0 - Successfully listed functions.
+#   Any other exit status is not defined by this function.
+#
+###############################################################################
 function help {
     echo "Builtin functions:"
     typeset -F | cut -d' ' -f3
@@ -283,9 +363,28 @@ function help {
 export -f help
 
 ###############################################################################
-# Utility help function: table of content.
-# See also: file_toc()
+# CATEGORY
+#   USAGE/HELP FUNCTION
 #
+# NAME
+#   help_toc - Generate a Table of Contents for the bash functions file.
+#
+# SYNOPSIS
+#   help_toc
+#
+# DESCRIPTION
+#   This function generates a table of contents for the bash functions defined in the
+#   'ff_bash_functions' file located at the FF_AGENT_HOME directory. It marks the start
+#   and end of sections and lists functions.
+#
+# EXAMPLE
+#   help_toc
+#
+# EXIT STATUS
+#   0 - Successfully generated the table of contents.
+#   1 - FF_AGENT_HOME not set or 'ff_bash_functions' file missing.
+#
+###############################################################################
 function help_toc {
   set_state "${FUNCNAME[0]}" 'started'
 
@@ -309,13 +408,32 @@ function help_toc {
 }
 export -f help_toc
 
-
 ### END USAGE/HELP FUNCTION
 
 ### BEGIN APT WRAPPER FUNCTIONS
 
 ###############################################################################
-# Utility wrapper around apt dist-upgrade for safer headless operation
+# CATEGORY
+#   APT WRAPPER FUNCTIONS
+#
+# NAME
+#   apt_dist_upgrade - Safely perform a dist-upgrade operation in a headless environment.
+#
+# SYNOPSIS
+#   apt_dist_upgrade
+#
+# DESCRIPTION
+#   Executes an 'apt-get dist-upgrade' operation with options configured for non-interactive
+#   environments. It ensures the upgrade process is handled without manual intervention, applying
+#   options to allow unauthenticated, downgrades, removal of essential packages, and change of held
+#   packages. It first runs 'apt_update' and 'apt_upgrade' to ensure the system is up-to-date before
+#   proceeding with dist-upgrade.
+#
+# EXIT STATUS
+#   0 - Successful dist-upgrade.
+#   1 - Failed to dist-update
+#
+###############################################################################
 function apt_dist_upgrade {
   local APT_COMMAND=dist-upgrade
 
@@ -337,7 +455,26 @@ function apt_dist_upgrade {
 export -f apt_dist_upgrade
 
 ###############################################################################
-# Utility wrapper around apt install for safer headless operation
+# CATEGORY
+#   APT WRAPPER FUNCTIONS
+#
+# NAME
+#   apt_install - Safely install packages in a headless environment.
+#
+# SYNOPSIS
+#   apt_install PACKAGE [PACKAGE ...]
+#
+# DESCRIPTION
+#   Installs one or more packages using 'apt-get install' with options tailored for non-interactive
+#   environments. This function reduces stdout noise by suppressing most output, focusing on error
+#   handling. It uses 'DEBIAN_FRONTEND=noninteractive' to avoid user prompts and includes options
+#   to force IPv4 and prevent the installation of recommended or suggested packages.
+#
+# EXIT STATUS
+#   0 - Successful installation of all specified packages.
+#   1 - Failure in installing one or more packages.
+#
+###############################################################################
 function apt_install {
   PACKAGES=${@}
   APT_COMMAND=install
@@ -358,17 +495,29 @@ function apt_install {
 export -f apt_install
 
 ###############################################################################
-# Utility wrapper to list all the files by given package name (even if package not installed).
-# As for reverse checking files from packages apt-file would be the best bet.
+# CATEGORY
+#   APT WRAPPER FUNCTIONS
 #
-# Discussion: https://serverfault.com/a/1059513/413686
+# NAME
+#   apt_list - List all files provided by a specified package.
 #
-# Usage:
-#    apt_list <package name>
+# SYNOPSIS
+#   apt_list PACKAGE_NAME
 #
-# Example:
-#    apt_list libjansson-dev
+# DESCRIPTION
+#   Uses 'apt-get download --print-uris' to fetch the URIs of package files and lists the files
+#   contained within the specified package, even if the package is not currently installed. This
+#   is useful for reverse checking which files belong to a given package. It handles errors such
+#   as missing package names or failure to retrieve package URIs.
 #
+# EXAMPLE
+#   apt_list libjansson-dev
+#
+# EXIT STATUS
+#   0 - Successfully listed package files.
+#   1 - Failure due to missing package name, inability to find package URIs, or failure to list package files.
+#
+###############################################################################
 function apt_list {
 
   # Check inputs:
@@ -408,7 +557,26 @@ function apt_list {
 export -f apt_list
 
 ###############################################################################
-# Utility wrapper around apt reinstall for safer headless operation
+# CATEGORY
+#   APT WRAPPER FUNCTIONS
+#
+# NAME
+#   apt_reinstall - Safely reinstall packages in a headless environment.
+#
+# SYNOPSIS
+#   apt_reinstall PACKAGE [PACKAGE ...]
+#
+# DESCRIPTION
+#   Reinstalls one or more specified packages using 'apt-get reinstall' with non-interactive options.
+#   It ensures that configurations are preserved ('--force-confold') and opts for IPv4 connections.
+#   The function iterates over each package, attempting to reinstall them individually and handles
+#   errors specifically for package reinstallation failures.
+#
+# EXIT STATUS
+#   0 - Successful reinstallation of all specified packages.
+#   1 - Failure in reinstalling one or more packages.
+#
+###############################################################################
 function apt_reinstall {
     PACKAGES=${@}
     APT_COMMAND=reinstall
@@ -425,7 +593,26 @@ function apt_reinstall {
 export -f apt_reinstall
 
 ###############################################################################
-# Utility wrapper around apt_remove for safer headless operation
+# CATEGORY
+#   APT WRAPPER FUNCTIONS
+#
+# NAME
+#   apt_remove - Safely remove packages in a headless environment.
+#
+# SYNOPSIS
+#   apt_remove PACKAGE [PACKAGE ...]
+#
+# DESCRIPTION
+#   Removes one or more specified packages using 'apt-get remove' with options designed for
+#   non-interactive environments. Similar to 'apt_install' and 'apt_reinstall', it minimizes
+#   stdout output and prioritizes error reporting, using 'DEBIAN_FRONTEND=noninteractive' and
+#   other options to ensure smooth operation without manual intervention.
+#
+# EXIT STATUS
+#   0 - Successful removal of all specified packages.
+#   1 - Failure in removing one or more packages.
+#
+###############################################################################
 function apt_remove {
     PACKAGES=${@}
     APT_COMMAND=remove
@@ -442,7 +629,28 @@ function apt_remove {
 export -f apt_remove
 
 ###############################################################################
-# Utility wrapper around apt_update for safer headless operation
+# CATEGORY
+#   APT WRAPPER FUNCTIONS
+#
+# NAME
+#   apt_update - Safely update package lists in a headless environment.
+#
+# SYNOPSIS
+#   apt_update
+#
+# DESCRIPTION
+#   Executes an 'apt-get update' operation with options that facilitate a non-interactive
+#   update process. It incorporates options to avoid using deprecated 'force-yes' behavior,
+#   opting instead for safer alternatives that allow unauthenticated, downgrades, and the
+#   removal of
+#   essential packages as well as the changing of held packages. Designed to minimize potential
+#   harm while updating package lists in a headless or automated setup.
+#
+# EXIT STATUS
+#   0 - Successful update of the package lists.
+#   1 - Failure in updating the package lists.
+#
+###############################################################################
 function apt_update {
     local APT_COMMAND=update
 
@@ -461,7 +669,27 @@ function apt_update {
 export -f apt_update
 
 ###############################################################################
-# Utility wrapper around apt_update for safer headless operation
+# CATEGORY
+#   APT WRAPPER FUNCTIONS
+#
+# NAME
+#   apt_upgrade - Safely upgrade packages in a headless environment.
+#
+# SYNOPSIS
+#   apt_upgrade
+#
+# DESCRIPTION
+#   Performs an 'apt-get upgrade' to update all installed packages to the newest versions
+#   without removing existing packages or installing new ones. It uses options to ensure
+#   non-interactive operation, applying the same safety measures as 'apt_update' to mitigate
+#   potential issues. The function is tailored to maintain system stability and security by
+#   upgrading packages in a controlled, automated fashion.
+#
+# EXIT STATUS
+#   0 - Successful upgrade of installed packages.
+#   1 - Failure in upgrading one or more packages.
+#
+###############################################################################
 function apt_upgrade {
     local APT_COMMAND=upgrade
 
@@ -484,28 +712,32 @@ export -f apt_upgrade
 ### BEGIN UTILITY FUNCTIONS: STRINGS
 
 ###############################################################################
-# Category: strings
+# CATEGORY
+#   UTILITY FUNCTIONS: STRINGS
 #
-# Given a version number MAJOR.MINOR.PATCH function get_version_component()
-# extracts one of three version components and prints it to standard output.
+# NAME
+#   get_version_component - Extracts version components from a semantic version string.
 #
-# Function return code:
-#   0 - on success
-#   1 - on error
+# SYNOPSIS
+#   get_version_component COMPONENT VERSION
 #
-# Usage examples:
+# DESCRIPTION
+#   Given a semantic version number MAJOR.MINOR.PATCH, this function extracts and
+#   prints one of the three version components (major, minor, patch) to standard output.
+#   It validates the input to ensure that a valid component name and version string are provided.
 #
-#   # Say we have the following example version:
-#   local VERSION="12.34.56"
+# EXAMPLES
+#   VERSION="12.34.56"
+#   MAJOR=$(get_version_component major "${VERSION}")
+#   MINOR=$(get_version_component minor "${VERSION}")
+#   PATCH=$(get_version_component patch "${VERSION}")
+#   echo "Version components: MAJOR:${MAJOR}, MINOR:${MINOR}, PATCH:${PATCH}"
 #
-#   MAJOR=$( get_version_component major "${VERSION}" ) || { abort "${FUNCNAME[0]}" 'falied_to_extract_major_version'; }
-#   MINOR=$( get_version_component minor "${VERSION}" ) || { abort "${FUNCNAME[0]}" 'falied_to_extract_minor_version'; }
-#   PATCH=$( get_version_component patch "${VERSION}" ) || { abort "${FUNCNAME[0]}" 'falied_to_extract_patch_version'; }
+# EXIT STATUS
+#   0 - Success, component extracted.
+#   1 - Error, due to invalid input or unsupported component name.
 #
-#   # Print result
-#   echo "Extracted version components: MAJOR:${MAJOR}, MINOR:${MINOR}, PATCH:${PATCH}"
-#   # Expected output:
-#   #   Extracted version components: MAJOR:12, MINOR:34, PATCH:56
+###############################################################################
 function get_version_component {
 
   # Check we get exactly 2 arguments
@@ -560,14 +792,31 @@ function get_version_component {
 export -f get_version_component
 
 ###############################################################################
-# Category: strings
-# Check if a value exists in an array
-# @param ${1} mixed  Needle
-# @param ${2} array  Haystack
-# @return  Success (0) if value exists, Failure (1) otherwise
-# Usage: in_array "${needle}" "${haystack[@]}"
-# See: http://fvue.nl/wiki/Bash:_Check_if_array_element_exists
+# CATEGORY
+#   UTILITY FUNCTIONS: STRINGS
 #
+# NAME
+#   in_array - Checks if a value exists in an array.
+#
+# SYNOPSIS
+#   in_array NEEDLE HAYSTACK
+#
+# DESCRIPTION
+#   Iterates through an array (haystack) to check if a specified value (needle) exists within it.
+#   Returns success if the needle is found, and failure otherwise.
+#
+# EXAMPLE
+#   if in_array "search_value" "${array[@]}"; then
+#       echo "Value found."
+#   else
+#       echo "Value not found."
+#   fi
+#
+# EXIT STATUS
+#   0 - Success, value exists in the array.
+#   1 - Failure, value does not exist in the array.
+#
+###############################################################################
 function in_array {
     local hay needle=${1}
     shift
@@ -579,13 +828,33 @@ function in_array {
 export -f in_array
 
 ###############################################################################
-# Category: strings
-# Return index or needle in haystack, otherwise 255
-# Bash range for return value from fn is (0-255) this is why when I return -1 it's 255
-# @param ${1} mixed  Needle
-# @param ${2} array  Haystack
-# @return  Success (index) if value exists, Failure (255) otherwise
-# Usage: index_of "$needle" "${haystack[@]}"
+# CATEGORY
+#   UTILITY FUNCTIONS: STRINGS
+#
+# NAME
+#   index_of - Returns the index of a value in an array, or 255 if not found.
+#
+# SYNOPSIS
+#   index_of NEEDLE HAYSTACK
+#
+# DESCRIPTION
+#   Searches for a value (needle) in an array (haystack) and returns its index.
+#   If the value is not found, returns 255. Note that Bash functions can only return
+#   values in the range of 0-255, hence 255 is used to indicate not found.
+#
+# EXAMPLE
+#   INDEX=$(index_of "search_value" "${array[@]}")
+#   if [ "${INDEX}" -ne 255 ]; then
+#       echo "Value found at index: ${INDEX}"
+#   else
+#       echo "Value not found."
+#   fi
+#
+# EXIT STATUS
+#   0-254 - Index of the value if found.
+#   255 - Value not found in the array.
+#
+###############################################################################
 function index_of {
     local NEEDLE=${1}
     declare -a HAYSTACK=("${!2}")
@@ -594,35 +863,33 @@ function index_of {
             return ${i};
         fi
     done
+    
+    # Not found: return -1 (same as 255)
     return -1;
 }
 export -f index_of
 
 ###############################################################################
-# Category: strings
+# CATEGORY
+#   UTILITY FUNCTIONS: STRINGS
 #
-# Function parses github repository url and allows to extract one of the following parts of it:
-#    - protocol
-#    - host
-#    - owner
-#    - project name
+# NAME
+#   parse_github_repository_url - Parses GitHub repository URLs.
 #
-# Function prints into standard output one of the parsed url components and return code 0 on success
-# or code 1 on error (e.g. failed to parse given url or missing arguments).
+# SYNOPSIS
+#   parse_github_repository_url URL COMPONENT
 #
-# Usage examples:
+# DESCRIPTION
+#   Extracts and prints specific components (protocol, host, owner, project name)
+#   from a GitHub repository URL. Validates input to ensure the URL and component name
+#   are provided. Supports various URL formats, including SSH, HTTPS, and Git protocol URLs.
+#
+# EXAMPLES
 #   URL="git://github.com/some-user/my-repo.git"
-#   OWNER=$( parse_github_repository_url "${URL}" "OWNER" )
-#   if [ ${?} -eq 0 ]; then
-#      echo "The ownder of the url '${URL}' is '${OWNER}'."
-#   else
-#      echo "Error: failed to parse url: '${URL}'." >&2
-#   fi
+#   OWNER=$(parse_github_repository_url "${URL}" "OWNER")
+#   echo "The owner of the URL '${URL}' is '${OWNER}'."
 #
-#  Expected output:
-#    The owner of the url 'git://github.com/some-user/my-repo.git' is 'some-user'.
-#
-# Other example:
+# Another example:
 # URLS=(
 #  "git://github.com/some-user/my-repo.git"
 #  "https://github.com/some-user/my-repo.git"
@@ -637,6 +904,11 @@ export -f index_of
 #     parse_github_repository_url "${URL}" "OWNER"
 # done
 #
+# EXIT STATUS
+#   0 - Success, component extracted.
+#   1 - Error, due to failed URL parsing or missing arguments.
+#
+###############################################################################
 function parse_github_repository_url {
   local URL="${1}"
   local KEY="${2}"
@@ -684,30 +956,38 @@ function parse_github_repository_url {
 export -f parse_github_repository_url
 
 ###############################################################################
-# Category: strings
+# CATEGORY
+#   UTILITY FUNCTIONS: STRINGS
 #
-# Utility function trim_slash():
-#   - Replaces all repeated slashes //[...] with a single slash /
-#   - Removes trailing slash unless it is also the leading slash (i.e., the root filepath /)
+# NAME
+#   trim_slash - Normalizes slashes in a string.
 #
-# Function is useful to remove trailing slashes from URL string for example "http://acme.com///" -> "http://acme.com"
+# SYNOPSIS
+#   trim_slash STRING...
 #
-# More details in this StackOverflow discussion: https://stackoverflow.com/a/69485442/7022062
+# DESCRIPTION
+#   For each input string, replaces consecutive slashes with a single slash,
+#   and removes trailing slashes except when the string is a single slash.
+#   Useful for cleaning URLs or file paths.
 #
-# Some test cases:
-#
+# EXAMPLES
 #   trim_slash "http://acme.com/a/b/c/" "http://acme.com///" "http://acme.com/" "/" "///" "a/" "b/b/" "c/c////"
 #
-# Expected output:
-#       http://acme.com/a/b/c
-#       http://acme.com
-#       http://acme.com
-#       /
-#       /
-#       a
-#       b/b
-#       c/c
+#   # Outputs:
+#   #   http://acme.com/a/b/c
+#   #   http://acme.com
+#   #   http://acme.com
+#   #   /
+#   #   /
+#   #   a
+#   #   b/b
+#   #   c/c
 #
+# EXIT STATUS
+#   0 - Always succeeds.
+#
+###############################################################################
+
 function trim_slash {
   for s; do
     sed -E 's:(^/)?/*$:\1:' <<< "${s}"
@@ -720,30 +1000,64 @@ export -f trim_slash
 ### BEGIN UTILITY FUNCTIONS: FILE
 
 ###############################################################################
-# Usage: assert_cd directory
-# Ensures command must exit cleanly (0) else will abort the entire system
+# CATEGORY
+#   UTILITY FUNCTIONS: FILE
+#
+# NAME
+#   assert_cd - Changes the current directory to the specified directory or aborts if it fails.
+#
+# SYNOPSIS
+#   assert_cd DIRECTORY
+#
+# DESCRIPTION
+#   Attempts to change the current working directory to the specified DIRECTORY. It first checks
+#   if the directory exists and is a directory. If it cannot change to the directory, possibly
+#   due to permission issues, it will abort the operation with an error message.
+#
+# USAGE
+#   assert_cd /path/to/directory
+#
+# EXIT STATUS
+#   Exits the script if it fails to change the directory.
+#
+###############################################################################
 function assert_cd {
 
   # Check first if it is a directory.
   if [ ! -d "${1}" ]; then
-     log "ERROR: Can not enter directory \"${1}\" -- it is not a directory."
-     abort
+     abort "ERROR: Can not enter directory \"${1}\" -- it is not a directory."
   fi
 
   # Directory exists, now enter it. May fail due to permissions.
   if [ -d "${1}" ]; then
      assert_clean_exit cd "${1}"
   else
-     log "ERROR: Can not enter directory \"${1}\""
-     log "SUGGEST: check user ID and directory permissions."
-     abort
+     abort "ERROR: Can not enter directory \"${1}\". SUGGEST: check user ID and directory permissions."
   fi
 }
 export -f assert_cd
 
 ###############################################################################
-# Usage: assert_makedir directory
-# Make directory if it does not exist
+# CATEGORY
+#   UTILITY FUNCTIONS: FILE
+#
+# NAME
+#   assert_makedir - Creates a directory if it does not already exist.
+#
+# SYNOPSIS
+#   assert_makedir DIRECTORY
+#
+# DESCRIPTION
+#   Checks if the specified DIRECTORY exists. If not, it attempts to create the directory.
+#   If the directory creation fails (for instance, due to lacking permissions), it aborts the operation.
+#
+# USAGE
+#   assert_makedir /path/to/directory
+#
+# EXIT STATUS
+#   Aborts script on failure to create the directory.
+#
+###############################################################################
 function assert_makedir {
   if [ -d "${1}" ]; then
      log "INFO: Directory \"${1}\" exists, skipping creation."
@@ -754,16 +1068,20 @@ function assert_makedir {
 export -f assert_makedir
 
 ###############################################################################
-# Category: file
-# Utility function - checks if given file has "EOL" at the end of the file. It gets the path to the file as the only argument.
-# Return codes:
-#    0 - EOL present or file is empty
-#    1 - EOL missing
-#    2 - Bad arguments
-#    3 - File does not exist or can not read even with "sudo"
+# CATEGORY
+#   UTILITY FUNCTIONS: FILE
 #
-# Usage example:
+# NAME
+#   does_file_have_eol_at_the_end - Checks if a file ends with an End Of Line (EOL) character.
 #
+# SYNOPSIS
+#   does_file_have_eol_at_the_end FILEPATH
+#
+# DESCRIPTION
+#   Verifies if the specified file ends with an EOL character or if the file is empty.
+#   It is useful for ensuring that a file is in a good state for appending content.
+#
+# USAGE EXAMPLE
 #   # Call function and preserve its return code
 #   does_file_have_eol_at_the_end "${FILEPATH}"
 #   does_file_have_eol_at_the_end_code=$?
@@ -777,12 +1095,14 @@ export -f assert_makedir
 #   # Check if EOL is present
 #   if does_file_have_eol_at_the_end_code /path/to/file.txt; then
 #       echo "Yes, EOL is present."
-#       . . .
 #
-# Note: function does not check if file exist and does not return errors (return binary outcome: code 0 = yes, EOL is present or empty file, code 1 = EOL is missing in last line)
+# EXIT STATUS
+#   0 - EOL present or file is empty.
+#   1 - EOL missing.
+#   2 - Incorrect arguments.
+#   3 - File does not exist or cannot be read.
 #
-# Function is used to avoid concatination of more than one name/value pairs into configuration files (be it yaml or .env files).
-#
+###############################################################################
 function does_file_have_eol_at_the_end {
 
   # Define exit codes (both success and errors)
@@ -822,13 +1142,26 @@ function does_file_have_eol_at_the_end {
 export -f does_file_have_eol_at_the_end
 
 ###############################################################################
-# Utility function f
-# Search recursively from current location for files or directories starting with a prefix prefix, case insensitive
-# @param ${1} string package name
-# @param ${2} array  package list to append
-# @return  Success if value exists, Failure otherwise
-# Usage: f prefix
-# Example: f index  # Will show all files or directories starting with 'index'
+# CATEGORY
+#   UTILITY FUNCTIONS: FILE
+#
+# NAME
+#   f - Finds files or directories starting with a given prefix, recursively, from the current directory.
+#
+# SYNOPSIS
+#   f PREFIX
+#
+# DESCRIPTION
+#   Performs a case-insensitive recursive search from the current directory for files or directories that
+#   start with the specified PREFIX. It excludes the 'node_modules' directory from the search.
+#
+# USAGE EXAMPLE
+#   f index
+#
+# EXIT STATUS
+#   Success if files or directories are found; failure otherwise.
+#
+###############################################################################
 function f {
     FILE_PREFIX="${1}"
     if [ "${FILE_PREFIX}" != "" ]; then
@@ -843,24 +1176,34 @@ function f {
 export -f f
 
 ###############################################################################
-# Category: file
-# Utility function - Easy way to check if a file contains a pattern
-# Function takes 2 arguments:
-#   - filepath to the target file
-#   - regex pattern to use to search match in the file
+# CATEGORY
+#   UTILITY FUNCTIONS: FILE
 #
-# Note: function will use "sudo" to read the file if needed to escalate privileges 
+# NAME
+#   file_contains_pattern - Checks if a file contains a given regex pattern.
 #
-# Return codes:
-#   0 - Pattern found
-#   1 - Pattern not found
-#   2 - File does not exist
-#   3 - Bad arguments (one or both arguments are not set)
-#   4 - Failed to get sudo read file prefix
+# SYNOPSIS
+#   file_contains_pattern FILEPATH PATTERN
 #
-# Usage example:
-#   file_contains_pattern /path/to/file.txt 'regex patt.rn'
+# DESCRIPTION
+#   Searches for a specified regular expression PATTERN within a file at FILEPATH.
+#   If necessary, it escalates privileges using sudo to read the file.
+#   PATTERN - The pattern is the POSIX regular expression:
+#             https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap09.html#tag_09_04
+#             but with platform-specific extensions (which vary in extent and can be incompatible).
+#             On Linux platforms (GNU userland), see man grep; on macOS/BSD platforms, see man re_format.#
 #
+# USAGE EXAMPLE
+#   file_contains_pattern /path/to/file.txt "pattern"
+#
+# EXIT STATUS
+#   0 - Pattern found.
+#   1 - Pattern not found.
+#   2 - File does not exist.
+#   3 - Incorrect arguments.
+#   4 - Failed to escalate privileges.
+#
+###############################################################################
 function file_contains_pattern {
 
   # Define exit codes for different outcomes
@@ -912,53 +1255,28 @@ function file_contains_pattern {
 export -f file_contains_pattern
 
 ###############################################################################
-# Category: file
-# Utility function - finds out which package owns a file and print result into standard output in form:
-#    [package_name_1]:  [/path_1/to/the/file/after/package/installed]
-#    [package_name_2]:  [/path_2/to/the/file/after/package/installed]
+# CATEGORY
+#   UTILITY FUNCTIONS: FILE
 #
-# Dependency:
-#   apt-file - The "apt-file" package must be installed. We will run "sudo apt-file update" on each function call.
+# NAME
+#   find_file_owner_in_all_packages - Identifies the package(s) that own a specified file across all available packages.
 #
-# Usage example:
-#    find_file_owner_in_all_packages realpath
+# SYNOPSIS
+#   find_file_owner_in_all_packages FILENAME
 #
-# Example output (can produce more than one line):
-#    bash-builtins: /usr/lib/bash/realpath
-#    bash-builtins: /usr/share/doc/bash/examples/loadables/realpath.c
-#    code: /usr/share/code/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/LICENSE
-#    code: /usr/share/code/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/README.md
-#    code: /usr/share/code/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/index.js
-#    code: /usr/share/code/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/old.js
-#    code: /usr/share/code/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/package.json
-#    code-exploration: /usr/share/code-exploration/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/LICENSE
-#    code-exploration: /usr/share/code-exploration/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/README.md
-#    code-exploration: /usr/share/code-exploration/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/index.js
-#    code-exploration: /usr/share/code-exploration/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/old.js
-#    code-exploration: /usr/share/code-exploration/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/package.json
-#    code-insiders: /usr/share/code-insiders/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/LICENSE
-#    code-insiders: /usr/share/code-insiders/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/README.md
-#    code-insiders: /usr/share/code-insiders/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/index.js
-#    code-insiders: /usr/share/code-insiders/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/old.js
-#    code-insiders: /usr/share/code-insiders/resources/app/extensions/ms-vscode.node-debug2/node_modules/fs.realpath/package.json
-#    coreutils: /usr/bin/realpath
-#    coreutils: /usr/share/man/man1/realpath.1.gz
-#    epic4-help: /usr/share/epic4/help/6_Functions/realpath
-#    fish-common: /usr/share/doc/fish/_sources/cmds/realpath.rst.txt
-#    fish-common: /usr/share/doc/fish/cmds/realpath.html
-#    fish-common: /usr/share/fish/completions/realpath.fish
-#    fish-common: /usr/share/fish/functions/realpath.fish
-#    gnulib: /usr/share/gnulib/doc/posix-functions/realpath.texi
-#    libexplain-dev: /usr/include/libexplain/realpath.h
-#    libexplain-dev: /usr/share/man/man3/explain_realpath.3.gz
-#    libexplain-dev: /usr/share/man/man3/explain_realpath_or_die.3.gz
-#    librnd-dev: /usr/include/librnd/core/compat_lrealpath.h
-#    libssh2-1-dev: /usr/share/man/man3/libssh2_sftp_realpath.3.gz
-#    manpages-de: /usr/share/man/de/man1/realpath.1.gz
-#    manpages-de-dev: /usr/share/man/de/man3/realpath.3.gz
-#    manpages-dev: /usr/share/man/man3/realpath.3.gz
-#    manpages-fr-dev: /usr/share/man/fr/man3/realpath.3.gz
+# DESCRIPTION
+#   Uses 'apt-file' to search across all packages in the repository to find which one(s) contain
+#   the specified FILENAME. Requires 'apt-file' to be installed and updated.
 #
+# USAGE EXAMPLES
+#   find_file_owner_in_all_packages realpath
+#   find_file_owner_in_all_packages hping3
+#   find_file_owner_in_all_packages netstat
+#
+# EXIT STATUS
+#   Outputs package names and file paths. Returns success if 'apt-file' is available and the search can be performed.
+#
+###############################################################################
 function find_file_owner_in_all_packages {
     # Take filename argument
     FILE="${1}"
@@ -976,6 +1294,12 @@ function find_file_owner_in_all_packages {
     fi
 
     # Update packages universe database
+    # Note: Running apt-file update updates its database of files available in packages,
+    # enabling users to search for a specific file to find out which package it belongs to.
+    # This is especially useful for resolving missing file or library dependencies.
+    # It is different from "apt-get update", which updates the package lists for upgrades
+    # or new package installations by syncing the package index files from their sources specified
+    # in /etc/apt/sources.list and /etc/apt/sources.list.d/*.list files.
     sudo apt-file update
 
     # Try to search given file
@@ -984,24 +1308,30 @@ function find_file_owner_in_all_packages {
 export -f find_file_owner_in_all_packages
 
 ###############################################################################
-# Category: file
-# Utility function - finds out which package owns a file and print result into standard output in form:
-#    [package_name_1]:  [/path_1/to/the/file/after/package/installed]
-#    [package_name_2]:  [/path_2/to/the/file/after/package/installed]
+# CATEGORY
+#   UTILITY FUNCTIONS: FILE
 #
-# The "find_file_owner_package" tries to find the package which owns the file.
-# It can only find owning package if mentioned file/package installed
-# (unlike function find_file_owner_in_all_packages() based on "apt-file
-# search realpath", which searches through all "potential universe", but require "apt-file to be installed and updated")
+# NAME
+#   find_file_owner_in_installed_packages - Finds which installed package owns a specified file.
 #
-# Usage example:
-#    find_file_owner_in_installed_packages realpath
+# SYNOPSIS
+#   find_file_owner_in_installed_packages FILENAME
 #
-# Example output (can produce more than one line):
-#    coreutils: /usr/bin/realpath
-#    coreutils: /usr/share/man/man1/realpath.1.gz
-#    manpages-dev: /usr/share/man/man3/realpath.3.gz
+# DESCRIPTION
+#   Searches through installed packages to find which package owns the specified FILENAME. It differs from
+#  'find_file_owner_in_all_packages' by only searching among packages that are already installed on the system
+#  and by using "dpkg" instead of "apt-file".
 #
+# USAGE EXAMPLES
+#   find_file_owner_in_installed_packages realpath
+#   find_file_owner_in_installed_packages hping3
+#   find_file_owner_in_installed_packages netstat
+#
+# EXIT STATUS
+#   Outputs package names and file paths. Returns success if the file is owned by an installed package.
+#
+###############################################################################
+
 function find_file_owner_in_installed_packages {
     # Take filename argument
     FILE="${1}"
@@ -1017,49 +1347,47 @@ function find_file_owner_in_installed_packages {
 }
 export -f find_file_owner_in_installed_packages
 
+
+
 ###############################################################################
-# Category: file
-# Utility function - Read remote file served by web server by given URL.
+# CATEGORY
+#   UTILITY FUNCTIONS: FILE
 #
-# Function downloads file by given URL into desired FILEPATH (or standard output).
-# Function sets state to indicate success or error code.
-# Note: dowlnoaded file permissions will be "read/write" by owner only (600).
-# If caller wants to meke it readable by all and writeable by owner and group
-# then it is caller responsibility to: 
-#    chmod 664 "${FILEPATH}"
+# NAME
+#   get_by_url - Downloads a file from a specified URL.
 #
-# Possible error codes are:
-#   - error_wrong_number_of_arguments
-#   - error_bad_argument_blank_url
-#   - error_bad_argument_blank_filepath
-#   - error_generating_tmp_filepath
-#   - error_downloading_file
-#   - error_bad_http_code_404
-#   - error_bad_http_code_000
-#   - error_printing_file
-#   - error_moving_file
-#   - error_removing_file
+# SYNOPSIS
+#   get_by_url URL FILEPATH
 #
-# Return values:
-#   0 - success
-#   1 - error
+# DESCRIPTION
+#   Downloads a file from the given URL to the specified FILEPATH. If FILEPATH is "-",
+#   the content is printed to standard output. This function is designed for non-interactive
+#   use, handling temporary file creation, download, and cleanup. It sets permissions for
+#   downloaded files to be readable and writable by the owner and readable by the group.
+#   Function sets state to indicate success or error code.
+#   Note: target FILEPATH will be overwritten upon successful completion.
 #
-# Usage:
-#   download_file_to_location "${URL}" "${FILEPATH}" 
+#   Possible error codes are:
+#      - error_wrong_number_of_arguments
+#      - error_bad_argument_blank_url
+#      - error_bad_argument_blank_filepath
+#      - error_generating_tmp_filepath
+#      - error_downloading_file
+#      - error_bad_http_code_404
+#      - error_bad_http_code_000
+#      - error_printing_file
+#      - error_moving_file
+#      - error_removing_file
 #
-# Usage examples:
-#    get_by_url "https://testtarget.redwolfsecurity.com/test/processor.php?a=1&b=2" "~/processor_output.txt"
-#    GO_VERSION=$( get_by_url "https://go.dev/VERSION?m=text" "-" )
+# USAGE EXAMPLE
+#   get_by_url "https://example.com/file.txt" "/path/to/save/file.txt" || { error "${FUNCNAME[0]}" "Failed to download file"; return 1; }
+#   CONTENT=$(get_by_url "https://example.com/text.txt" "-") || { error "${FUNCNAME[0]}" "Failed to download file"; return 1; }
 #
-# Treat 2nd argument value "-" as "output to stdout"
-#   1) Function always creates a temporary file
-#   2) Fully download into that temporary file (never stream until completion)
-#   3) Copies the result to the desired FILEPATH
-#      or
-#      if FILEPATH value is "-" then prints dowlnoaded file to standard output.
+# EXIT STATUS
+#   0 - Success.
+#   1 - Error occurred (e.g., bad arguments, download failure, etc.).
 #
-# Note: target FILEPATH will be overwritten upon successful completion.
-#
+###############################################################################
 function get_by_url {
   # Indicate: function started
   set_state "${FUNCNAME[0]}" 'started'
@@ -1152,13 +1480,28 @@ function get_by_url {
 export -f get_by_url
 
 ###############################################################################
-# Category: file
-# Utility function - Easy way to check if a sudo prefix needed to read given file.
-# Function prints to standard ouput "sudo" if root privileges required.
-# Return codes:
-#   0 - success
-#   1 - error (examples: file does not exist, can not read even with "sudo")
+# CATEGORY
+#   UTILITY FUNCTIONS: FILE
 #
+# NAME
+#   get_sudo_read_file_prefix - Determines if sudo is needed to read a file.
+#
+# SYNOPSIS
+#   get_sudo_read_file_prefix FILEPATH
+#
+# DESCRIPTION
+#   Checks if the current user has read permissions for the specified FILEPATH. 
+#   If not, it checks if sudo can grant read access. If sudo is required, "sudo"
+#   is printed to standard output.
+#
+# USAGE EXAMPLE
+#   SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "/path/to/protected/file.txt") || { error "${FUNCNAME[0]}" "failed to get sudo read file prefix"; return 1; }
+#
+# EXIT STATUS
+#   0 - Success, determined if sudo is needed.
+#   1 - Error, file does not exist or other issue preventing access determination.
+#
+###############################################################################
 function get_sudo_read_file_prefix {
 
   # Take arguments
@@ -1199,13 +1542,28 @@ function get_sudo_read_file_prefix {
 export -f get_sudo_read_file_prefix
 
 ###############################################################################
-# Category: file
-# Utility function - Easy way to check if a sudo prefix needed to write given file.
-# Function prints to standard ouput "sudo" if root privileges required.
-# Return codes:
-#   0 - success
-#   1 - error (examples: file does not exist, can not write even with "sudo")
+# CATEGORY
+#   UTILITY FUNCTIONS: FILE
 #
+# NAME
+#   get_sudo_write_file_prefix - Determines if sudo is needed to write to a file.
+#
+# SYNOPSIS
+#   get_sudo_write_file_prefix FILEPATH
+#
+# DESCRIPTION
+#   Checks if the current user has write permissions for the specified FILEPATH.
+#   If not, it checks if sudo can grant write access. If sudo is required, "sudo"
+#   is printed to standard output.
+#
+# USAGE EXAMPLE
+#   PREFIX=$(get_sudo_write_file_prefix "/path/to/protected/file.txt") || { error "${FUNCNAME[0]}" "failed to get sudo write file prefix"; return 1; }
+#
+# EXIT STATUS
+#   0 - Success, determined if sudo is needed.
+#   1 - Error, file does not exist or other issue preventing access determination.
+#
+###############################################################################
 function get_sudo_write_file_prefix {
 
   # Take arguments
@@ -1246,16 +1604,28 @@ function get_sudo_write_file_prefix {
 export -f get_sudo_write_file_prefix
 
 ###############################################################################
-# Category: file
-# Utility function - Easy way to check if a sudo prefix needed to read-write given file.
-# Function prints to standard ouput "sudo" if root privileges required.
+# CATEGORY
+#   UTILITY FUNCTIONS: FILE
 #
-# Use case example: for inline-editor "sed -i" we must be able to both read and write.
+# NAME
+#   get_sudo_readwrite_file_prefix - Determines if sudo is needed for read-write access to a file.
 #
-# Return codes:
-#   0 - success
-#   1 - error (examples: file does not exist, can not read-write even with "sudo")
+# SYNOPSIS
+#   get_sudo_readwrite_file_prefix FILEPATH
 #
+# DESCRIPTION
+#   Checks if the current user has read and write permissions for the specified FILEPATH.
+#   If not, it checks if sudo can grant read-write access. If sudo is required, "sudo"
+#   is printed to standard output.
+#
+# USAGE EXAMPLE
+#   PREFIX=$(get_sudo_readwrite_file_prefix "/path/to/protected/file.txt") || { error "${FUNCNAME[0]}" "failed to get sudo read/write file prefix"; return 1; }
+#
+# EXIT STATUS
+#   0 - Success, determined if sudo is needed.
+#   1 - Error, file does not exist or other issue preventing access determination.
+#
+###############################################################################
 function get_sudo_readwrite_file_prefix {
 
   # Take arguments
@@ -1293,68 +1663,77 @@ function get_sudo_readwrite_file_prefix {
 export -f get_sudo_readwrite_file_prefix
 
 ###############################################################################
-# Category: file
-# Utility function - Easy way to check if a glob matches.
-# This is a bash builtin wrapper. e.g. glob_matches '/tmp/abc*' will return 0 or 1
+# CATEGORY
+#   UTILITY FUNCTIONS: FILE
+#
+# NAME
+#   glob_matches - Checks if a glob pattern matches any files or directories.
+#
+# SYNOPSIS
+#   glob_matches PATTERN
+#
+# DESCRIPTION
+#   Uses bash's globbing feature to check if the specified PATTERN matches any files
+#   or directories in the current directory. It is a simple wrapper around bash's
+#   built-in globbing capabilities to provide a programmatic check for glob matches.
+#
+# USAGE EXAMPLE
+#   if glob_matches "*.txt"; then
+#     echo "Text files exist."
+#   else
+#     echo "No text files found."
+#   fi
+#
+# EXIT STATUS
+#   0 - Pattern matches.
+#   1 - No matches found.
+#
+###############################################################################
 function glob_matches {
 	compgen -G ${@} >/dev/null
 	return ${?}
 }
 export -f glob_matches
 
+
 ###############################################################################
-# Category: file
-# Utility function - injects text into the end of existing file.
+# CATEGORY
+#   UTILITY FUNCTIONS: FILE
 #
-# Synopsis:
-#     inject_into_file "${FILEPATH}" "${REGEX}" "${INJECT_CONTENT}"
+# NAME
+#   inject_into_file - Injects or appends text into a file based on a pattern.
 #
-# Function logic:
-#   - Take 3 arguments: target file, regex pattern and desired content
-#   - Search for given pattern
-#   - If no match found: the INJECT_CONTENT got injected at the end of the given file
-#   - If match found: call replace_all_lines_by_regexp(), which will replace all occurrences
-#   - Use "sudo" if/when needed (and available)
-#   - Return proper code (0=success) and use set_state()
+# SYNOPSIS
+#   inject_into_file FILEPATH PATTERN INJECT_CONTENT
 #
-# Return codes:
-#  0 - success: the INJECT_CONTENT got injected or PATTERN already present in the file
-#  1 - failed to inject (not enough permissions, target file does not exist etc.)
-#      In case of error: the error will be reported by error() function (to standard output and into logger)
+# DESCRIPTION
+#   Searches for a given PATTERN within a file. If the pattern is not found,
+#   INJECT_CONTENT is appended to the file. If the file ends without an End
+#   Of Line (EOL), an EOL is added before appending. It uses sudo if necessary
+#   for the file access.
+#   PATTERN - The pattern is the POSIX regular expression:
+#             https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap09.html#tag_09_04
+#             but with platform-specific extensions (which vary in extent and can be incompatible).
+#             On Linux platforms (GNU userland), see man grep; on macOS/BSD platforms, see man re_format.#
 #
-# Note: if existing file have missing EOL in last line, extra EOL will be injected before injectint the content.
+# USAGE EXAMPLE
+#   inject_into_file "/path/to/file.txt" "unique_pattern" "Text to be injected"
 #
-# Pattern is the POSIX regular expression:
-#    https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap09.html#tag_09_04
-# but with platform-specific extensions (which vary in extent and can be incompatible).
-# On Linux platforms (GNU userland), see man grep; on macOS/BSD platforms, see man re_format.
-#
-# Usage example:
-#
-#   # Create test target file
-#   FILEPATH="/tmp/some_file.txt"
-#   echo "creating example target file" > "${FILEPATH}"
-#
-#   # Define pattern to search
-#   PATTERN="source \"${FF_AGENT_PROFILE_FILE}\""
-#
-#   INJECT_CONTENT=$(
-#       cat <<EOT
-# # Sourcing custom ff_agent/.bashrc file (injected by set_environment -> ff_bash_functions -> ${FUNCNAME[0]} on $(date --utc))
-# source "${FF_AGENT_PROFILE_FILE}"
-# injected line #3
-# injected line #4
-#
-# EOT
+#   More complex example with regular expression and multiple lines INJECT_CONTENT:
+#     PATTERN="^source \"${FF_AGENT_PROFILE_FILE}\""
+#     INJECT_CONTENT=$(
+#     cat <<EOT
+#         # Sourcing ${FF_AGENT_PROFILE_FILE} injected by set_environment ${FUNCNAME[0]}() on $(date --utc).
+#         source "${FF_AGENT_PROFILE_FILE}"
+#         EOT
 #     )
+#     inject_into_file "${TARGET_FILE}" "${PATTERN}" "${INJECT_CONTENT}" || { error "${FUNCNAME[0]}" "error_injecting_source_custom_profile"; return 1; }
 #
-#   inject_into_file "${FILEPATH}" "${PATTERN}" "${INJECT_CONTENT}"
-#   if [ ${?} -ne 0 ]; then
-#     echo "Error: failed to inject into the file: '${FILEPATH}'"
-#   else
-#     echo "Successfully injected text into the file: '${FILEPATH}'"
-#   fi
+# EXIT STATUS
+#   0 - Success, content injected or pattern already present.
+#   1 - Error occurred (e.g., permissions issues, file does not exist).
 #
+###############################################################################
 function inject_into_file {
 
   # Take arguments
@@ -1397,7 +1776,6 @@ function inject_into_file {
   if ! file_contains_pattern "${FILEPATH}" "${PATTERN}"; then
     # Expected pattern is missing. Inject text.
 
-
     # Call function and preserve its return code
     does_file_have_eol_at_the_end "${FILEPATH}"
     does_file_have_eol_at_the_end_code=$?
@@ -1427,7 +1805,7 @@ function inject_into_file {
     # Post condition: verify that the expected pattern can be found after injection.
     if ! file_contains_pattern "${FILEPATH}" "${PATTERN}"; then
       # Expected pattern is still missing. Report an error.
-      error "${FUNCNAME[0]}" 'failed_postcondition_check_expected_pattern_is_missing_after_injection'
+      error "${FUNCNAME[0]}" 'postcondition check failed:expected pattern is missing after injection'
       return 1
     fi
   fi
@@ -1435,13 +1813,31 @@ function inject_into_file {
 export -f inject_into_file
 
 ###############################################################################
-# Category: file
-# Utility function - checks if given file or directory is writable by the current user.
+# CATEGORY
+#   UTILITY FUNCTIONS: FILE
 #
-# Function return code:
-#  0 - if file/directory writable
-#  1 - otherwise
+# NAME
+#   is_writable - Checks if the specified file or directory is writable.
 #
+# SYNOPSIS
+#   is_writable TARGET
+#
+# DESCRIPTION
+#   Verifies if the current user has write permissions for the specified TARGET file or directory.
+#   It does not escalate privileges or attempt to modify permissions.
+#
+# USAGE EXAMPLE
+#   if is_writable "/path/to/file"; then
+#     echo "File is writable."
+#   else
+#     echo "File is not writable."
+#   fi
+#
+# EXIT STATUS
+#   0 - Target is writable.
+#   1 - Target is not writable or does not exist.
+#
+###############################################################################
 function is_writable {
   # Get argument
   local TARGET="${1}"
@@ -1458,10 +1854,30 @@ function is_writable {
 export -f is_writable
 
 ###############################################################################
-# Category: file
-# Utility function - Convenience methoud wrapping "realpath" call (realpath is a part of coreutils apt package, which we install as a baseline)
-# Takes a path argument and returns it as an absolute path. 
+# CATEGORY
+#   UTILITY FUNCTIONS: FILE
 #
+# NAME
+#   path_to_absolute_path - Converts a relative file path to an absolute path.
+#
+# SYNOPSIS
+#   path_to_absolute_path PATH
+#
+# DESCRIPTION
+#   Uses the 'realpath' command to convert the given PATH to its absolute form,
+#   accounting for symbolic links and relative path elements. Requires 'realpath'
+#   to be available on the system, which is a part of the coreutils apt package,
+#   installed as a set_environment baseline.
+#   Note: the '--canonicalize-missing' option is used, so no path components need
+#   to exist or be a directory.
+#
+# USAGE EXAMPLE
+#   ABSOLUTE_FILEPATH=$(path_to_absolute_path "../../../../../../../../../some/relative/path") #  result: /some/relative/path
+#
+# EXIT STATUS
+#   The absolute path is output to standard output. Returns exit status of the 'realpath' command.
+#
+###############################################################################
 function path_to_absolute_path {
   local TARGET="$1"
   realpath --canonicalize-missing "${TARGET}"
@@ -1469,13 +1885,28 @@ function path_to_absolute_path {
 export -f path_to_absolute_path
 
 ###############################################################################
-# Category: file
-# Utility function -  parses given file and removes all lines containing a match by the given regular expression.
+# CATEGORY
+#   UTILITY FUNCTIONS: FILE
 #
-# Usage example:
+# NAME
+#   remove_all_lines_by_regexp - Removes all lines from a file that match a given regular expression.
+#
+# SYNOPSIS
+#   remove_all_lines_by_regexp FILEPATH PATTERN
+#
+# DESCRIPTION
+#   Searches a file at FILEPATH for lines matching REGEX and removes them. It supports basic
+#   and extended POSIX regular expressions. This function uses sudo if necessary for file access.
+#   PATTERN - The pattern is the POSIX regular expression:
+#             https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap09.html#tag_09_04
+#             but with platform-specific extensions (which vary in extent and can be incompatible).
+#             On Linux platforms (GNU userland), see man grep; on macOS/BSD platforms, see man re_format.#
+#
+# USAGE EXAMPLES
+#   remove_all_lines_by_regexp "/path/to/config.txt" "^#.*"
 #   remove_all_lines_by_regexp /some/path/to/the/file.txt "Some line matcher regexp \(.*\)"
 #
-# Return codes:
+# EXIT STATUS
 #   0 - successfully removed lines
 #   1 - missing regular expression
 #   2 - missing target filename
@@ -1487,6 +1918,7 @@ export -f path_to_absolute_path
 #   8 - editor return an error (most probably bad regex pattern
 #   9 - zero lines removed (despite the pattern was found and editor didn't error out and we have all the permissions)
 #
+###############################################################################
 function remove_all_lines_by_regexp {
 
   # Get regexp argument
@@ -1592,19 +2024,31 @@ function remove_all_lines_by_regexp {
 export -f remove_all_lines_by_regexp
 
 ###############################################################################
-# Category: file
-# Utility function - parses given file and replaces all lines containing a match
-# by the given regular expression to other string.
+# CATEGORY
+#   UTILITY FUNCTIONS: FILE
 #
-# Synopsis:
-#   replace_all_lines_by_regexp "${FILEPATH}" "${REGEX}" "${INJECT_CONTENT}"
+# NAME
+#   replace_all_lines_by_regexp - Replaces all lines matching a regular expression in a file.
 #
-# Usage example:
-#   LINES_CHANGED_COUNT=$( replace_all_lines_by_regexp "/some/path/to/the/file.txt" "Some line matcher regexp \(.*\)" "New content" )
+# SYNOPSIS
+#   replace_all_lines_by_regexp FILE PATTERN INJECT_CONTENT
+#
+# DESCRIPTION
+#   Parses the given FILE and replaces all lines that contain a match for the given
+#   regular expression REGEX with the new content INJECT_CONTENT. Utilizes sed for
+#   in-place editing and supports using sudo for file access if needed.
+#   PATTERN - The pattern is the POSIX regular expression:
+#             https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap09.html#tag_09_04
+#             but with platform-specific extensions (which vary in extent and can be incompatible).
+#             On Linux platforms (GNU userland), see man grep; on macOS/BSD platforms, see man re_format.#
+#
+# EXAMPLES
+#   replace_all_lines_by_regexp "/path/to/file.txt" "old_content" "new_content"
+#   replace_all_lines_by_regexp "/some/path/to/the/file.txt" "Some old content regexp \(.*\)" "New content"
 #   if [ $? -eq 0 ]; then
 #     echo "Successfully changed ${LINES_CHANGED_COUNT} line(s)"
 #
-# Return codes:
+# EXIT STATUS
 #   0 - Successfully changed lines (and print number of changed lines to the standard output)
 #   1 - Missing inputs: regular expression or replacement string is empty
 #   2 - Missing target filename
@@ -1620,6 +2064,7 @@ export -f remove_all_lines_by_regexp
 #  12 - Failed to remove temporary file
 #  13 - Failed to calculate difference after edit
 #
+###############################################################################
 function replace_all_lines_by_regexp {
 
   # Take arguments
@@ -1727,12 +2172,26 @@ function replace_all_lines_by_regexp {
 export -f replace_all_lines_by_regexp
 
 ###############################################################################
-# Utility function s
-# Search from current directory for files containing keyword (case insensitive)
-# Ignores node_modules directory
-# @param ${1} pattern
-# @return  Success if keyword exists, Failure otherwise
-# Usage: s pattern
+# CATEGORY
+#   UTILITY FUNCTIONS: FILE
+#
+# NAME
+#   s - Searches files from the current directory down for a given pattern, ignoring node_modules.
+#
+# SYNOPSIS
+#   s PATTERN
+#
+# DESCRIPTION
+#   Performs a recursive search for files containing the specified PATTERN, starting
+#   from the current directory. It ignores any files within 'node_modules' directories
+#   and is case-insensitive.
+#
+# EXAMPLES
+#   s "search term"
+#
+# EXIT STATUS
+#   Success if the pattern is found in any file; failure otherwise.
+###############################################################################
 function s {
 #!/bin/bash -
     GREP_OPTIONS="--color=always"
@@ -1749,24 +2208,34 @@ function s {
 export -f s
 
 ###############################################################################
-# Category: file
-# Utility function - truncates file to zero
+# CATEGORY
+#   UTILITY FUNCTIONS: FILE
 #
-# Return codes
-#   0 - success
-#   2 - missing target filename
-#   3 - target file does not exist
-#   4 - not enough permissions to read the target file
-#   5 - not enough permissions to writ the target file
-#   6 - failed to truncate the target file (expected size didn't drop to zero)
+# NAME
+#   truncate_file - Truncates a specified file to zero length.
 #
-# Usage example:
-#   truncate_file /some/path/to/the/file.txt
+# SYNOPSIS
+#   truncate_file FILEPATH
 #
-# Note: if you truncating the log file, which is actively used by running process(es) there might be the case
-# when right after you truncated the file it was written to before we checked the size, so error code 6 might
-# be not an error in these cases.
+# DESCRIPTION
+#   Sets the size of the specified file to zero, effectively erasing its contents. This operation is performed safely, checking for the existence and write permissions of the file.
 #
+# EXAMPLES
+#   truncate_file "/path/to/logfile.log"
+#
+# EXIT STATUS
+#   0 - Success, file truncated to zero length.
+#   1 - General error, such as file does not exist or insufficient permissions.
+#   2 - Missing target filename argument.
+#   3 - Target file does not exist.
+#   4 - Insufficient permissions to read the target file.
+#   5 - Insufficient permissions to write to the target file.
+#   6 - Failed to truncate the target file to zero length.
+#       Note: if you truncating the log file, which is actively used by running process(es) there might be the case
+#             when right after you truncated the file it was written to before we checked the size, so error code 6 might
+#             be not an error in these cases.
+#
+###############################################################################
 function truncate_file {
   # Get filename argument
   local FILEPATH="${1}"
@@ -1817,13 +2286,29 @@ export -f truncate_file
 
 
 
-
-
-
 ### BEGIN UTILITY FUNCTIONS: LOGGING / PROCESS CONTROl
 
 ###############################################################################
-# Utility abort / exit function - called when terminal conditions
+# CATEGORY
+#   UTILITY FUNCTIONS: LOGGING / PROCESS CONTROL
+#
+# NAME
+#   abort
+#
+# SYNOPSIS
+#   abort [custom_message]
+#
+# DESCRIPTION
+#   This function logs a custom error message, if provided, and aborts the
+#   execution of the script. If the SERVICE variable is set, it also updates
+#   the service's state to 'abort' before exiting.
+#
+# EXAMPLES
+#   do_critical_task || { abort "Critical task XYZ failed!"; }
+#
+# EXIT STATUS
+#   Exits the script with status 1.
+###############################################################################
 function abort {
     error "abort called - aborting ${@}"
 
@@ -1836,13 +2321,27 @@ function abort {
 export -f abort
 
 ###############################################################################
+# CATEGORY
+#   UTILITY FUNCTIONS: LOGGING / PROCESS CONTROL
 #
-# Ensures command must exit cleanly (with exit code 0) else abort the entire
-# process by calling abort(), which will log error and exit(1).
+# NAME
+#   assert_clean_exit
 #
-# Usage example:
-#    assert_clean_exit apt_update
+# SYNOPSIS
+#   assert_clean_exit command [options]
 #
+# DESCRIPTION
+#   Executes a specified command with optional parameters. If the command
+#   exits with a status other than 0, indicating failure, this function will
+#   log an error and call `abort` to terminate the script execution.
+#
+# EXAMPLES
+#   # Ensure a package update completes successfully:
+#   assert_clean_exit apt-get update
+#
+# EXIT STATUS
+#   Does not return if the command fails; otherwise, continues script execution.
+###############################################################################
 function assert_clean_exit {
   #echo "TRY: ${@}"
   "${@}"
@@ -1857,8 +2356,26 @@ function assert_clean_exit {
 export -f assert_clean_exit
 
 ###############################################################################
-# Auxilary function to produce human-readable output in standard output describing
-# the current process (start time, ownership, hostname, os, etc.)
+# CATEGORY
+#   UTILITY FUNCTIONS: LOGGING / PROCESS CONTROL
+#
+# NAME
+#   banner
+#
+# SYNOPSIS
+#   banner [custom_message]
+#
+# DESCRIPTION
+#   Displays a banner at the start of a script or process, providing key
+#   information such as the start time, user ID, current working directory,
+#   hostname, and operating system. A custom message can also be included.
+#   This function is particularly useful for logging and debugging purposes,
+#   making it easier to trace the execution context of a script.
+#
+# EXAMPLE
+#   banner "Script XYZ has started"
+#
+###############################################################################
 function banner {
 cat <<EOT
     ================================================================================
@@ -1875,11 +2392,25 @@ EOT
 export -f banner
 
 ###############################################################################
-# Utility error logging function. For now simply forwar it to log, which reports
-# given string to both:
-#    - standard error stream
-#    - logger
+# CATEGORY
+#   UTILITY FUNCTIONS: LOGGING / PROCESS CONTROL
 #
+# NAME
+#   error
+#
+# SYNOPSIS
+#   error [message]
+#
+# DESCRIPTION
+#   Logs a given error message, enhancing visibility by optionally prefacing
+#   the message with a red font style. It forwards the message to the `log`
+#   function, which outputs to both the standard error stream and the system
+#   logger.
+#
+# EXAMPLES
+#   error "Failed to download the required dependencies."
+#
+###############################################################################
 function error {
     echo -n "${FONT_STYLE_RED}"
     log error: "${@}"
@@ -1888,18 +2419,25 @@ function error {
 export -f error
 
 ###############################################################################
-# Utility loging function to report given string to both:
-#    - standard error stream
-#    - logger
+# CATEGORY
+#   UTILITY FUNCTIONS: LOGGING / PROCESS CONTROL
 #
-# Require optional ${SERVICE} to be defined. Proudce all the output into both: standard error stream and send it to logger.
+# NAME
+#   log
 #
-# Usage example:
-#   log "Some event happened."
+# SYNOPSIS
+#   log message
 #
-# Example output:
-#   Tue 07 Sep 2021 07:29:02 PM UTC: SomeService: Some event happened.
+# DESCRIPTION
+#   Outputs a given message to both the standard error stream and the system
+#   logger. If the `SERVICE` environment variable is defined, it is included
+#   as a prefix in the log message and used as a tag for the logger.
 #
+# EXAMPLES
+#   log "Update process started."
+#
+###############################################################################
+
 function log {
 
   # Check if optional environment SERVICE is defined, then use it as a tag for logger
@@ -1915,6 +2453,7 @@ function log {
 export -f log
 
 ###############################################################################
+# Category: UTILITY FUNCTIONS: LOGGING / PROCESS CONTROl
 # Auxilary function to produce human-readable output in standard output describing
 # currently executed "step". Function takes arbitrary number of arguments.
 # 
@@ -1930,7 +2469,26 @@ EOT
 export -f step
 
 ###############################################################################
+# CATEGORY
+#   UTILITY FUNCTIONS: LOGGING / PROCESS CONTROL
 #
+# NAME
+#   successful_exit
+#
+# SYNOPSIS
+#   successful_exit
+#
+# DESCRIPTION
+#   Marks the last run state as 'success' if a `SERVICE` variable is defined,
+#   and then exits the script with status 0. This function is typically called
+#   at the end of a script to indicate successful completion.
+#
+# EXAMPLES
+#   successful_exit
+#
+# EXIT STATUS
+#   Exits the script with status 0.
+###############################################################################
 function successful_exit {
 
   # Check if SERVICE is defined
@@ -1944,6 +2502,7 @@ function successful_exit {
 export -f successful_exit
 
 ###############################################################################
+# Category: UTILITY FUNCTIONS: LOGGING / PROCESS CONTROl
 # Utility error logging function
 function warning {
 
@@ -2297,8 +2856,9 @@ export -f retry_command
 ### BEGIN UTILITY FUNCTIONS: STATE/SECRETS
 
 ###############################################################################
-# Utility function
-# Function generates 16 characters long password, which is printed to standard output.
+# Category: UTILITY FUNCTIONS: PROCESS
+# 
+# Utility function generates 16 characters long password, which is printed to standard output.
 # Depends on: dd, uudecode, sed, cut.
 #
 # Return code:
@@ -2335,6 +2895,7 @@ function generate_strong_password {
 export -f generate_strong_password
 
 ###############################################################################
+# Category: UTILITY FUNCTIONS: PROCESS
 # Function get_state() allows to get state set (by string name).
 # Return value:
 #   - if state found by given state name, print its value to standard output and return code 0
@@ -2385,6 +2946,7 @@ function get_state {
 export -f get_state
 
 ###############################################################################
+# Category: UTILITY FUNCTIONS: PROCESS
 # Utility function, getting secret value by given secret key name.
 # Note: secret_get() require the FF_AGENT_HOME to be set.
 function secret_get {
@@ -2558,7 +3120,11 @@ function secret_get {
 export -f secret_get
 
 ###############################################################################
-# Utility function
+# Category: UTILITY FUNCTIONS: PROCESS
+# Utility function to set secret key/value pair.
+# Example:
+# secret_set readonly_api_password "my-password"
+#
 function secret_set {
 
   # Preserve current bash echo settings and enable bash echo setting
@@ -2617,7 +3183,7 @@ function secret_set {
 export -f secret_set
 
 ###############################################################################
-# Utility function
+# Category: UTILITY FUNCTIONS: PROCESS
 #
 # The set_state() function require "${FF_AGENT_HOME}" to be set to non-empty string.
 #
@@ -2789,7 +3355,7 @@ export -f set_state
 ### BEGIN UTILITY FUNCTIONS: USER / GROUPS
 
 ###############################################################################
-# Category: authorization
+# Category: UTILITY FUNCTIONS: USER / GROUPS
 # Utility function - Can I sudo?
 # @param1 user_to_check
 function can_sudo {
@@ -2818,6 +3384,7 @@ function can_sudo {
 export -f can_sudo
 
 ###############################################################################
+# Category: UTILITY FUNCTIONS: USER / GROUPS
 # Utility function check_group_exists takes one argument (group name) and return 0 if such group exists.
 # Return:
 #  0 - group exists
@@ -2842,7 +3409,7 @@ function check_group_exists {
 export -f check_group_exists
 
 ###############################################################################
-# Category: identity
+# Category: UTILITY FUNCTIONS: USER / GROUPS
 # Utility function - Create User, with a disabled password
 function create_user {
   local USERNAME="${1}"
@@ -2858,7 +3425,7 @@ function create_user {
 export -f create_user
 
 ###############################################################################
-# Category: authorization
+# Category: UTILITY FUNCTIONS: USER / GROUPS
 # Utility function - Am I root? Return 0 if I am, 1 if not
 function is_effectively_root {
     if  [ "${EUID}" -eq 0 ]; then
@@ -2870,7 +3437,7 @@ function is_effectively_root {
 export -f is_effectively_root
 
 ###############################################################################
-# Category: identity
+# Category: UTILITY FUNCTIONS: USER / GROUPS
 # Utility function - Get home directory for user
 function get_home_directory_for_user {
     # TODO: OSX doesn't have getent. Find Equivalent
@@ -2884,7 +3451,8 @@ function get_home_directory_for_user {
 export -f get_home_directory_for_user
 
 ###############################################################################
-# Category: process
+# Category: UTILITY FUNCTIONS: USER / GROUPS
+
 # Utility function - Get cmdline of parent process ID -- useful to know who is starting us
 # E.g. if [ $( get_ppid_cmd | grep --text -c node ) -gt "0" ] -> will let you check if your parent process is nodejs
 function get_ppid_cmd {
@@ -2894,6 +3462,7 @@ function get_ppid_cmd {
 export -f get_ppid_cmd
 
 ###############################################################################
+# Category: UTILITY FUNCTIONS: USER / GROUPS
 # Utility function - check if user is in a group
 # Usage: 
 # if is_user_in_group "user" "group"; then ...
@@ -2912,7 +3481,7 @@ function is_user_in_group {
 export -f is_user_in_group
 
 ###############################################################################
-# Category: identity
+# Category: UTILITY FUNCTIONS: USER / GROUPS
 # Utility function - Check if User Exists
 function user_exists {
     # TODO: OSX doesn't have getent. Find Equivalent
@@ -2931,7 +3500,7 @@ export -f user_exists
 ### BEGIN DISCOVER FUNCTIONS
 
 ###############################################################################
-#
+# Category: DISCOVERY
 # Auxiliary function wraps the logic of choosing the best value for: 'FF_AGENT_URI'
 # Note: this function uses get/set secrets and state, thus it can be called only after "choose proper user" step is complete.
 #
@@ -2965,7 +3534,7 @@ function ff_agent_get_best_ff_agent_uri {
 export -f ff_agent_get_best_ff_agent_uri
 
 ###############################################################################
-#
+# Category: DISCOVERY
 # Auxiliary function wraps the logic of choosing the best value for: 'FF_CONTENT_URL'
 # Note: this function uses get/set secrets and state, thus it can be called only after "choose proper user" step is complete.
 #
@@ -2996,7 +3565,7 @@ function ff_agent_get_best_ff_content_url {
 export -f ff_agent_get_best_ff_content_url
 
 ###############################################################################
-#
+# Category: DISCOVERY
 # Auxiliary function wraps the logic of choosing the best value for: 'FF_HOST'
 # Note: this function uses get/set secrets and state, thus it can be called only after "choose proper user" step is complete.
 #
@@ -3025,7 +3594,7 @@ function ff_agent_get_best_ff_host {
 export -f ff_agent_get_best_ff_host
 
 ###############################################################################
-#
+# Category: DISCOVERY
 # Auxiliary function wraps the logic of choosing the best value for: 'FF_HOST'
 # Note: this function uses get/set secrets and state, thus it can be called only after "choose proper user" step is complete.
 #
@@ -3048,7 +3617,7 @@ function ff_agent_get_best_ff_port {
 export -f ff_agent_get_best_ff_port
 
 ###############################################################################
-#
+# Category: DISCOVERY
 function ff_agent_get_best_namespace {
 
   # Try to get value from environment or by secret_get()
@@ -3066,7 +3635,7 @@ function ff_agent_get_best_namespace {
 export -f ff_agent_get_best_namespace
 
 ###############################################################################
-#
+# Category: DISCOVERY
 function ff_agent_get_best_organization {
 
   # Try to get value from environment or by secret_get()
@@ -3084,7 +3653,7 @@ function ff_agent_get_best_organization {
 export -f ff_agent_get_best_organization
 
 ###############################################################################
-#
+# Category: DISCOVERY
 # Function ff_uuid() generates UUID and prints it to the standard output.
 # Dependency: uuidgen
 # Note: function will try to install dependency if missing.
@@ -3122,7 +3691,7 @@ function ff_uuid {
 export -f ff_uuid
 
 ###############################################################################
-#
+# Category: DISCOVERY
 # Figure out environment - where are we?
 #
 # First the function is trying to choose right FF_AGENT_HOME, then it
@@ -3208,7 +3777,7 @@ function discover_environment {
 export -f discover_environment
 
 # ###############################################################################
-# #
+# # Category: DISCOVERY
 # function discover_ff_environment {
 
 #     # Define 2 lists of variable names and default values: required and optional.
@@ -3252,7 +3821,7 @@ export -f discover_environment
 # export -f discover_ff_environment
 
 ###############################################################################
-#
+# Category: DISCOVERY
 # F-n takes 2 arguments:
 #    - environment variable name (must be not empty)
 #    - default value (can be blank if no default value set)
@@ -3311,7 +3880,7 @@ function discover_optional_environment_variable {
 export -f discover_optional_environment_variable
 
 ###############################################################################
-#
+# Category: DISCOVERY
 # discover_os() tries to identify operating system type/version and return it as a string.
 # In case of error it will return string: "unknown"
 #
@@ -3348,7 +3917,7 @@ function discover_os {
 export -f discover_os
 
 ###############################################################################
-#
+# Category: DISCOVERY
 # F-n discover_required_environment_variable is similar to discover_optional_environment_variable, but after an attempt
 # to discover variable it checks if the value was actually found/set and if not, then error out.
 #
@@ -3371,7 +3940,7 @@ function discover_required_environment_variable {
 export -f discover_required_environment_variable
 
 ###############################################################################
-# Category: time
+# Category: DISCOVERY
 # Utility function to get Unix epoch time in milliseconds
 # Usage example:
 #   "current epoch_ms value is: $( get_epoch_ms )"
@@ -3384,7 +3953,7 @@ function get_epoch_ms {
 export -f get_epoch_ms
 
 ###############################################################################
-# Category: environment
+# Category: DISCOVERY
 # Utility function - Get hardware architecture (e.g. arm64, amd64)
 function get_hardware_architecture {
     dpkg --print-architecture
@@ -3392,7 +3961,7 @@ function get_hardware_architecture {
 export -f get_hardware_architecture
 
 ###############################################################################
-# Category: environment
+# Category: DISCOVERY
 # Utility function - Get os name - e.g. linux
 function get_os_name {
   local OS_NAME="$( basename $( uname --operating-system ) | tr '[:upper:]' '[:lower:]' )"
@@ -3406,7 +3975,7 @@ function get_os_name {
 export -f get_os_name
 
 ###############################################################################
-# Category: environment
+# Category: DISCOVERY
 # Utility function - Get codename - e.g. breezy, focal, ..
 function get_lsb_codename {
     lsb_release --short --codename
@@ -3414,7 +3983,7 @@ function get_lsb_codename {
 export -f get_lsb_codename
 
 ###############################################################################
-# Category: environment
+# Category: DISCOVERY
 # Utility function - Get LSB ID - e.g. Ubuntu
 function get_lsb_id {
     lsb_release --short --id
@@ -3422,7 +3991,7 @@ function get_lsb_id {
 export -f get_lsb_id
 
 ###############################################################################
-# Category: environment
+# Category: DISCOVERY
 # Utility function - Get LSB ID - e.g. ubuntu
 function get_lsb_id_downcase {
   # Dependency check: 'tr' is installed
@@ -3436,7 +4005,7 @@ function get_lsb_id_downcase {
 export -f get_lsb_id_downcase
 
 ###############################################################################
-# Category: environment
+# Category: DISCOVERY
 # Utility function - Get release - e.g. 16.04, 18.04, 20.04
 function get_lsb_release {
     lsb_release --short --release
@@ -3449,6 +4018,7 @@ export -f get_lsb_release
 ### BEGIN SET ENVIRONMENT FUNCTIONS
 
 ###############################################################################
+# Category: SET ENVIRONMENT
 # Utility function check_environment_variables_are_set() checks if all the expected environment variables are set
 #
 # On success: reuturn 0
@@ -3484,6 +4054,7 @@ function check_environment_variables_are_set {
 export -f check_environment_variables_are_set
 
 ###############################################################################
+# Category: SET ENVIRONMENT
 # Utility function ff_agent_check_bin_is_in_the_path()
 # On success: reuturn 0
 # On failure: 1
@@ -3500,6 +4071,7 @@ function ff_agent_check_bin_is_in_the_path {
 export -f ff_agent_check_bin_is_in_the_path
 
 ###############################################################################
+# Category: SET ENVIRONMENT
 # Utility function check_nodejs_installation() checks if nodejs is installed
 # under right path and expected version
 #
@@ -3578,6 +4150,7 @@ function check_nodejs_installation {
 export -f check_nodejs_installation
 
 ###############################################################################
+# Category: SET ENVIRONMENT
 # Utility function check_set_get_secret() checks if set_secret() and get_secret()
 # work as expected.
 #
@@ -3607,6 +4180,7 @@ function check_set_get_secret {
 export -f secret_check_set_and_get
 
 ###############################################################################
+# Category: SET ENVIRONMENT
 # Utility function state_check_set_and_get() checks if set_state() and get_state()
 # work as expected.
 #
@@ -3645,7 +4219,7 @@ function state_check_set_and_get {
 export -f state_check_set_and_get
 
 ###############################################################################
-#
+# Category: SET ENVIRONMENT
 # Function get_current_user is a smarter alternative to ${USER} environment variable,
 # which might not be set when running inside docker.
 #
@@ -3684,7 +4258,7 @@ function get_current_user {
 export -f get_current_user
 
 ###############################################################################
-#
+# Category: SET ENVIRONMENT
 # Function get_best_ff_agent_home:
 #
 # Sets the following environment variables:
@@ -3724,7 +4298,7 @@ function get_best_ff_agent_home {
 export -f get_best_ff_agent_home
 
 ###############################################################################
-#
+# Category: SET ENVIRONMENT
 # Function takes the only parameter: REST-API "call" and makes https GET request: https://${FF_HOST}${CALL}
 #
 # Usage example:  ff_api_get "/admin/organizations"
@@ -3758,6 +4332,7 @@ function ff_api_get {
 export -f ff_api_get
 
 ###############################################################################
+# Category: SET ENVIRONMENT
 # Function prints into standard output the expected version of nodejs.
 # We use it during installation and to check installed "set environment" project.
 function get_expected_nodejs_version {
@@ -3766,7 +4341,7 @@ function get_expected_nodejs_version {
 export -f get_expected_nodejs_version
 
 ###############################################################################
-#
+# Category: SET ENVIRONMENT
 # Function checks if we have framework API defined by checking if all of the following is set:
 #    - FF_HOST
 #    - ( FF_API_USERNAME and FF_API_PASSWORDS ) OR ( FF_API_TOKEN )
@@ -3794,6 +4369,7 @@ function is_framework_api_defined {
 export -f is_framework_api_defined
 
 ###############################################################################
+# Category: SET ENVIRONMENT
 # Utility function set_environment_is_working() checks if all the aspects of "set_environment"
 # are in place and functioning as expected
 #
@@ -3859,8 +4435,6 @@ function set_environment_is_working {
     fi
   done
 
-  # TODO: check docker is installed with >= minimal version (if install_docker() was required in given environment)
-
   # TODO: check if list of required basic packages is installed
 
   # TODO: instead of "cherry-picking" what to check we should have 1:1 "doer/instaler" and corresponding "checker" functions defined, which we'll call here by list.
@@ -3875,7 +4449,7 @@ function set_environment_is_working {
 export -f set_environment_is_working
 
 ###############################################################################
-#
+# Category: SET ENVIRONMENT
 # Function publish_message() takes JSON payload, wraps it into the message and posts JSON to the FF_HOST.
 #
 # Function returns 0 upon successfully sending POST to FF_HOST, any other code otherwise.
