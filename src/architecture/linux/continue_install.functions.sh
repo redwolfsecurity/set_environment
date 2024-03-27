@@ -56,8 +56,8 @@ function add_to_install_if_missing {
   # Take argument ${1} - package name
   local PACKAGE="${1}"
   
-  # Check inputs: ${1} - must be not empty string (package name to check)
-  if [ "${1}" == "" ]; then
+  # Check inputs: ${PACKAGE} - must be not empty string (package name to check)
+  if [ "${PACKAGE}" == "" ]; then
     error "${FUNCNAME[0]} bad arguments: package name is not specified (no arguments)"
     return 1
   fi
@@ -65,7 +65,7 @@ function add_to_install_if_missing {
   # Take argument ${2} - reference to array
 	declare -n PACKAGES_TO_INSTALL=${2}
 
-  # Check inputs: ${2} - must be a reference to an array
+  # Check inputs: ${PACKAGES_TO_INSTALL} - must be a reference to an array
   if [ "${PACKAGES_TO_INSTALL@a}" != "a" ]; then
     # Error: passed reference does not point to array
     error "${FUNCNAME[0]} bad arguments: 2nd argument must be reference to array"
@@ -715,7 +715,7 @@ function install_go {
 
   # Check temporary folder created and we can write to it
   if ! is_writable "${TEMP_DIR}"; then
-    set_state "${FUNCNAME[0]}" "error_temp_dir_isnt_writable"
+    set_state "${FUNCNAME[0]}" "error_temp_dir_is_not_writable"
     return 1
   fi
 
@@ -941,7 +941,7 @@ EOT
       return 1
   }
 
-  # ------------------ Export N_PREFIX and inject that export into FF_AGENT_PROFILE_FILE (end) ----------------
+  # ------------------ Export N_PREFIX and inject that export into FF_AGENT_PROFILE_FILE (begin) ----------------
 
 
   # ------------------ Export NODE_PATH and inject that export into FF_AGENT_PROFILE_FILE (begin) ----------------

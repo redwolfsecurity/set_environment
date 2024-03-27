@@ -35,7 +35,7 @@ TEMP_DIRECTORY=$( mktemp -d ) && \
 cd ${TEMP_DIRECTORY} && \
 git clone https://github.com/redwolfsecurity/set_environment.git && \
 cd set_environment && \
-FF_CONTENT_URL=https://cdn.redwolfsecurity.com ./install
+FF_CONTENT_URL=https://cdn.redwolfsecurity.com/ ./install 2>&1 | logger -t 'set_environment'
 ```
 
 ### Testing
