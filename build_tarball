@@ -21,14 +21,14 @@ set -x
 #      - npm
 #      - tar
 #
-# Also build script relies on set_environment functions installed (e.g.: set_state(), ensure_variable_not_empty())
+# Also build script relies on set_environment functions installed (e.g.: state_set(), ensure_variable_not_empty())
 #
 # Return:
 #   - on success: script exits with code 0
 #   - on error: script exits with code 1
 #
 function build_tarball {
-    # set_state "${FUNCNAME[0]}" 'started'
+    # state_set "${FUNCNAME[0]}" 'started'
 
     # Check dependencies: define required variables
     local REQUIRED_VARIABLES=(
@@ -41,7 +41,7 @@ function build_tarball {
     for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
         ensure_variable_not_empty "${VARIABLE_NAME}" || {
             local ERROR_CODE="$( echo "Error: failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-            # set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+            # state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
             # abort "${ERROR_CODE}"
             echo "${ERROR_CODE}" >&2
             exit 1
@@ -64,21 +64,21 @@ function build_tarball {
     local TEMPORARY_DIR="/tmp"
 
     # We need to "npm install" because of aws-sdk dependency (used by cdn_upload.js)
-    npm install || { echo "Error: failed to 'npm install'" >&2; exit 1; } # { set_state "${FUNCNAME[0]}" 'failed_to_npm_install'; abort; }
+    npm install || { echo "Error: failed to 'npm install'" >&2; exit 1; } # { state_set "${FUNCNAME[0]}" 'failed_to_npm_install'; abort; }
 
     # Capture date and build git commit numbers into separate files
-    echo "BUILD_DATE=$(date +%Y%m%d)  # YYYYMMDD" > build_date || { echo "Error: failed to write build date" >&2; exit 1; } # { set_state "${FUNCNAME[0]}" 'failed_to_write_build_date'; abort; }
-    echo "BUILD_COMMIT_ID=$(git rev-parse HEAD)"  > build_commit_id || { echo "Error: failed to write build commit id">&2; exit 1; } # { set_state "${FUNCNAME[0]}" 'failed_to_write_build_commit_id'; abort; }
+    echo "BUILD_DATE=$(date +%Y%m%d)  # YYYYMMDD" > build_date || { echo "Error: failed to write build date" >&2; exit 1; } # { state_set "${FUNCNAME[0]}" 'failed_to_write_build_date'; abort; }
+    echo "BUILD_COMMIT_ID=$(git rev-parse HEAD)"  > build_commit_id || { echo "Error: failed to write build commit id">&2; exit 1; } # { state_set "${FUNCNAME[0]}" 'failed_to_write_build_commit_id'; abort; }
 
     # Delete target tmp "set_environment" folder, otherwise copy will result in wrong folder structure (1 level nested deeper)
     if [ -d "${TEMPORARY_DIR}/set_environment" ]; then
-        rm -fr ${TEMPORARY_DIR}/set_environment || { echo "Error: failed to remove temporary folder">&2; exit 1; } # { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmp_folder'; abort; }
+        rm -fr ${TEMPORARY_DIR}/set_environment || { echo "Error: failed to remove temporary folder">&2; exit 1; } # { state_set "${FUNCNAME[0]}" 'failed_to_remove_tmp_folder'; abort; }
     fi
 
     # Before creating tarball: move all files into "set_environment" folder.
     # We do so because while Jenkins buidling the project all the files are located in ugly-looking folder:
     #     /var/jenkins_home/jobs/RedWolfSecurity/jobs/set-environment.ja761g/branches/master/workspace
-    cp -a $(pwd) ${TEMPORARY_DIR}/set_environment || { echo "Error: failed to copy files">&2; exit 1; } # { set_state "${FUNCNAME[0]}" 'failed_to_copy_files'; abort; }
+    cp -a $(pwd) ${TEMPORARY_DIR}/set_environment || { echo "Error: failed to copy files">&2; exit 1; } # { state_set "${FUNCNAME[0]}" 'failed_to_copy_files'; abort; }
 
     # Now we can create tarball which contain just 1 folder 'set_environment'
     # Note on used arguments:
@@ -91,7 +91,7 @@ function build_tarball {
     #      set_environment - last argument is the folder to archive. It does not include full path (like: ${TEMPORARY_DIR}/set_environment)
     #                        because we already specified -C argument.
     #
-    tar -C "${TEMPORARY_DIR}" -czf "${TARBALL_FILENAME}" "set_environment" || { echo "Error: failed to create tarball">&2; exit 1; } # { set_state "${FUNCNAME[0]}" 'failed_to_create_tarball'; abort; }
+    tar -C "${TEMPORARY_DIR}" -czf "${TARBALL_FILENAME}" "set_environment" || { echo "Error: failed to create tarball">&2; exit 1; } # { state_set "${FUNCNAME[0]}" 'failed_to_create_tarball'; abort; }
 
     # Upload tarball to S3 so it is available via URL: https:#cdn.redwolfsecurity.com/ff/ff_agent/set_environment.tgz
     node cdn_upload.js \
@@ -99,9 +99,9 @@ function build_tarball {
         "${PRODUCTION_CONTENT_S3_BUCKET_NAME}" \
         "${PRODUCTION_CONTENT_S3_FF_AGENT_PATH}" \
         "${PRODUCTION_CONTENT_CDN_DISTRIBUTION_ID}" \
-         || { set_state "${FUNCNAME[0]}" 'failed_to_cdn_upload'; abort; }
+         || { state_set "${FUNCNAME[0]}" 'failed_to_cdn_upload'; abort; }
 
-    # set_state "${FUNCNAME[0]}" 'success'
+    # state_set "${FUNCNAME[0]}" 'success'
     return 0
 }
 

@@ -32,10 +32,9 @@
 #    - apt_upgrade 
 ## END APT WRAPPER FUNCTIONS
 ## BEGIN UTILITY FUNCTIONS: STRINGS
-#    - get_version_component 
 #    - in_array 
-#    - index_of 
-#    - parse_github_repository_url 
+#    - github_repository_url_parse 
+#    - semantic_version_parse 
 #    - trim_slash 
 ## END UTILITY FUNCTIONS: STRINGS
 ## BEGIN UTILITY FUNCTIONS: FILE
@@ -46,10 +45,6 @@
 #    - file_contains_pattern 
 #    - find_file_owner_in_all_packages 
 #    - find_file_owner_in_installed_packages 
-#    - get_by_url 
-#    - get_sudo_read_file_prefix 
-#    - get_sudo_write_file_prefix 
-#    - get_sudo_readwrite_file_prefix 
 #    - glob_matches 
 #    - inject_into_file 
 #    - is_writable 
@@ -58,6 +53,7 @@
 #    - replace_all_lines_by_regexp 
 #    - s 
 #    - truncate_file 
+#    - url_get 
 ## END UTILITY FUNCTIONS: FILE
 ## BEGIN UTILITY FUNCTIONS: LOGGING / PROCESS CONTROl
 #    - abort 
@@ -70,10 +66,10 @@
 #    - warning 
 ## END UTILITY FUNCTIONS: LOGGING / PROCESS CONTROl
 ## BEGIN UTILITY FUNCTIONS: TERMINAL / SHELL
-#    - set_bash_echo_on 
-#    - set_bash_echo_off 
-#    - get_bash_echo_setting 
-#    - set_bash_echo_setting 
+#    - bash_echo_off_set 
+#    - bash_echo_on_set 
+#    - bash_echo_setting_get 
+#    - bash_echo_setting_set 
 #    - ensure_variable_defined 
 #    - ensure_variable_not_empty 
 #    - is_shell_attribute_set 
@@ -89,22 +85,27 @@
 ## END UTILITY FUNCTIONS: PROCESS
 ## BEGIN UTILITY FUNCTIONS: STATE/SECRETS
 #    - generate_strong_password 
-#    - get_state 
 #    - secret_get 
 #    - secret_set 
-#    - set_state 
+#    - state_get 
+#    - state_set 
 ## END UTILITY FUNCTIONS: STATE/SECRETS
 ## BEGIN UTILITY FUNCTIONS: USER / GROUPS
 #    - can_sudo 
 #    - check_group_exists 
 #    - create_user 
+#    - home_directory_for_user_get 
 #    - is_effectively_root 
-#    - get_home_directory_for_user 
-#    - get_ppid_cmd 
 #    - is_user_in_group 
+#    - ppid_command_get 
 #    - user_exists 
 ## END UTILITY FUNCTIONS: USER / GROUPS
 ## BEGIN DISCOVER FUNCTIONS
+#    - discover_environment 
+#    - discover_optional_environment_variable 
+#    - discover_os 
+#    - discover_required_environment_variable 
+#    - epoch_ms_get 
 #    - ff_agent_get_best_ff_agent_uri 
 #    - ff_agent_get_best_ff_content_url 
 #    - ff_agent_get_best_ff_host 
@@ -112,33 +113,27 @@
 #    - ff_agent_get_best_namespace 
 #    - ff_agent_get_best_organization 
 #    - ff_uuid 
-#    - discover_environment 
-#    - discover_optional_environment_variable 
-#    - discover_os 
-#    - discover_required_environment_variable 
-#    - get_epoch_ms 
-#    - get_hardware_architecture 
-#    - get_os_name 
-#    - get_lsb_codename 
-#    - get_lsb_id 
-#    - get_lsb_id_downcase 
-#    - get_lsb_release 
+#    - hardware_architecture_get 
+#    - lsb_codename_get 
+#    - lsb_id_get 
+#    - lsb_id_get_downcase 
+#    - lsb_release_get 
+#    - os_name_get 
 ## END DISCOVER FUNCTIONS
 ## BEGIN SET ENVIRONMENT FUNCTIONS
 #    - check_environment_variables_are_set 
-#    - ff_agent_check_bin_is_in_the_path 
 #    - check_nodejs_installation 
-#    - check_set_get_secret 
-#    - state_check_set_and_get 
-#    - get_current_user 
-#    - get_best_ff_agent_home 
+#    - check_secret_set_get 
+#    - current_user_get 
+#    - ff_agent_check_bin_is_in_the_path 
+#    - ff_agent_home_get_best 
 #    - ff_api_get 
-#    - get_expected_nodejs_version 
 #    - is_framework_api_defined 
-#    - set_environment_is_working 
+#    - nodejs_desired_version_get 
 #    - publish_message 
+#    - set_environment_is_working 
+#    - state_check_set_and_get 
 ## END SET ENVIRONMENT FUNCTIONS
-
 
 ### BEGIN USAGE/HELP FUNCTION
 
@@ -220,7 +215,6 @@ export -f ask_for_value
 #   1 - User answered 'n'.
 #
 ###############################################################################
-
 function ask_for_yn {
     local QUESTION=${1}
     local ANSWER=""
@@ -386,25 +380,22 @@ export -f help
 #
 ###############################################################################
 function help_toc {
-  set_state "${FUNCNAME[0]}" 'started'
 
   # Check FF_AGENT_HOME is set
   ensure_variable_not_empty 'FF_AGENT_HOME' || {
-    set_state "${FUNCNAME[0]}" 'error_ensure_variable_not_empty_ff_agent_home'
+    error "${FUNCNAME[0]}" 'Required variable is not set: FF_AGENT_HOME'
     return 1
   }
 
   # Define path to ff_bash_functions file
   TARGET_FILE="${FF_AGENT_HOME}/git/redwolfsecurity/set_environment/src/ff_bash_functions"
   [ ! -f "${TARGET_FILE}" ] && {
-    set_state "${FUNCNAME[0]}" "error_ff_bash_functions_file_missing"
+    error "${FUNCNAME[0]}" "ff_bash_functions is missing"
     return 1
   }
 
   # Parse ff_bash_functions and generate table of contents
   cat "${TARGET_FILE}" | grep '^### BEGIN\|^### END\|^function' | sed 's/^function /\#    - /g' | sed 's/{//g' | sed 's/###/##/g'
-
-  set_state "${FUNCNAME[0]}" 'success'
 }
 export -f help_toc
 
@@ -450,7 +441,7 @@ function apt_dist_upgrade {
       -yq \
       -o Dpkg::Options::="--force-confdef" \
       -o Dpkg::Options::="--force-confold" \
-      ${FORCE_YES} ${APT_COMMAND} || { set_state "${FUNCNAME[0]}" "failed_to_apt_dist_upgrade"; return 1; }
+      ${FORCE_YES} ${APT_COMMAND} || { error "${FUNCNAME[0]}" "failed_to_apt_dist_upgrade"; return 1; }
 }
 export -f apt_dist_upgrade
 
@@ -716,86 +707,6 @@ export -f apt_upgrade
 #   UTILITY FUNCTIONS: STRINGS
 #
 # NAME
-#   get_version_component - Extracts version components from a semantic version string.
-#
-# SYNOPSIS
-#   get_version_component COMPONENT VERSION
-#
-# DESCRIPTION
-#   Given a semantic version number MAJOR.MINOR.PATCH, this function extracts and
-#   prints one of the three version components (major, minor, patch) to standard output.
-#   It validates the input to ensure that a valid component name and version string are provided.
-#
-# EXAMPLES
-#   VERSION="12.34.56"
-#   MAJOR=$(get_version_component major "${VERSION}")
-#   MINOR=$(get_version_component minor "${VERSION}")
-#   PATCH=$(get_version_component patch "${VERSION}")
-#   echo "Version components: MAJOR:${MAJOR}, MINOR:${MINOR}, PATCH:${PATCH}"
-#
-# EXIT STATUS
-#   0 - Success, component extracted.
-#   1 - Error, due to invalid input or unsupported component name.
-#
-###############################################################################
-function get_version_component {
-
-  # Check we get exactly 2 arguments
-  [ $# -eq 2 ] || { error "${FUNCNAME[0]}" 'error_wrong_number_of_arguments'; return 1; }
-
-  # Get arguments
-  local VERSION_COMPONENT_NAME="$1"
-  local FULL_VERSION="$2"
-
-  # Check we got non-empty arguments
-  [ ! -z ${VERSION_COMPONENT_NAME} ] || { error "${FUNCNAME[0]}" 'error_empty_argument_component_name'; return 1; }
-  [ ! -z ${FULL_VERSION} ] || { error "${FUNCNAME[0]}" 'error_empty_argument_full_version'; return 1; }
-
-  # Define an array of all supported version component names
-  local SUPPORTED_VERSION_COMPONENT_NAMES=("major" "minor" "patch")
-
-  # Check argument: must be 1 of 3 supported: major, minor, patch
-  if ! in_array "${VERSION_COMPONENT_NAME}" "${SUPPORTED_VERSION_COMPONENT_NAMES[@]}"; then
-    error "${FUNCNAME[0]}" 'error_unsupported_version_component_name'
-    return 1
-  fi
-
-  # Extract component version into EXTRACTED_COMPONENT_VERSION
-  case "${VERSION_COMPONENT_NAME}" in
-
-  major)
-    local EXTRACTED_COMPONENT_VERSION=$( echo "${FULL_VERSION}" | cut -d"." -f 1 )
-    ;;
-
-  minor)
-    local EXTRACTED_COMPONENT_VERSION=$( echo "${FULL_VERSION}" | cut -d"." -f 2 )
-    ;;
-
-  patch)
-    local EXTRACTED_COMPONENT_VERSION=$( echo "${FULL_VERSION}" | cut -d"." -f 3 )
-    ;;
-
-  *)
-    # We already checked (the value is in SUPPORTED_VERSION_COMPONENT_NAMES),
-    # but what if "case()" was not updated, then we must error out in our "default" case.
-    error "${FUNCNAME[0]}" 'error_unsupported_version_component_name_case'
-    return 1
-    ;;
-  esac
-  
-  # Check extracted EXTRACTED_COMPONENT_VERSION is not blank
-  [ ! -z "${EXTRACTED_COMPONENT_VERSION}" ] || { error "${FUNCNAME[0]}" 'error_got_empty_component_version'; return 1; }
-
-  # Print result to standard output
-  echo -n "${EXTRACTED_COMPONENT_VERSION}"
-}
-export -f get_version_component
-
-###############################################################################
-# CATEGORY
-#   UTILITY FUNCTIONS: STRINGS
-#
-# NAME
 #   in_array - Checks if a value exists in an array.
 #
 # SYNOPSIS
@@ -832,61 +743,19 @@ export -f in_array
 #   UTILITY FUNCTIONS: STRINGS
 #
 # NAME
-#   index_of - Returns the index of a value in an array, or 255 if not found.
+#   github_repository_url_parse - Parses GitHub repository URLs.
 #
 # SYNOPSIS
-#   index_of NEEDLE HAYSTACK
+#   github_repository_url_parse URL COMPONENT
 #
 # DESCRIPTION
-#   Searches for a value (needle) in an array (haystack) and returns its index.
-#   If the value is not found, returns 255. Note that Bash functions can only return
-#   values in the range of 0-255, hence 255 is used to indicate not found.
-#
-# EXAMPLE
-#   INDEX=$(index_of "search_value" "${array[@]}")
-#   if [ "${INDEX}" -ne 255 ]; then
-#       echo "Value found at index: ${INDEX}"
-#   else
-#       echo "Value not found."
-#   fi
-#
-# EXIT STATUS
-#   0-254 - Index of the value if found.
-#   255 - Value not found in the array.
-#
-###############################################################################
-function index_of {
-    local NEEDLE=${1}
-    declare -a HAYSTACK=("${!2}")
-    for i in "${!HAYSTACK[@]}"; do
-        if [[ "${HAYSTACK[$i]}" == "${NEEDLE}" ]]; then
-            return ${i};
-        fi
-    done
-    
-    # Not found: return -1 (same as 255)
-    return -1;
-}
-export -f index_of
-
-###############################################################################
-# CATEGORY
-#   UTILITY FUNCTIONS: STRINGS
-#
-# NAME
-#   parse_github_repository_url - Parses GitHub repository URLs.
-#
-# SYNOPSIS
-#   parse_github_repository_url URL COMPONENT
-#
-# DESCRIPTION
-#   Extracts and prints specific components (protocol, host, owner, project name)
+#   Extracts and prints specific components (--protocol, --host, --owner, --project-name)
 #   from a GitHub repository URL. Validates input to ensure the URL and component name
 #   are provided. Supports various URL formats, including SSH, HTTPS, and Git protocol URLs.
 #
 # EXAMPLES
 #   URL="git://github.com/some-user/my-repo.git"
-#   OWNER=$(parse_github_repository_url "${URL}" "OWNER")
+#   OWNER=$(github_repository_url_parse "${URL}" --owner)
 #   echo "The owner of the URL '${URL}' is '${OWNER}'."
 #
 # Another example:
@@ -898,18 +767,65 @@ export -f index_of
 #  "https://github.com/some-user/my-repo"
 #  "git@github.com:some-user/my-repo"
 # )
-#
+
 # for URL in "${URLS[@]}"; do
-#     echo "${URL}"
-#     parse_github_repository_url "${URL}" "OWNER"
+#     PROTOCOL=$(github_repository_url_parse "${URL}" --protocol) || { error "Failed to extract protocol from URL: ${URL}"; }
+#     HOST=$(github_repository_url_parse "${URL}" --host) || { error "Failed to extract host from URL: ${URL}"; }
+#     OWNER=$(github_repository_url_parse "${URL}" --owner) || { error "Failed to extract owner from URL: ${URL}"; }
+#     PROJECT_NAME=$(github_repository_url_parse "${URL}" --project-name) || { error "Failed to extract project name from URL: ${URL}"; }
+#     echo -e "${URL}:"
+#     echo -e "\tPROTOCOL=${PROTOCOL}"
+#     echo -e "\tHOST=${HOST}"
+#     echo -e "\tOWNER=${OWNER}"
+#     echo -e "\tPROJECT_NAME=${PROJECT_NAME}"
+#     echo
 # done
+#
+# Example output:
+# git://github.com/some-user/my-repo.git:
+# 	PROTOCOL=git
+# 	HOST=github.com
+# 	OWNER=some-user
+# 	PROJECT_NAME=my-repo
+
+# https://github.com/some-user/my-repo.git:
+# 	PROTOCOL=https
+# 	HOST=github.com
+# 	OWNER=some-user
+# 	PROJECT_NAME=my-repo
+
+# git@github.com:some-user/my-repo.git:
+# 	PROTOCOL=git
+# 	HOST=github.com
+# 	OWNER=some-user
+# 	PROJECT_NAME=my-repo
+
+# git://github.com/some-user/my-repo:
+# 	PROTOCOL=git
+# 	HOST=github.com
+# 	OWNER=some-user
+# 	PROJECT_NAME=my-repo
+
+# https://github.com/some-user/my-repo:
+# 	PROTOCOL=https
+# 	HOST=github.com
+# 	OWNER=some-user
+# 	PROJECT_NAME=my-repo
+
+# git@github.com:some-user/my-repo:
+# 	PROTOCOL=git
+# 	HOST=github.com
+# 	OWNER=some-user
+# 	PROJECT_NAME=my-repo
 #
 # EXIT STATUS
 #   0 - Success, component extracted.
 #   1 - Error, due to failed URL parsing or missing arguments.
 #
 ###############################################################################
-function parse_github_repository_url {
+function github_repository_url_parse {
+
+  # Get arguments
   local URL="${1}"
   local KEY="${2}"
 
@@ -917,7 +833,10 @@ function parse_github_repository_url {
   [ ! -z "${URL}" ] || { return 1; }
   [ ! -z "${KEY}" ] || { return 1; }
 
-  # Define regexp to parse github repository url
+  # Lowercase key
+  KEY="${KEY,,}"
+
+  # Define regexp to parse the github repository url
   re="^(https|git)(:\/\/|@)([^\/:]+)[\/:]([^\/:]+)\/(.+)(.git)*$"
 
   # Parse github repository url
@@ -928,19 +847,19 @@ function parse_github_repository_url {
     OWNER=${BASH_REMATCH[4]}
     PROJECT_NAME=${BASH_REMATCH[5]%.git}
     case "${KEY}" in
-      PROTOCOL)
+      --protocol)
         echo "${PROTOCOL}"
         return 0
         ;;
-      HOST)
+      --host)
         echo "${HOST}"
         return 0
         ;;
-      OWNER)
+      --owner)
         echo "${OWNER}"
         return 0
         ;;
-      PROJECT_NAME)
+      --project-name)
         echo "${PROJECT_NAME}"
         return 0
         ;;
@@ -953,7 +872,90 @@ function parse_github_repository_url {
     return 1
   fi
 }
-export -f parse_github_repository_url
+export -f github_repository_url_parse
+
+###############################################################################
+# CATEGORY
+#   UTILITY FUNCTIONS: STRINGS
+#
+# NAME
+#   semantic_version_parse - Extracts version components from a semantic version string.
+#
+# SYNOPSIS
+#   semantic_version_parse COMPONENT VERSION
+#
+# DESCRIPTION
+#   Given a semantic version number MAJOR.MINOR.PATCH, this function extracts and
+#   prints one of the three version components (major, minor, patch) to standard output.
+#   It validates the input to ensure that a valid component name and version string are provided.
+#
+# EXAMPLES
+#   VERSION="12.34.56"
+#   MAJOR=$(semantic_version_parse --major "${VERSION}")
+#   MINOR=$(semantic_version_parse --minor "${VERSION}")
+#   PATCH=$(semantic_version_parse --patch "${VERSION}")
+#   echo "Version components: MAJOR:${MAJOR}, MINOR:${MINOR}, PATCH:${PATCH}"
+#
+# EXIT STATUS
+#   0 - Success, component extracted.
+#   1 - Error, due to invalid input or unsupported component name.
+#
+###############################################################################
+function semantic_version_parse {
+
+  # Check we get exactly 2 arguments
+  [ $# -eq 2 ] || { error "${FUNCNAME[0]}" 'error_wrong_number_of_arguments'; return 1; }
+
+  # Get arguments
+  local VERSION_COMPONENT_NAME="$1"
+  local FULL_VERSION="$2"
+
+  # Check we got non-empty arguments
+  [ ! -z ${VERSION_COMPONENT_NAME} ] || { error "${FUNCNAME[0]}" 'error_empty_argument_component_name'; return 1; }
+  [ ! -z ${FULL_VERSION} ] || { error "${FUNCNAME[0]}" 'error_empty_argument_full_version'; return 1; }
+
+  # Define an array of all supported version component names
+  local SUPPORTED_VERSION_COMPONENT_NAMES=("--major" "--minor" "--patch")
+
+  # Lowercase argument, so it will work for both "--major" and "--MAJOR"
+  VERSION_COMPONENT_NAME="${VERSION_COMPONENT_NAME,,}"
+
+  # Check argument: must be 1 of 3 supported: major, minor, patch
+  if ! in_array "${VERSION_COMPONENT_NAME}" "${SUPPORTED_VERSION_COMPONENT_NAMES[@]}"; then
+    error "${FUNCNAME[0]}" 'error_unsupported_version_component_name'
+    return 1
+  fi
+
+  # Extract component version into EXTRACTED_COMPONENT_VERSION
+  case "${VERSION_COMPONENT_NAME}" in
+
+  --major)
+    local EXTRACTED_COMPONENT_VERSION=$( echo "${FULL_VERSION}" | cut -d"." -f 1 )
+    ;;
+
+  --minor)
+    local EXTRACTED_COMPONENT_VERSION=$( echo "${FULL_VERSION}" | cut -d"." -f 2 )
+    ;;
+
+  --patch)
+    local EXTRACTED_COMPONENT_VERSION=$( echo "${FULL_VERSION}" | cut -d"." -f 3 )
+    ;;
+
+  *)
+    # We already checked (the value is in SUPPORTED_VERSION_COMPONENT_NAMES),
+    # but what if "case()" was not updated, then we must error out in our "default" case.
+    error "${FUNCNAME[0]}" 'error_unsupported_version_component_name_case'
+    return 1
+    ;;
+  esac
+  
+  # Check extracted EXTRACTED_COMPONENT_VERSION is not blank
+  [ ! -z "${EXTRACTED_COMPONENT_VERSION}" ] || { error "${FUNCNAME[0]}" 'error_got_empty_component_version'; return 1; }
+
+  # Print result to standard output
+  echo -n "${EXTRACTED_COMPONENT_VERSION}"
+}
+export -f semantic_version_parse
 
 ###############################################################################
 # CATEGORY
@@ -987,7 +989,6 @@ export -f parse_github_repository_url
 #   0 - Always succeeds.
 #
 ###############################################################################
-
 function trim_slash {
   for s; do
     sed -E 's:(^/)?/*$:\1:' <<< "${s}"
@@ -1117,12 +1118,8 @@ function does_file_have_eol_at_the_end {
   # Check required arguments are not empty
   [ ! -z "${FILEPATH}" ] || { error "${FUNCNAME[0]}" "error_target_filepath_is_blank"; return ${ERROR_BAD_ARGUMENTS}; }
 
-  # Get "sudo read / write" prefixes
-  local SUDO_READ_FILE_PREFIX
-  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { error "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return ${ERROR_FILE_DOES_NOT_EXIST_OR_CAN_NOT_READ_EVEN_WITH_SUDO}; }
-
   # Check if file is empty
-  if ${SUDO_READ_FILE_PREFIX} [ ! -s "${FILENAME}" ]; then
+  if [ ! -s "${FILENAME}" ]; then
       # Note: For our needs (to avoid concatination of name/value lines) we consider empty file as having EOL (i.e. safe to append more name/values)
       # The file is empty.
       # Note: function does_file_have_eol_at_the_end() got empty file.
@@ -1131,7 +1128,7 @@ function does_file_have_eol_at_the_end {
       return 0
   # -z - true if the length of string is zero
   # -n - true if the length of string is nonzero
-  elif [ -z "$(${SUDO_READ_FILE_PREFIX} tail -c 1 "${FILENAME}" )" ]; then
+  elif [ -z "$( tail -c 1 "${FILENAME}" )" ]; then
       # The file ends with a newline or with a null byte,
       return ${EOL_PRESENT_OR_EMPTY_FILE}
   else
@@ -1187,7 +1184,6 @@ export -f f
 #
 # DESCRIPTION
 #   Searches for a specified regular expression PATTERN within a file at FILEPATH.
-#   If necessary, it escalates privileges using sudo to read the file.
 #   PATTERN - The pattern is the POSIX regular expression:
 #             https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap09.html#tag_09_04
 #             but with platform-specific extensions (which vary in extent and can be incompatible).
@@ -1199,58 +1195,19 @@ export -f f
 # EXIT STATUS
 #   0 - Pattern found.
 #   1 - Pattern not found.
-#   2 - File does not exist.
-#   3 - Incorrect arguments.
-#   4 - Failed to escalate privileges.
 #
 ###############################################################################
 function file_contains_pattern {
+    FILE="${1}"
+    PATTERN="${2}"
 
-  # Define exit codes for different outcomes
-  local PATTERN_FOUND=0
-  local PATTERN_NOT_FOUND=1
-  local ERROR_FILE_DOES_NOT_EXIST=2
-  local ERROR_BAD_ARGUMENTS=3
-  local ERROR_FAILED_TO_GET_SUDO_PREFIX=4
-
-  # Take arguments
-  local FILEPATH="${1}"
-  local PATTERN="${2}"
-
-  # Define list of required environment variables (must be not empty)
-  local ALL_EXPECTED_ENVRIONMENT_VARIABLES=(
-    FILEPATH
-    PATTERN
-  )
-
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${ALL_EXPECTED_ENVRIONMENT_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      error "${FUNCNAME[0]}" "Argument not set: ${VARIABLE_NAME,,}" # Using ,, for lowercase conversion
-      return ${ERROR_BAD_ARGUMENTS}
-    }
-  done
-
-  # Check if we need to use "sudo" prefix to read / write / readwrite (or check file existence) for a given file
-  local SUDO_READ_FILE_PREFIX
-  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return ${ERROR_FAILED_TO_GET_SUDO_PREFIX}; }
-
-  # Check the target file exists
-  if ${SUDO_READ_FILE_PREFIX} [ ! -e "${FILEPATH}" ]; then
-    return ${ERROR_FILE_DOES_NOT_EXIST}
-  fi
-
-  # Search pattern in the file
-  ${SUDO_READ_FILE_PREFIX} grep --quiet --text "${PATTERN}" "${FILEPATH}"
-
-  # Analyze search exit code
-  if [ $? -eq 0 ]; then
-    # Pattern found
-    return ${PATTERN_FOUND}
-  else
-    # Pattern not found
-    return ${PATTERN_NOT_FOUND}
-  fi
+    if [ ! -e "${FILE}" ]; then
+        return 1
+    fi
+    if [  -z "${PATTERN}" ]; then
+        return 1
+    fi
+    grep --quiet --text "${PATTERN}" "${FILE}"
 }
 export -f file_contains_pattern
 
@@ -1347,321 +1304,6 @@ function find_file_owner_in_installed_packages {
 }
 export -f find_file_owner_in_installed_packages
 
-
-
-###############################################################################
-# CATEGORY
-#   UTILITY FUNCTIONS: FILE
-#
-# NAME
-#   get_by_url - Downloads a file from a specified URL.
-#
-# SYNOPSIS
-#   get_by_url URL FILEPATH
-#
-# DESCRIPTION
-#   Downloads a file from the given URL to the specified FILEPATH. If FILEPATH is "-",
-#   the content is printed to standard output. This function is designed for non-interactive
-#   use, handling temporary file creation, download, and cleanup. It sets permissions for
-#   downloaded files to be readable and writable by the owner and readable by the group.
-#   Function sets state to indicate success or error code.
-#   Note: target FILEPATH will be overwritten upon successful completion.
-#
-#   Possible error codes are:
-#      - error_wrong_number_of_arguments
-#      - error_bad_argument_blank_url
-#      - error_bad_argument_blank_filepath
-#      - error_generating_tmp_filepath
-#      - error_downloading_file
-#      - error_bad_http_code_404
-#      - error_bad_http_code_000
-#      - error_printing_file
-#      - error_moving_file
-#      - error_removing_file
-#
-# USAGE EXAMPLE
-#   get_by_url "https://example.com/file.txt" "/path/to/save/file.txt" || { error "${FUNCNAME[0]}" "Failed to download file"; return 1; }
-#   CONTENT=$(get_by_url "https://example.com/text.txt" "-") || { error "${FUNCNAME[0]}" "Failed to download file"; return 1; }
-#
-# EXIT STATUS
-#   0 - Success.
-#   1 - Error occurred (e.g., bad arguments, download failure, etc.).
-#
-###############################################################################
-function get_by_url {
-  # Indicate: function started
-  set_state "${FUNCNAME[0]}" 'started'
-
-  # Check number of arguments: it must be exactly 2
-  [ $# -ne 2 ] && { set_state "${FUNCNAME[0]}" "error_wrong_number_of_arguments"; return 1; }
-
-  # Get/check inputs: URL
-  local URL="$1"
-  [ -z "${URL}" ] && { set_state "${FUNCNAME[0]}" "error_bad_argument_blank_url"; return 1; }
-
-  # TODO: discuss if we want to user regexp to check URL is valid:
-  # https://stackoverflow.com/questions/3183444/check-for-valid-link-url
-
-  # Get/check inputs: FILEPATH
-  local FILEPATH="$2"
-  [ -z "${URL}" ] && { set_state "${FUNCNAME[0]}" "error_bad_argument_blank_filepath"; return 1; }
-
-  # Create a temporary file and store it's filepath to TMP_FILEPATH
-  # It will be used to download the file.
-  # Note: we use "-t" to allow "mktemp" to select temporary folder for us.
-  # The "XXX" in the "mktemp" arguments are template - these will be replaced
-  # with random characters.
-
-  local TMP_FILEPATH
-  TMP_FILEPATH=$(mktemp -t ${FUNCNAME[0]}.XXXXXXX) || { set_state "${FUNCNAME[0]}" "error_generating_tmp_filepath"; return 1; }
-
-  # Chmod file from "-rw-------" to default "-rw-rw-r--" 664
-  chmod 664 "${TMP_FILEPATH}" || { set_state "${FUNCNAME[0]}" "error_chmod_tmp_filepath"; return 1; }
-
-  # Start actual download
-  local HTTP_CODE
-  HTTP_CODE=$(curl \
-  --silent    \
-  --retry 5    \
-  --location    \
-  --retry-delay 1 \
-  --retry-max-time 55 \
-  --max-time 60 \
-  --connect-timeout 12 \
-  -o "${TMP_FILEPATH}" \
-  -w "%{http_code}" \
-  ${URL}) \
-  || { set_state "${FUNCNAME[0]}" 'error_downloading_file'; return 1; }
-
-  # Note: curl return code 0 does not mean successful file download.
-  # We must check the HTTP_CODE has value 200 - that is the only necessary
-  # and sufficient condition of successful file download.
-  #
-  # Example HTTP_CODE values and reasons:
-  #    HTTP_CODE: 000 - one of the possible reasons: failed to resolve domain
-  #    HTTP_CODE: 404 - file was not found on the server by the given URL
-  #
-  [ "${HTTP_CODE}" -eq 200 ] || { set_state "${FUNCNAME[0]}" "error_bad_http_code_${HTTP_CODE}"; return 1; }
-
-  # We have file successfully downloaded file into temporary filepath: ${TMP_FILEPATH}
-  # Now there are 2 cases:
-  #   1) Move that file into ${FILEPATH} provided by user as f-n argument
-  #   or
-  #   2) Print that file to standard output if provided ${FILEPATH} is "-"
-  if [ "${FILEPATH}" == "-" ]; then
-      # Print file to standard output
-      cat "${TMP_FILEPATH}" || { set_state "${FUNCNAME[0]}" 'error_reading_file'; return 1; }
-  else
-      # Move file to desired destination
-      # We use -f to make mv to overwrite whenever possible without asking for any confirmations
-      mv -f "${TMP_FILEPATH}" "${FILEPATH}" || {
-        # If failed to move try with sudo
-        local CURRENT_USER
-        CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" 'error_getting_current_user'; return 1; }
-        if can_sudo "${CURRENT_USER}"; then
-          # Have sudo privileges. Try to move using 'sudo'.
-          sudo mv -f "${TMP_FILEPATH}" "${FILEPATH}" || { set_state "${FUNCNAME[0]}" 'error_moving_file_as_root'; return 1; }
-        else
-          # Don't have sudo privileges
-          set_state "${FUNCNAME[0]}" 'error_moving_file_and_no_sudo_privileges'
-          return 1
-        fi 
-      }
-  fi
-
-  # Clean up: remove temporary file (TODO: in future we might cover "partial download" case if needed)
-  if [ -f "${TMP_FILEPATH}" ]; then
-      rm "${TMP_FILEPATH}" || { set_state "${FUNCNAME[0]}" 'error_removing_file'; return 1; }
-  fi
-
-  # Indicate: function succeed
-  set_state "${FUNCNAME[0]}" 'success'
-}
-export -f get_by_url
-
-###############################################################################
-# CATEGORY
-#   UTILITY FUNCTIONS: FILE
-#
-# NAME
-#   get_sudo_read_file_prefix - Determines if sudo is needed to read a file.
-#
-# SYNOPSIS
-#   get_sudo_read_file_prefix FILEPATH
-#
-# DESCRIPTION
-#   Checks if the current user has read permissions for the specified FILEPATH. 
-#   If not, it checks if sudo can grant read access. If sudo is required, "sudo"
-#   is printed to standard output.
-#
-# USAGE EXAMPLE
-#   SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "/path/to/protected/file.txt") || { error "${FUNCNAME[0]}" "failed to get sudo read file prefix"; return 1; }
-#
-# EXIT STATUS
-#   0 - Success, determined if sudo is needed.
-#   1 - Error, file does not exist or other issue preventing access determination.
-#
-###############################################################################
-function get_sudo_read_file_prefix {
-
-  # Take arguments
-  local FILEPATH="${1}"
-
-  # Check required arguments are not empty
-  [ ! -z "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" "error_target_filepath_is_blank"; return 1; }
-
-## EVEN THIS CHECK MIGHT NEED "sudo"
-## Let us intentionally skip this check, if file does not exist then
-## this f-n return an error: error_target_file_is_not_readable
-## 
-##  # Check file exists
-##  [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 1; }
-  
-  # Check if target file is readable by the current user.
-  # Also set SUDO_READ_FILE_PREFIX="sudo" if file can be read only by "root"
-  local SUDO_READ_FILE_PREFIX=""
-  [ -r "${FILEPATH}" ] || {
-    # The FILEPATH is not readable by the current user, check if current user can_sudo
-    local CURRENT_USER
-    CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" "failed_to_get_current_user"; return 1; }
-    if can_sudo "${CURRENT_USER}"; then
-      # Yes, current uer can_sudo, try with sudo and if successful, then set SUDO_READ_FILE_PREFIX="sudo"
-      sudo [ -r "${FILEPATH}" ] && SUDO_READ_FILE_PREFIX="sudo" || { set_state "${FUNCNAME[0]}" 'error_target_file_is_not_readable'; return 1; }
-    else
-      set_state "${FUNCNAME[0]}" 'error_target_file_is_not_readable'
-      return 1
-    fi
-  }
-
-  # Print result to standard output
-  echo -n "${SUDO_READ_FILE_PREFIX}"
-
-  # Indicate: function succeed
-  set_state "${FUNCNAME[0]}" 'success'
-}
-export -f get_sudo_read_file_prefix
-
-###############################################################################
-# CATEGORY
-#   UTILITY FUNCTIONS: FILE
-#
-# NAME
-#   get_sudo_write_file_prefix - Determines if sudo is needed to write to a file.
-#
-# SYNOPSIS
-#   get_sudo_write_file_prefix FILEPATH
-#
-# DESCRIPTION
-#   Checks if the current user has write permissions for the specified FILEPATH.
-#   If not, it checks if sudo can grant write access. If sudo is required, "sudo"
-#   is printed to standard output.
-#
-# USAGE EXAMPLE
-#   PREFIX=$(get_sudo_write_file_prefix "/path/to/protected/file.txt") || { error "${FUNCNAME[0]}" "failed to get sudo write file prefix"; return 1; }
-#
-# EXIT STATUS
-#   0 - Success, determined if sudo is needed.
-#   1 - Error, file does not exist or other issue preventing access determination.
-#
-###############################################################################
-function get_sudo_write_file_prefix {
-
-  # Take arguments
-  local FILEPATH="${1}"
-
-  # Check required arguments are not empty
-  [ ! -z "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" "error_target_filepath_is_blank"; return 1; }
-
-## EVEN THIS CHECK MIGHT NEED "sudo"
-## Let us intentionally skip this check, if file does not exist then
-## this f-n return an error: error_target_file_is_not_writeable
-## 
-##  # Check file exists
-##  [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 1; }
-  
-  # Check if target file is writable by the current user
-  # Also set SUDO_WRITE_FILE_PREFIX="sudo" if file can be written only by "root"
-  local SUDO_WRITE_FILE_PREFIX=""
-  [ -w "${FILEPATH}" ] || {
-    # The FILEPATH is not writable by the current user, check if current user can_sudo
-    local CURRENT_USER
-    CURRENT_USER="$(get_current_user)" || { set_state "${FUNCNAME[0]}" "failed_to_get_current_user"; return 1; }
-    if can_sudo "${CURRENT_USER}"; then
-      # Yes, current uer can_sudo, try with sudo and if successful, then set SUDO_WRITE_FILE_PREFIX="sudo"
-      sudo [ -w "${FILEPATH}" ] && SUDO_WRITE_FILE_PREFIX="sudo" || { set_state "${FUNCNAME[0]}" 'error_target_file_is_not_writable'; return 1; }
-    else
-      set_state "${FUNCNAME[0]}" 'error_target_file_is_not_writable'
-      return 1
-    fi
-  }
-
-  # Print result to standard output
-  echo -n "${SUDO_WRITE_FILE_PREFIX}"
-
-  # Indicate: function succeed
-  set_state "${FUNCNAME[0]}" 'success'
-}
-export -f get_sudo_write_file_prefix
-
-###############################################################################
-# CATEGORY
-#   UTILITY FUNCTIONS: FILE
-#
-# NAME
-#   get_sudo_readwrite_file_prefix - Determines if sudo is needed for read-write access to a file.
-#
-# SYNOPSIS
-#   get_sudo_readwrite_file_prefix FILEPATH
-#
-# DESCRIPTION
-#   Checks if the current user has read and write permissions for the specified FILEPATH.
-#   If not, it checks if sudo can grant read-write access. If sudo is required, "sudo"
-#   is printed to standard output.
-#
-# USAGE EXAMPLE
-#   PREFIX=$(get_sudo_readwrite_file_prefix "/path/to/protected/file.txt") || { error "${FUNCNAME[0]}" "failed to get sudo read/write file prefix"; return 1; }
-#
-# EXIT STATUS
-#   0 - Success, determined if sudo is needed.
-#   1 - Error, file does not exist or other issue preventing access determination.
-#
-###############################################################################
-function get_sudo_readwrite_file_prefix {
-
-  # Take arguments
-  local FILEPATH="${1}"
-
-  # Check required arguments are not empty
-  [ ! -z "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" "error_target_filepath_is_blank"; return 1; }
-
-## EVEN THIS CHECK MIGHT NEED "sudo"
-## Let us intentionally skip this check, if file does not exist then
-## this f-n return an error: ????
-## 
-##  # Check file exists
-##  [ -f "${FILEPATH}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 1; }
-  
-  # Get "sudo read / write" prefixes
-  local SUDO_READ_FILE_PREFIX
-  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 1; }
-  
-  local SUDO_WRITE_FILE_PREFIX
-  SUDO_WRITE_FILE_PREFIX=$(get_sudo_write_file_prefix "${FILEPATH}") || { set_state "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 1; }
-  
-  # If we need to use "sudo" for either: read or write, then
-  # let's set SUDO_READWRITE_FILE_PREFIX="sudo"
-  if [ "${SUDO_READ_FILE_PREFIX}" == "sudo" ] || [ "${SUDO_READ_FILE_PREFIX}" == "sudo" ]; then
-    local SUDO_READWRITE_FILE_PREFIX="sudo"
-  fi
-
-  # Print result to standard output
-  echo -n "${SUDO_READWRITE_FILE_PREFIX}"
-
-  # Indicate: function succeed
-  set_state "${FUNCNAME[0]}" 'success'
-}
-export -f get_sudo_readwrite_file_prefix
-
 ###############################################################################
 # CATEGORY
 #   UTILITY FUNCTIONS: FILE
@@ -1748,8 +1390,6 @@ function inject_into_file {
     PATTERN
     INJECT_CONTENT
   )
-
-  # Check required environment variables are set
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
       local ERROR_CODE="$( echo "error_empty_argument_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
@@ -1758,23 +1398,12 @@ function inject_into_file {
     }
   done
 
-  # Check if we need to use "sudo" prefix to read / write / readwrite (or check file existence) given file
-  local SUDO_READ_FILE_PREFIX
-  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { error "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 4; }
-  
-  local SUDO_WRITE_FILE_PREFIX
-  SUDO_WRITE_FILE_PREFIX=$(get_sudo_write_file_prefix "${FILEPATH}") || { error "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
-  
-  local SUDO_READWRITE_FILE_PREFIX
-  SUDO_READWRITE_FILE_PREFIX=$(get_sudo_readwrite_file_prefix "${FILEPATH}") || { error "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
-
   # Check the target file exists
-  ${SUDO_READ_FILE_PREFIX} [ -f "${FILEPATH}" ] || { error "${FUNCNAME[0]}" "error_target_file_does_not_exist: '${FILEPATH}'"; return 1; }
+  [ -f "${FILEPATH}" ] || { error "${FUNCNAME[0]}" "error_target_file_does_not_exist: '${FILEPATH}'"; return 1; }
 
   # Check if target file contains the PATTERN.
-  # Note: the file_contains_pattern() will take care of "sudo" prefix
   if ! file_contains_pattern "${FILEPATH}" "${PATTERN}"; then
-    # Expected pattern is missing. Inject text.
+    # Expected pattern is missing. Append text.
 
     # Call function and preserve its return code
     does_file_have_eol_at_the_end "${FILEPATH}"
@@ -1790,14 +1419,14 @@ function inject_into_file {
     if [ ${does_file_have_eol_at_the_end_code} -ne 0 ]; then
       # The ${FILEPATH} file does not have EOL at the end.
       # Add EOL to the end of the file (so our injected line starts from the new line)
-      echo "" | ${SUDO_READ_FILE_PREFIX} tee -a "${FILEPATH}" || {
+      echo "" | tee -a "${FILEPATH}" || {
         error "${FUNCNAME[0]}" "Failed to add missing EOL to the end of the file: ${FILEPATH}"
         return 1
       }
     fi
 
     # Append INJECT_CONTENT to the end of the target file
-    echo "${INJECT_CONTENT}" | ${SUDO_READ_FILE_PREFIX} tee -a "${FILEPATH}" >/dev/null || {
+    echo "${INJECT_CONTENT}" | tee -a "${FILEPATH}" >/dev/null || {
       error "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'
       return 1
     }
@@ -1940,27 +1569,17 @@ function remove_all_lines_by_regexp {
     }
   done
 
-  # Check if we need to use "sudo" prefix to read / write / readwrite (or check file existence) given file
-  local SUDO_READ_FILE_PREFIX
-  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { error "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 4; }
-  
-  local SUDO_WRITE_FILE_PREFIX
-  SUDO_WRITE_FILE_PREFIX=$(get_sudo_write_file_prefix "${FILEPATH}") || { error "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
-  
-  local SUDO_READWRITE_FILE_PREFIX
-  SUDO_READWRITE_FILE_PREFIX=$(get_sudo_readwrite_file_prefix "${FILEPATH}") || { error "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
-
   # Check the target file exists
-  ${SUDO_READ_FILE_PREFIX} [ -f "${FILEPATH}" ] || { error "${FUNCNAME[0]}" "error_target_file_does_not_exist: '${FILEPATH}'"; return 1; }
+  [ -f "${FILEPATH}" ] || { error "${FUNCNAME[0]}" "error_target_file_does_not_exist: '${FILEPATH}'"; return 1; }
 
   # Check if target file is readable
-  if ${SUDO_READ_FILE_PREFIX} [ ! -r "${FILEPATH}" ]; then
+  if [ ! -r "${FILEPATH}" ]; then
     # Error: not enough permissions to read target file
     return 4
   fi
 
   # Check if target file is writable
-  if ${SUDO_WRITE_FILE_PREFIX} [ ! -w "${FILEPATH}" ]; then
+  if [ ! -w "${FILEPATH}" ]; then
     # Error: not enough permissions to write target file
     return 5
   fi
@@ -1970,29 +1589,29 @@ function remove_all_lines_by_regexp {
   # not spill output to stderr/stdout. We might enrich return error with more details later
   # (examaple: bad syntax in the used regex).
   local GREP_OUTPUT
-  GREP_OUTPUT=$( ${SUDO_READ_FILE_PREFIX} grep --quiet "${REGEX}" "${FILEPATH}" 2>&1 )
+  GREP_OUTPUT=$( grep --quiet "${REGEX}" "${FILEPATH}" 2>&1 )
   local EXIT_CODE
   EXIT_CODE=${?}
 
   # Check if the pattern is found
   if [ ${EXIT_CODE} -eq 1 ]; then
     # The pattern match not found
-    error "${FUNCNAME[0]}" 'error_pattern_match_not_found'
+    error "${FUNCNAME[0]}" 'Pattern not found'
     return 6
   fi
   if [ ${EXIT_CODE} -gt 1 ]; then
     # Error: 7 - failed to search by given pattern.
-    error "${FUNCNAME[0]}" 'failed_to_search_by_given_pattern'
+    error "${FUNCNAME[0]}" 'Failed to search by given pattern'
     return 7
   fi
 
   # Take a note on the current number of lines
   local LINE_COUNT_BEFORE_CHANGE
-  LINE_COUNT_BEFORE_CHANGE="$( ${SUDO_READ_FILE_PREFIX} cat "${FILEPATH}" | wc -l )" || { error "${FUNCNAME[0]}" 'failed_to_count_lines_before_edit'; return 1; }
+  LINE_COUNT_BEFORE_CHANGE="$( cat "${FILEPATH}" | wc -l )" || { error "${FUNCNAME[0]}" 'failed_to_count_lines_before_edit'; return 1; }
 
   # Found line in the target file. Edit file:
   local EDITOR_OUTPUT
-  EDITOR_OUTPUT=$( ${SUDO_READWRITE_FILE_PREFIX} sed -i "/${REGEX}/d" "${FILEPATH}" 2>&1 )
+  EDITOR_OUTPUT=$( sed -i "/${REGEX}/d" "${FILEPATH}" 2>&1 )
 
   # Check if stream editor error out.
   # Example: bad pattern would return code=1 and error message: sed: -e expression #1, char 8: unterminated address regex
@@ -2006,7 +1625,7 @@ function remove_all_lines_by_regexp {
 
   # Count the number of deleted lines
   # Note: sed always return 0, so it won't let us know how many changes were done
-  LINE_COUNT_AFTER_CHANGE="$( ${SUDO_READ_FILE_PREFIX} cat "${FILEPATH}" | wc -l )" || { error "${FUNCNAME[0]}" 'failed_to_count_lines_after_edit'; return 1; }
+  LINE_COUNT_AFTER_CHANGE="$( cat "${FILEPATH}" | wc -l )" || { error "${FUNCNAME[0]}" 'failed_to_count_lines_after_edit'; return 1; }
   local DELETED_LINES_COUNT
   DELETED_LINES_COUNT=$(( LINE_COUNT_BEFORE_CHANGE - LINE_COUNT_AFTER_CHANGE ))
 
@@ -2086,22 +1705,12 @@ function replace_all_lines_by_regexp {
       return 1
     }
   done
-
-  # Check if we need to use "sudo" prefix to read / write / readwrite (or check file existence) given file
-  local SUDO_READ_FILE_PREFIX
-  SUDO_READ_FILE_PREFIX=$(get_sudo_read_file_prefix "${FILEPATH}") || { error "${FUNCNAME[0]}" "failed_to_get_sudo_read_file_prefix"; return 4; }
   
-  # local SUDO_WRITE_FILE_PREFIX
-  # SUDO_WRITE_FILE_PREFIX=$(get_sudo_write_file_prefix "${FILEPATH}") || { error "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
-  
-  local SUDO_READWRITE_FILE_PREFIX
-  SUDO_READWRITE_FILE_PREFIX=$(get_sudo_readwrite_file_prefix "${FILEPATH}") || { error "${FUNCNAME[0]}" "failed_to_get_sudo_write_file_prefix"; return 5; }
-
   # Check the target file exists
-  ${SUDO_READ_FILE_PREFIX} [ -f "${FILEPATH}" ] || { error "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 3; }
+  [ -f "${FILEPATH}" ] || { error "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 3; }
 
   # Try to find by given regexp
-  GREP_OUTPUT=$( ${SUDO_READ_FILE_PREFIX} grep --quiet "${REGEX}" "${FILEPATH}" 2>&1 )
+  GREP_OUTPUT=$( grep --quiet "${REGEX}" "${FILEPATH}" 2>&1 )
   EXIT_CODE=${?}
 
   # Check if the pattern is found
@@ -2126,7 +1735,7 @@ function replace_all_lines_by_regexp {
   fi
 
   # Create a temporary copy of the target file before editing it
-  ${SUDO_READ_FILE_PREFIX} cp "${FILEPATH}" "${ORIGINAL_FILE_COPY}"
+  cp "${FILEPATH}" "${ORIGINAL_FILE_COPY}"
   if [ ${?} -ne 0 ]; then
     # Failed to copy file ${FILEPATH} to temporary file ${ORIGINAL_FILE_COPY}
     error "${FUNCNAME[0]}" 'failed_to_copy_target_to_temporary_file'
@@ -2134,7 +1743,7 @@ function replace_all_lines_by_regexp {
   fi
 
   # We found line(s) in the target file. Edit file:
-  EDITOR_OUTPUT=$( ${SUDO_READWRITE_FILE_PREFIX} sed -i "s/${REGEX}/${INJECT_CONTENT}/g" "${FILEPATH}" 2>&1 )
+  EDITOR_OUTPUT=$( sed -i "s/${REGEX}/${INJECT_CONTENT}/g" "${FILEPATH}" 2>&1 )
 
   # Check if stream editor error out.
   # Example: bad pattern would return code=1 and error message: sed: -e expression #1, char 8: unterminated address regex
@@ -2150,7 +1759,7 @@ function replace_all_lines_by_regexp {
 
   # Count the number of modified lines
   # Note: sed always return 0, so it won't let us know how many changes were done unless we count "before" and "after"
-  MODIFIED_LINES_COUNT=$( ${SUDO_READ_FILE_PREFIX} diff "${FILEPATH}" "${ORIGINAL_FILE_COPY}" | grep '^<' | wc -l ) || { error "${FUNCNAME[0]}" 'failed_to_calculate_difference_after_edit'; return 13; }
+  MODIFIED_LINES_COUNT=$( diff "${FILEPATH}" "${ORIGINAL_FILE_COPY}" | grep '^<' | wc -l ) || { error "${FUNCNAME[0]}" 'failed_to_calculate_difference_after_edit'; return 13; }
 
   # Remove temporary file
   rm "${ORIGINAL_FILE_COPY}" || { error "${FUNCNAME[0]}" 'error_removing_temporary_file'; return 12; }
@@ -2191,6 +1800,7 @@ export -f replace_all_lines_by_regexp
 #
 # EXIT STATUS
 #   Success if the pattern is found in any file; failure otherwise.
+#
 ###############################################################################
 function s {
 #!/bin/bash -
@@ -2243,24 +1853,28 @@ function truncate_file {
   # Check filename is not blank
   if [ "${FILEPATH}" == "" ]; then
     # Error: missing target filename
+    error "${FUNCNAME[0]}" 'Missing filename argument'
     return 2
   fi
 
   # Check file exists
   if [ ! -f "${FILEPATH}" ]; then
     # Error: file does not exist
+    error "${FUNCNAME[0]}" "File does not exist: '${FILEPATH}'"
     return 3
   fi
 
   # Check if target file is readable
   if [ ! -r "${FILEPATH}" ]; then
     # Error: not enough permissions to read target file
+    error "${FUNCNAME[0]}" "Insufficient permissions to read file: '${FILEPATH}'"
     return 4
   fi
 
   # Check if target file is writable
   if [ ! -w "${FILEPATH}" ]; then
     # Error: not enough permissions to write target file
+    error "${FUNCNAME[0]}" "Insufficient permissions to write file: '${FILEPATH}'"
     return 5
   fi
 
@@ -2268,7 +1882,7 @@ function truncate_file {
   if [ -s "${FILEPATH}" ]; then
     # File is not empty.
     # Warning: don't "sudo" here, for files with permissions like "-rw-rw-r--" truncate won't have access by root user
-    truncate --size=0 "${FILEPATH}" || { set_state "${FUNCNAME[0]}" 'error_trancating_file'; return 1; }
+    truncate --size=0 "${FILEPATH}" || { error "${FUNCNAME[0]}" "Failed to truncate file: '${FILEPATH}'"; return 1; }
   else
     # File is already empty
     return 0
@@ -2277,10 +1891,141 @@ function truncate_file {
   # Final check: file must have zero size now
   if [ -s file ]; then
     # Error: File is not empty after truncation
+    error "${FUNCNAME[0]}" "File is not empty after truncation: '${FILEPATH}'"
     return 6
   fi
 }
 export -f truncate_file
+
+###############################################################################
+# CATEGORY
+#   UTILITY FUNCTIONS: FILE
+#
+# NAME
+#   url_get - Downloads a file from a specified URL.
+#
+# SYNOPSIS
+#   url_get URL FILEPATH
+#
+# DESCRIPTION
+#   Downloads a file from the given URL to the specified FILEPATH. If FILEPATH is "-",
+#   the content is printed to standard output. This function is designed for non-interactive
+#   use, handling temporary file creation, download, and cleanup. It sets permissions for
+#   downloaded files to be readable and writable by the owner and readable by the group.
+#   Function sets state to indicate success or error code (because it is a complex multi-step function).
+#   Note: target file FILEPATH will be overwritten upon successful completion.
+#
+#   Possible error codes are:
+#      - error_wrong_number_of_arguments
+#      - error_bad_argument_blank_url
+#      - error_bad_argument_blank_filepath
+#      - error_generating_tmp_filepath
+#      - error_downloading_file
+#      - error_bad_http_code_404
+#      - error_bad_http_code_000
+#      - error_printing_file
+#      - error_moving_file
+#      - error_removing_file
+#
+# USAGE EXAMPLE
+#   url_get "https://example.com/file.txt" "/path/to/save/file.txt" || { error "${FUNCNAME[0]}" "Failed to download file"; return 1; }
+#   CONTENT=$(url_get "https://example.com/text.txt" "-") || { error "${FUNCNAME[0]}" "Failed to download file"; return 1; }
+#
+# EXIT STATUS
+#   0 - Success.
+#   1 - Error occurred (e.g., bad arguments, download failure, etc.).
+#
+###############################################################################
+function url_get {
+  # Indicate: function started
+  state_set "${FUNCNAME[0]}" 'started'
+
+  # Check number of arguments: it must be exactly 2
+  [ $# -ne 2 ] && { state_set "${FUNCNAME[0]}" "error_wrong_number_of_arguments"; return 1; }
+
+  # Get/check inputs: URL
+  local URL="$1"
+  [ -z "${URL}" ] && { state_set "${FUNCNAME[0]}" "error_bad_argument_blank_url"; return 1; }
+
+  # TODO: discuss if we want to user regexp to check URL is valid:
+  # https://stackoverflow.com/questions/3183444/check-for-valid-link-url
+
+  # Get/check inputs: FILEPATH
+  local FILEPATH="$2"
+  [ -z "${URL}" ] && { state_set "${FUNCNAME[0]}" "error_bad_argument_blank_filepath"; return 1; }
+
+  # Create a temporary file and store it's filepath to TMP_FILEPATH
+  # It will be used to download the file.
+  # Note: we use "-t" to allow "mktemp" to select temporary folder for us.
+  # The "XXX" in the "mktemp" arguments are template - these will be replaced
+  # with random characters.
+
+  local TMP_FILEPATH
+  TMP_FILEPATH=$(mktemp -t ${FUNCNAME[0]}.XXXXXXX) || { state_set "${FUNCNAME[0]}" "error_generating_tmp_filepath"; return 1; }
+
+  # Chmod file from "-rw-------" to default "-rw-rw-r--" 664
+  chmod 664 "${TMP_FILEPATH}" || { state_set "${FUNCNAME[0]}" "error_chmod_tmp_filepath"; return 1; }
+
+  # Start actual download
+  local HTTP_CODE
+  HTTP_CODE=$(curl \
+  --silent    \
+  --retry 5    \
+  --location    \
+  --retry-delay 1 \
+  --retry-max-time 55 \
+  --max-time 60 \
+  --connect-timeout 12 \
+  -o "${TMP_FILEPATH}" \
+  -w "%{http_code}" \
+  ${URL}) \
+  || { state_set "${FUNCNAME[0]}" 'error_downloading_file'; return 1; }
+
+  # Note: curl return code 0 does not mean successful file download.
+  # We must check the HTTP_CODE has value 200 - that is the only necessary
+  # and sufficient condition of successful file download.
+  #
+  # Example HTTP_CODE values and reasons:
+  #    HTTP_CODE: 000 - one of the possible reasons: failed to resolve domain
+  #    HTTP_CODE: 404 - file was not found on the server by the given URL
+  #
+  [ "${HTTP_CODE}" -eq 200 ] || { state_set "${FUNCNAME[0]}" "error_bad_http_code_${HTTP_CODE}"; return 1; }
+
+  # We have file successfully downloaded file into temporary filepath: ${TMP_FILEPATH}
+  # Now there are 2 cases:
+  #   1) Move that file into ${FILEPATH} provided by user as f-n argument
+  #   or
+  #   2) Print that file to standard output if provided ${FILEPATH} is "-"
+  if [ "${FILEPATH}" == "-" ]; then
+      # Print file to standard output
+      cat "${TMP_FILEPATH}" || { state_set "${FUNCNAME[0]}" 'error_reading_file'; return 1; }
+  else
+      # Move file to desired destination
+      # We use -f to make mv to overwrite whenever possible without asking for any confirmations
+      mv -f "${TMP_FILEPATH}" "${FILEPATH}" || {
+        # If failed to move try with sudo
+        local CURRENT_USER
+        CURRENT_USER="$(current_user_get)" || { state_set "${FUNCNAME[0]}" 'error_getting_current_user'; return 1; }
+        if can_sudo "${CURRENT_USER}"; then
+          # Have sudo privileges. Try to move using 'sudo'.
+          sudo mv -f "${TMP_FILEPATH}" "${FILEPATH}" || { state_set "${FUNCNAME[0]}" 'error_moving_file_as_root'; return 1; }
+        else
+          # Don't have sudo privileges
+          state_set "${FUNCNAME[0]}" 'error_moving_file_and_no_sudo_privileges'
+          return 1
+        fi 
+      }
+  fi
+
+  # Clean up: remove temporary file (TODO: in future we might cover "partial download" case if needed)
+  if [ -f "${TMP_FILEPATH}" ]; then
+      rm "${TMP_FILEPATH}" || { state_set "${FUNCNAME[0]}" 'error_removing_file'; return 1; }
+  fi
+
+  # Indicate: function succeed
+  state_set "${FUNCNAME[0]}" 'success'
+}
+export -f url_get
 
 ### END UTILITY FUNCTIONS: FILE
 
@@ -2308,13 +2053,14 @@ export -f truncate_file
 #
 # EXIT STATUS
 #   Exits the script with status 1.
+#
 ###############################################################################
 function abort {
     error "abort called - aborting ${@}"
 
     # Check if the SERVICE is set (not blank string), then also set corresponding state
     if [ ! -z "${SERVICE}" ]; then
-        set_state ${SERVICE} abort
+        state_set ${SERVICE} abort
     fi
     exit 1
 }
@@ -2341,6 +2087,7 @@ export -f abort
 #
 # EXIT STATUS
 #   Does not return if the command fails; otherwise, continues script execution.
+#
 ###############################################################################
 function assert_clean_exit {
   #echo "TRY: ${@}"
@@ -2437,7 +2184,6 @@ export -f error
 #   log "Update process started."
 #
 ###############################################################################
-
 function log {
 
   # Check if optional environment SERVICE is defined, then use it as a tag for logger
@@ -2453,10 +2199,26 @@ function log {
 export -f log
 
 ###############################################################################
-# Category: UTILITY FUNCTIONS: LOGGING / PROCESS CONTROl
-# Auxilary function to produce human-readable output in standard output describing
-# currently executed "step". Function takes arbitrary number of arguments.
-# 
+# CATEGORY
+#   UTILITY FUNCTIONS: LOGGING / PROCESS CONTROL
+#
+# NAME
+#   step
+#
+# SYNOPSIS
+#   step [message]
+#
+# DESCRIPTION
+#   Outputs a formatted message to standard output, visually highlighting the
+#   current step of a process. The function takes an arbitrary number of arguments,
+#   which are concatenated into a single message. This message is then framed
+#   with lines to distinguish it as a significant step in the terminal output,
+#   enhancing readability during script execution or debugging.
+#
+# EXAMPLES
+#   step "Initializing database migration..."
+#
+###############################################################################
 function step {
 cat <<EOT
 
@@ -2488,13 +2250,14 @@ export -f step
 #
 # EXIT STATUS
 #   Exits the script with status 0.
+#
 ###############################################################################
 function successful_exit {
 
   # Check if SERVICE is defined
   if [ "${SERVICE}" != "" ]; then
     local SERVICE_SUFFIX="${SERVICE}_"
-    set_state "${SERVICE_SUFFIX}last_run_state" success
+    state_set "${SERVICE_SUFFIX}last_run_state" success
   fi
 
   exit 0
@@ -2541,10 +2304,33 @@ export -f warning
 #   UTILITY FUNCTIONS: TERMINAL / SHELL
 #
 # NAME
-#   set_bash_echo_on - Enables verbose bash echo.
+#   bash_echo_off_set - Disables verbose bash echo.
 #
 # SYNOPSIS
-#   set_bash_echo_on
+#   bash_echo_off_set
+#
+# DESCRIPTION
+#   Deactivates the bash 'set +x' option, stopping the printing of executed
+#   commands before their execution.
+#
+# EXAMPLES
+#   bash_echo_off_set
+#
+###############################################################################
+function bash_echo_off_set {
+  set +x
+}
+export -f bash_echo_off_set
+
+###############################################################################
+# CATEGORY
+#   UTILITY FUNCTIONS: TERMINAL / SHELL
+#
+# NAME
+#   bash_echo_on_set - Enables verbose bash echo.
+#
+# SYNOPSIS
+#   bash_echo_on_set
 #
 # DESCRIPTION
 #   Activates the bash 'set -x' option, which prints all executed commands
@@ -2552,103 +2338,80 @@ export -f warning
 #   scripts.
 #
 # EXAMPLES
-#   set_bash_echo_on
+#   bash_echo_on_set
 #
 ###############################################################################
-function set_bash_echo_on {
+function bash_echo_on_set {
   set -x
 }
-export -f set_bash_echo_on
+export -f bash_echo_on_set
 
 ###############################################################################
 # CATEGORY
 #   UTILITY FUNCTIONS: TERMINAL / SHELL
 #
 # NAME
-#   set_bash_echo_off - Disables verbose bash echo.
+#   bash_echo_setting_get - Preserves current bash echo settings.
 #
 # SYNOPSIS
-#   set_bash_echo_off
-#
-# DESCRIPTION
-#   Deactivates the bash 'set +x' option, stopping the printing of executed
-#   commands before their execution.
-#
-# EXAMPLES
-#   set_bash_echo_off
-#
-###############################################################################
-function set_bash_echo_off {
-  set +x
-}
-export -f set_bash_echo_off
-
-###############################################################################
-# CATEGORY
-#   UTILITY FUNCTIONS: TERMINAL / SHELL
-#
-# NAME
-#   get_bash_echo_setting - Preserves current bash echo settings.
-#
-# SYNOPSIS
-#   get_bash_echo_setting
+#   bash_echo_setting_get
 #
 # DESCRIPTION
 #   Returns a string indicating whether bash xtrace (verbose echo) is
 #   enabled, allowing the current setting to be restored later using
-#   set_bash_echo_setting.
+#   bash_echo_setting_set.
 #
 # EXAMPLES
-#   BASH_ECHO_SETTINGS=$(get_bash_echo_setting)
-#   set_bash_echo_on
+#   BASH_ECHO_SETTINGS=$(bash_echo_setting_get)
+#   bash_echo_on_set
 #   # ...some operations...
-#   set_bash_echo_setting "${BASH_ECHO_SETTINGS}"
+#   bash_echo_setting_set "${BASH_ECHO_SETTINGS}"
 #
 ###############################################################################
-function get_bash_echo_setting {
+function bash_echo_setting_get {
   # Preserve current xtrace state
   if is_shell_attribute_set x; then
     echo -n " XTRACE_ENABLED "
   fi
 }
-export -f get_bash_echo_setting
+export -f bash_echo_setting_get
 
 ###############################################################################
 # CATEGORY
 #   UTILITY FUNCTIONS: TERMINAL / SHELL
 #
 # NAME
-#   set_bash_echo_setting - Restores or sets bash echo settings.
+#   bash_echo_setting_set - Restores or sets bash echo settings.
 #
 # SYNOPSIS
-#   set_bash_echo_setting [XTRACE_ENABLED]
+#   bash_echo_setting_set [XTRACE_ENABLED]
 #
 # DESCRIPTION
 #   Restores bash echo settings based on the provided argument. The settings
-#   string, potentially obtained from get_bash_echo_setting, dictates whether
+#   string, potentially obtained from bash_echo_setting_get, dictates whether
 #   to enable or disable bash xtrace.
 #
 # EXAMPLES
-#   BASH_ECHO_SETTINGS=$(get_bash_echo_setting)
-#   set_bash_echo_on
+#   BASH_ECHO_SETTINGS=$(bash_echo_setting_get)
+#   bash_echo_on_set
 #   # ...some operations...
-#   set_bash_echo_setting "${BASH_ECHO_SETTINGS}"
+#   bash_echo_setting_set "${BASH_ECHO_SETTINGS}"
 #
 ###############################################################################
-function set_bash_echo_setting {
+function bash_echo_setting_set {
   # Get all provided arguments (it supports multiple arguments)
   local BASH_ECHO_SETTINGS="${@}"
 
   # Check if arguments have XTRACE_ENABLED
   if [[ "${BASH_ECHO_SETTINGS}" =~ XTRACE_ENABLED ]]; then
     # Enable bash tracing
-    set_bash_echo_on
+    bash_echo_on_set
   else
     # Disable bash tracing
-    set_bash_echo_off
+    bash_echo_off_set
   fi
 }
-export -f set_bash_echo_setting
+export -f bash_echo_setting_set
 
 
 ###############################################################################
@@ -2671,6 +2434,7 @@ export -f set_bash_echo_setting
 # EXIT STATUS
 #   0 - Variable is defined.
 #   1 - Variable is not defined or function encountered an error.
+#
 ###############################################################################
 function ensure_variable_defined {
   
@@ -2714,6 +2478,7 @@ export -f ensure_variable_defined
 # EXIT STATUS
 #   0 - Variable is defined and not empty.
 #   1 - Variable is undefined or empty, or function encountered an error.
+#
 ###############################################################################
 function ensure_variable_not_empty {
   local NAME="${1}"
@@ -2950,25 +2715,21 @@ export -f terminal_reset
 #
 ###############################################################################
 function process_is_running_as_me {
-    set_state "${FUNCNAME[0]}" 'started'
     local COMMAND_PATTERN="${1}"
-    [ ! -z "${COMMAND_PATTERN}" ] || { set_state "${FUNCNAME[0]}" 'error_require_pattern_to_search_for'; return 1; }
+    [ ! -z "${COMMAND_PATTERN}" ] || { error "${FUNCNAME[0]}" 'error_require_pattern_to_search_for'; return 1; }
 
     # We require PS and GREP commands
     local PS
-    PS=$( command_exists ps ) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_ps_command'; return 1; }
+    PS=$( command_exists ps ) || { error "${FUNCNAME[0]}" 'error_dependency_not_met_ps_command'; return 1; }
 
     local GREP
-    GREP=$( command_exists grep ) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_grep_command'; return 1; }
+    GREP=$( command_exists grep ) || { error "${FUNCNAME[0]}" 'error_dependency_not_met_grep_command'; return 1; }
 
-    # Get current user. Note: the ${USER} environment is NOT set when running as 'root' in docker, we must use f-n get_current_user() instead.
+    # Get current user. Note: the ${USER} environment is NOT set when running as 'root' in docker, we must use f-n current_user_get() instead.
     local CURRENT_USER
-    CURRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
+    CURRENT_USER="$(current_user_get)" || { error "Can not get current user"; return 1; }
 
     ${PS} -u "${CURRENT_USER}" -U "${CURRENT_USER}" o command | ${GREP} --silent -e "^${COMMAND_PATTERN}"
-    STATUS=${?}
-    set_state "${FUNCNAME[0]}" 'success'
-    return ${STATUS}
 }
 export -f process_is_running_as_me
 
@@ -2999,6 +2760,7 @@ export -f process_is_running_as_me
 #   0 - Command executed successfully within the given attempts.
 #   Non-zero - Command failed after all attempts or bad arguments Error printed to standard error.
 #              Note: the error code will be actual command exit code returned on the last failed attempt.
+#
 ###############################################################################
 function retry_command {
 
@@ -3116,73 +2878,6 @@ export -f generate_strong_password
 #   UTILITY FUNCTIONS: PROCESS
 #
 # NAME
-#   get_state - Retrieves a previously set state by its name.
-#
-# SYNOPSIS
-#   get_state state_name
-#
-# DESCRIPTION
-#   Attempts to read a named state's value from a dedicated storage location,
-#   printing the value to standard output if found. The function aims to preserve
-#   bash echo settings while performing its operation to maintain script verbosity
-#   control.
-#
-# EXAMPLES
-#   CURRENT_STATE=$(get_state "operation_status")
-#
-# EXIT STATUS
-#   0 - State found and printed to standard output.
-#   1 - State not found or an error occurred.
-###############################################################################
-function get_state {
-
-  # Preserve current bash echo settings and enable bash echo setting
-  BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_bash_echo_settings'; return 1; }
-
-  set_bash_echo_off || { set_state "${FUNCNAME[0]}" 'failed_to_set_bash_echo_off'; return 1; } # Disable xtrace to avoid priting secrets
-
-  # Get 1 argument: state name
-  STATE_NAME="${1}"
-
-  # Check state name isn't
-  [ ! -z "${STATE_NAME}" ] || { error "get_state(): blank state name argument"; return 1; }
-
-  # Check if state name contains any prohibited symbols, then error out.
-  [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { error "get_state(): illigal characters in the state name argument: '${BASH_REMATCH[1]}'"; return 1; }
-
-  # Make sure "${FF_AGENT_HOME}" is not empty
-  if [ -z "${FF_AGENT_HOME}" ]; then
-      error "Can not set state. FF_AGENT_HOME variable not defined. State would have been set to ${STATE_NAME}=${VALUE}"
-      set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-      return 1
-  fi
-
-  # Construct path to the state file
-  STATE_DIR="${FF_AGENT_HOME}/state"
-  STATE_FILE="${STATE_DIR}/${STATE_NAME}"
-
-  # Check if state file exists
-  if [ -f "${STATE_FILE}" ]; then
-    # State file found, try to print it's content and preserve result code
-    VALUE="$( cat "${STATE_FILE}" )"
-    EXIT_CODE=${?}
-    # Print value to standard output
-    echo -n "${VALUE}"
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    return ${EXIT_CODE}
-  else
-    # Error: state file not found. Restore xtrace and eturn code 1
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    return 1
-  fi
-}
-export -f get_state
-
-###############################################################################
-# CATEGORY
-#   UTILITY FUNCTIONS: PROCESS
-#
-# NAME
 #   secret_get - Retrieves a secret value by its key.
 #
 # SYNOPSIS
@@ -3204,21 +2899,22 @@ export -f get_state
 # EXIT STATUS
 #   0 - Secret found and printed to standard output.
 #   1 - Secret not found, or an error occurred, including missing dependencies.
+#
 ###############################################################################
 function secret_get {
   
   # Dependency check: 'tr' is installed
   if ! command_exists tr >/dev/null; then
-    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
+    state_set "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
     return 1
   fi
 
   # Preserve current bash echo settings and enable bash echo setting
-  BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { set_state "${FUNCNAME[0]}" 'failed_to_get_bash_echo_settings'; return 1; }
+  BASH_ECHO_SETTINGS=$( bash_echo_setting_get ) || { state_set "${FUNCNAME[0]}" 'failed_to_bash_echo_setting_gets'; return 1; }
 
-  set_state "${FUNCNAME[0]}" 'started'
+  state_set "${FUNCNAME[0]}" 'started'
 
-  set_bash_echo_off || { set_state "${FUNCNAME[0]}" 'failed_to_set_bash_echo_off'; return 1; } # Disable xtrace to avoid priting secrets
+  bash_echo_off_set || { state_set "${FUNCNAME[0]}" 'failed_to_bash_echo_off_set'; return 1; } # Disable xtrace to avoid priting secrets
 
   local KEY="${1}"
 
@@ -3227,21 +2923,21 @@ function secret_get {
 
   # Check if KEY contains any prohibited symbols, then error out.
   [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { 
-    set_state "${FUNCNAME[0]}" 'error_bad_argument_illigal_charaacters_in_key'
+    state_set "${FUNCNAME[0]}" 'error_bad_argument_illigal_charaacters_in_key'
     return 1
   }
 
   # Check if FF_AGENT_HOME is not empty
   if [ "${FF_AGENT_HOME}" == "" ]; then
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    set_state "${FUNCNAME[0]}" 'error_ff_agent_home_not_set'
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    state_set "${FUNCNAME[0]}" 'error_ff_agent_home_not_set'
     return 1
   fi
 
   # Check if key is not empty
   if [ "${KEY}" == "" ]; then
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    set_state "${FUNCNAME[0]}" 'error_empty_key'
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    state_set "${FUNCNAME[0]}" 'error_empty_key'
     return 1
   fi
 
@@ -3249,19 +2945,19 @@ function secret_get {
   # Let's run cleanup only once (upon 1st call) and set the flag to avoid any futher cleaning ups during this run.
   # Note: -z - true if the length of string is zero
   #       -n - true if the length of string is nonzero
-  if [ -z "${GET_SECRET_WIPE_NULLS_RUN_ONCE_FLAG}" ]; then
+  if [ -z "${SECRET_GET_WIPE_NULLS_RUN_ONCE_FLAG}" ]; then
       # Note: --files-with-matches - Suppress normal output; instead print the  name  of  each  input
       #                              file  from  which  output would normally have been printed.  The
       #                              scanning will stop on the first match.
       grep --files-with-matches null "${FF_AGENT_HOME}/secrets/*" 2>/dev/null | xargs rm 2>/dev/null
-      GET_SECRET_WIPE_NULLS_RUN_ONCE_FLAG="any non empty string can be 'a flag'"
+      SECRET_GET_WIPE_NULLS_RUN_ONCE_FLAG="any non empty string can be 'a flag'"
   fi
 
   # Case: requested key already exists in ff_agent "secrets/" folder
   if [ -e "${FF_AGENT_HOME}/secrets/${KEY}" ]; then
       cat "${FF_AGENT_HOME}/secrets/${KEY}"
-      set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-      set_state "${FUNCNAME[0]}" 'success'
+      bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+      state_set "${FUNCNAME[0]}" 'success'
       return
   fi
 
@@ -3274,8 +2970,8 @@ function secret_get {
       #       -n - true if the length of string is nonzero
       if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
           echo ${VALUE}
-          set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-          set_state "${FUNCNAME[0]}" 'success'
+          bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+          state_set "${FUNCNAME[0]}" 'success'
           return
       fi
 
@@ -3286,8 +2982,8 @@ function secret_get {
         VALUE=$( sudo cat /var/lib/cloud/instance/user-data.txt | jq -r '.[] | select(.mime_type == "agent/configuration") | .roles[] | select(.role_name == "AgentRole") | .services[] | select(.service_name == "ActionManager") | .control_api_user' )
         if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
             echo ${VALUE}
-            set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-            set_state "${FUNCNAME[0]}" 'success'
+            bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+            state_set "${FUNCNAME[0]}" 'success'
             return
         fi
       fi
@@ -3296,8 +2992,8 @@ function secret_get {
         VALUE=$( sudo cat /var/lib/cloud/instance/user-data.txt | jq -r '.[] | select(.mime_type == "agent/configuration") | .roles[] | select(.role_name == "AgentRole") | .services[] | select(.service_name == "ActionManager") | .control_api_password' )
         if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
             echo ${VALUE}
-            set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-            set_state "${FUNCNAME[0]}" 'success'
+            bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+            state_set "${FUNCNAME[0]}" 'success'
             return
         fi
       fi
@@ -3310,8 +3006,8 @@ function secret_get {
       #       -n - true if the length of string is nonzero
       if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
           echo ${VALUE}
-          set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-          set_state "${FUNCNAME[0]}" 'success'
+          bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+          state_set "${FUNCNAME[0]}" 'success'
           return
       fi
   fi
@@ -3321,9 +3017,9 @@ function secret_get {
   if [ -e "${USER_DATA}" ]; then
     VALUE=$( cat "${USER_DATA}" | jq ".${KEY}" | cut -d'"' -f2 )
       if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
-          set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+          bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
           echo ${VALUE}
-          set_state "${FUNCNAME[0]}" 'success'
+          state_set "${FUNCNAME[0]}" 'success'
           return
       fi
   fi
@@ -3332,9 +3028,9 @@ function secret_get {
   if [ -f /etc/ff/configuration/user_data.json ]; then
       VALUE=$( sudo cat /etc/ff/configuration/user_data.json | jq '.[] | select(.mime_type=="agent/configuration")' | jq -r ".${KEY}" | grep -v -e '^null$' )
       if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
-          set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+          bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
           echo ${VALUE}
-          set_state "${FUNCNAME[0]}" 'success'
+          state_set "${FUNCNAME[0]}" 'success'
           return
       fi
   fi
@@ -3347,9 +3043,9 @@ function secret_get {
     # Store "agent" to proper unified place for secrets, so we don't have to look for it in random places again next time.
     if [ ! -z "${FF_AGENT_URI}" ]; then
       secret_set ff_agent_uri "${FF_AGENT_URI}"
-      set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+      bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
       echo "${FF_AGENT_URI}"
-      set_state "${FUNCNAME[0]}" 'success'
+      state_set "${FUNCNAME[0]}" 'success'
       return
     fi
   fi
@@ -3362,15 +3058,15 @@ function secret_get {
           VALUE=$( grep -i "^${KEY}=" ${ENVPATH}/* | cut -d= -f2 | head -1 )
           if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
               echo ${VALUE}
-              set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-              set_state "${FUNCNAME[0]}" 'success'
+              bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+              state_set "${FUNCNAME[0]}" 'success'
               return
           fi
       fi
   done
 
-  set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-  set_state "${FUNCNAME[0]}" 'failed_to_find_secret_value'
+  bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+  state_set "${FUNCNAME[0]}" 'failed_to_find_secret_value'
   return 1
 }
 export -f secret_get
@@ -3400,13 +3096,14 @@ export -f secret_get
 # EXIT STATUS
 #   0 - Secret successfully set.
 #   1 - Error occurred, such as missing dependencies or failure to write the secret.
+#
 ###############################################################################
 function secret_set {
 
   # Preserve current bash echo settings and enable bash echo setting
-  BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { error "${FUNCNAME[0]}" 'failed_to_get_bash_echo_settings'; return 1; }
+  BASH_ECHO_SETTINGS=$( bash_echo_setting_get ) || { error "${FUNCNAME[0]}" 'failed_to_bash_echo_setting_gets'; return 1; }
 
-  set_bash_echo_off || { error "${FUNCNAME[0]}" 'failed_to_set_bash_echo_off'; return 1; } # Disable xtrace to avoid priting secrets
+  bash_echo_off_set || { error "${FUNCNAME[0]}" 'failed_to_bash_echo_off_set'; return 1; } # Disable xtrace to avoid priting secrets
 
   # Get arguments
   local URI="${1}"
@@ -3414,28 +3111,28 @@ function secret_set {
 
   # Check FF_AGENT_HOME is set
   [ ! -z "${FF_AGENT_HOME}" ] || {
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     error "${FUNCNAME[0]}" 'error_envirnment_not_set_ff_agent_home'
     return 1
   }
 
   # Check URI is not blank
   [ ! -z "${URI}" ] || {
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     error "${FUNCNAME[0]}" 'error_blank_uri_argument'
     return 1
   }
 
   # Check if URI contains any prohibited symbols, then error out.
   [[ ! "${URI}" =~ ([^a-z0-9_]+) ]] || {
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     error "${FUNCNAME[0]}" 'error_illigal_characters_in_uri_argument'
     return 1
   }
 
   # Check SECRET is not empty
   if [ -z "${SECRET}" ]; then
-      set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+      bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
       error "${FUNCNAME[0]}" 'error_bad_argument_secret'
       return 1
   fi
@@ -3443,7 +3140,7 @@ function secret_set {
   # Create secrets directory
   local SECRET_DIRECTORY="${FF_AGENT_HOME}/secrets"
   mkdir -p "${SECRET_DIRECTORY}" || {
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     error "${FUNCNAME[0]}" 'failed_to_create_secrets_directory'
     return 1
   }
@@ -3454,7 +3151,7 @@ function secret_set {
     return 1
   }
 
-  set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+  bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
 }
 export -f secret_set
 
@@ -3463,10 +3160,78 @@ export -f secret_set
 #   UTILITY FUNCTIONS: PROCESS
 #
 # NAME
-#   set_state - Sets a named state with a specified value.
+#   state_get - Retrieves a previously set state by its name.
 #
 # SYNOPSIS
-#   set_state state_name value
+#   state_get state_name
+#
+# DESCRIPTION
+#   Attempts to read a named state's value from a dedicated storage location,
+#   printing the value to standard output if found. The function aims to preserve
+#   bash echo settings while performing its operation to maintain script verbosity
+#   control.
+#
+# EXAMPLES
+#   CURRENT_STATE=$(state_get "operation_status")
+#
+# EXIT STATUS
+#   0 - State found and printed to standard output.
+#   1 - State not found or an error occurred.
+#
+###############################################################################
+function state_get {
+
+  # Preserve current bash echo settings and enable bash echo setting
+  BASH_ECHO_SETTINGS=$( bash_echo_setting_get ) || { error "${FUNCNAME[0]}" 'failed_to_bash_echo_setting_gets'; return 1; }
+
+  bash_echo_off_set || { error "${FUNCNAME[0]}" 'failed_to_bash_echo_off_set'; return 1; } # Disable xtrace to avoid priting secrets
+
+  # Get 1 argument: state name
+  STATE_NAME="${1}"
+
+  # Check state name isn't
+  [ ! -z "${STATE_NAME}" ] || { error "state_get(): blank state name argument"; return 1; }
+
+  # Check if state name contains any prohibited symbols, then error out.
+  [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { error "state_get(): illigal characters in the state name argument: '${BASH_REMATCH[1]}'"; return 1; }
+
+  # Make sure "${FF_AGENT_HOME}" is not empty
+  if [ -z "${FF_AGENT_HOME}" ]; then
+      error "Can not set state. FF_AGENT_HOME variable not defined. State would have been set to ${STATE_NAME}=${VALUE}"
+      bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+      return 1
+  fi
+
+  # Construct path to the state file
+  STATE_DIR="${FF_AGENT_HOME}/state"
+  STATE_FILE="${STATE_DIR}/${STATE_NAME}"
+
+  # Check if state file exists
+  if [ -f "${STATE_FILE}" ]; then
+    # State file found, try to print it's content and preserve result code
+    VALUE="$( cat "${STATE_FILE}" )"
+    EXIT_CODE=${?}
+    # Print value to standard output
+    echo -n "${VALUE}"
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    return ${EXIT_CODE}
+  else
+    # Error: state file not found. Restore xtrace and eturn code 1
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    return 1
+  fi
+}
+export -f state_get
+
+###############################################################################
+# CATEGORY
+#   UTILITY FUNCTIONS: PROCESS
+#
+# NAME
+#   state_set - Sets a named state with a specified value.
+#
+# SYNOPSIS
+#   state_set state_name value
 #
 # DESCRIPTION
 #   Stores a named state's value, providing a mechanism for tracking script
@@ -3483,30 +3248,27 @@ export -f secret_set
 #    polute the states set space).
 #
 # EXAMPLES
-#   set_state "some_function_name" "success"
-#   set_state "${FUNCNAME[0]}" "bad_arguments"
+#   state_set "some_function_name" "success"
+#   state_set "${FUNCNAME[0]}" "bad_arguments"
 #
 # EXIT STATUS
 #   0 - State successfully set.
 #   1 - Error occurred, such as a missing 'FF_AGENT_HOME' variable or illegal characters in input.
-###############################################################################
-
-# Note: each call to "set_state()" will also generate a JSON wich will be published
-# by calling "publish_message()".
 #
-function set_state {
+###############################################################################
+function state_set {
 
   # Get 2 arguments: state and value
   local STATE_NAME="${1}"
   local STATE_VALUE="${2}"
 
   # Check state name / value aren't blank
-  [ ! -z "${STATE_NAME}" ] || { error "set_state(): blank state name argument"; return 1; }
-  [ ! -z "${STATE_VALUE}" ] || { error "set_state(): blank state value argument"; return 1; }
+  [ ! -z "${STATE_NAME}" ] || { error "state_set(): blank state name argument"; return 1; }
+  [ ! -z "${STATE_VALUE}" ] || { error "state_set(): blank state value argument"; return 1; }
 
   # Check if state name / vaue contains any prohibited symbols, then error out.
-  [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { error "set_state(): illigal characters in the state name argument: '${BASH_REMATCH[1]}'"; return 1; }
-  [[ ! "${STATE_VALUE}" =~ ([^a-z0-9_]+) ]] || { error "set_state(): illigal characters in the state value argument: '${BASH_REMATCH[1]}'"; return 1; }
+  [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { error "state_set(): illigal characters in the state name argument: '${BASH_REMATCH[1]}'"; return 1; }
+  [[ ! "${STATE_VALUE}" =~ ([^a-z0-9_]+) ]] || { error "state_set(): illigal characters in the state value argument: '${BASH_REMATCH[1]}'"; return 1; }
   
   # Make sure "${FF_AGENT_HOME}" is not empty
   if [ -z "${FF_AGENT_HOME}" ]; then
@@ -3541,10 +3303,10 @@ function set_state {
   fi
 
   # Get current epoch time
-  local TIMESTAMP_EPOCH_MS="$( get_epoch_ms )"
+  local TIMESTAMP_EPOCH_MS="$( epoch_ms_get )"
   
   # Check if we actually got non-empty string?
-  [ ! -z "${TIMESTAMP_EPOCH_MS}" ] || { error "${FUNCNAME[0]}: failed_to_get_epoch_ms"; return 1; }
+  [ ! -z "${TIMESTAMP_EPOCH_MS}" ] || { error "${FUNCNAME[0]}: failed_to_epoch_ms_get"; return 1; }
   
   # If state value contains: success|running, then: "is_success": true
   # else
@@ -3650,7 +3412,7 @@ EOF
     ff_metric --metric-name="${STATE_NAME}" --metric-value=1 --tag=state:"${STATE_VALUE}" --tag=is_error:"${IS_ERROR}"
   fi
 }
-export -f set_state
+export -f state_set
 
 ### END UTILITY FUNCTIONS: STATE/SECRETS
 
@@ -3681,6 +3443,7 @@ export -f set_state
 # EXIT STATUS
 #   0 - User can execute sudo commands.
 #   1 - User cannot execute sudo commands or an error occurred.
+#
 ###############################################################################
 function can_sudo {
     local USER_TO_CHECK="${1}"
@@ -3736,6 +3499,7 @@ export -f can_sudo
 # EXIT STATUS
 #   0 - Group exists.
 #   1 - Group does not exist or function was called without arguments.
+#
 ###############################################################################
 function check_group_exists {
   # Take argument
@@ -3777,6 +3541,7 @@ export -f check_group_exists
 #   0 - User successfully created.
 #   1 - User not created due to missing username, insufficient privileges,
 #       or other errors.
+#
 ###############################################################################
 function create_user {
   local USERNAME="${1}"
@@ -3790,6 +3555,44 @@ function create_user {
 	return 1
 }
 export -f create_user
+
+###############################################################################
+# CATEGORY
+#   UTILITY FUNCTIONS: USER / GROUPS
+#
+# NAME
+#   home_directory_for_user_get - Retrieves the home directory for a specified user.
+#
+# SYNOPSIS
+#   home_directory_for_user_get username
+#
+# DESCRIPTION
+#   Looks up and returns the home directory of the specified user. This can
+#   be useful for scripts that need to perform operations within user-specific
+#   directories or need to resolve user paths dynamically.
+#
+# DEPENDENCIES
+#   Depends on 'getent' command; may not be available on all operating systems.
+#
+# EXAMPLES
+#   HOME_DIR=$(home_directory_for_user_get "john_doe")
+#   echo "John Doe's home directory is ${HOME_DIR}."
+#
+# EXIT STATUS
+#   0 - Home directory found and printed to standard output.
+#   1 - Home directory not found or function encountered an error.
+#
+###############################################################################
+function home_directory_for_user_get {
+    # TODO: OSX doesn't have getent. Find Equivalent
+    HOME_DIR=$( getent passwd "${1}" | cut -d: -f6 )
+    if [ -z "${HOME_DIR}" ]; then
+        return 1
+    else
+        echo "${HOME_DIR}"
+    fi
+}
+export -f home_directory_for_user_get
 
 ###############################################################################
 # CATEGORY
@@ -3814,6 +3617,7 @@ export -f create_user
 # EXIT STATUS
 #   0 - The script/command is running with root privileges.
 #   1 - The script/command is not running with root privileges.
+#
 ###############################################################################
 function is_effectively_root {
     if  [ "${EUID}" -eq 0 ]; then
@@ -3823,75 +3627,6 @@ function is_effectively_root {
     fi
 }
 export -f is_effectively_root
-
-###############################################################################
-# CATEGORY
-#   UTILITY FUNCTIONS: USER / GROUPS
-#
-# NAME
-#   get_home_directory_for_user - Retrieves the home directory for a specified user.
-#
-# SYNOPSIS
-#   get_home_directory_for_user username
-#
-# DESCRIPTION
-#   Looks up and returns the home directory of the specified user. This can
-#   be useful for scripts that need to perform operations within user-specific
-#   directories or need to resolve user paths dynamically.
-#
-# DEPENDENCIES
-#   Depends on 'getent' command; may not be available on all operating systems.
-#
-# EXAMPLES
-#   HOME_DIR=$(get_home_directory_for_user "john_doe")
-#   echo "John Doe's home directory is ${HOME_DIR}."
-#
-# EXIT STATUS
-#   0 - Home directory found and printed to standard output.
-#   1 - Home directory not found or function encountered an error.
-###############################################################################
-function get_home_directory_for_user {
-    # TODO: OSX doesn't have getent. Find Equivalent
-    HOME_DIR=$( getent passwd "${1}" | cut -d: -f6 )
-    if [ -z "${HOME_DIR}" ]; then
-        return 1
-    else
-        echo "${HOME_DIR}"
-    fi
-}
-export -f get_home_directory_for_user
-
-###############################################################################
-# CATEGORY
-#   UTILITY FUNCTIONS: USER / GROUPS
-#
-# NAME
-#   get_ppid_cmd - Retrieves the command line of the parent process.
-#
-# SYNOPSIS
-#   get_ppid_cmd
-#
-# DESCRIPTION
-#   Extracts and prints the command line used to start the current process's
-#   parent. This can be useful for debugging or for scripts that need to
-#   behave differently based on how they were invoked.
-#
-# EXAMPLES
-#   # Get the parent process command
-#   PARENT_CMD=$(get_ppid_cmd)
-#   echo "The parent process command is: ${PARENT_CMD}"
-#
-#   # Check if your parent process is nodejs
-#   if [ $( get_ppid_cmd | grep --text -c node ) -gt "0" ]
-#
-# EXIT STATUS
-#   There is no specific exit status; the command line is printed to standard output.
-###############################################################################
-function get_ppid_cmd {
-    local PPID_CMD=$( cat /proc/${PPID}/cmdline )
-    echo "${PPID_CMD}"
-}
-export -f get_ppid_cmd
 
 ###############################################################################
 # CATEGORY
@@ -3915,6 +3650,7 @@ export -f get_ppid_cmd
 # EXIT STATUS
 #   0 - User is a member of the group.
 #   1 - User is not a member of the group or function was called with missing arguments.
+#
 ###############################################################################
 function is_user_in_group {
   local USERNAME="${1}"
@@ -3928,6 +3664,39 @@ function is_user_in_group {
   fi
 }
 export -f is_user_in_group
+
+###############################################################################
+# CATEGORY
+#   UTILITY FUNCTIONS: USER / GROUPS
+#
+# NAME
+#   ppid_command_get - Retrieves the command line of the parent process.
+#
+# SYNOPSIS
+#   ppid_command_get
+#
+# DESCRIPTION
+#   Extracts and prints the command line used to start the current process's
+#   parent. This can be useful for debugging or for scripts that need to
+#   behave differently based on how they were invoked.
+#
+# EXAMPLES
+#   # Get the parent process command
+#   PARENT_CMD=$(ppid_command_get)
+#   echo "The parent process command is: ${PARENT_CMD}"
+#
+#   # Check if your parent process is nodejs
+#   if [ $( ppid_command_get | grep --text -c node ) -gt "0" ]
+#
+# EXIT STATUS
+#   There is no specific exit status; the command line is printed to standard output.
+#
+###############################################################################
+function ppid_command_get {
+    local PPID_CMD=$( cat /proc/${PPID}/cmdline )
+    echo "${PPID_CMD}"
+}
+export -f ppid_command_get
 
 ###############################################################################
 # CATEGORY
@@ -3956,6 +3725,7 @@ export -f is_user_in_group
 # EXIT STATUS
 #   0 - User exists.
 #   1 - User does not exist or function was called without arguments.
+#
 ###############################################################################
 function user_exists {
     # TODO: OSX doesn't have getent. Find Equivalent
@@ -3972,296 +3742,6 @@ export -f user_exists
 
 
 ### BEGIN DISCOVER FUNCTIONS
-
-###############################################################################
-# CATEGORY
-#   DISCOVERY
-#
-# NAME
-#   ff_agent_get_best_ff_agent_uri - Determines the best FF_AGENT_URI value.
-#
-# SYNOPSIS
-#   ff_agent_get_best_ff_agent_uri
-#
-# DESCRIPTION
-#   Attempts to discover or generate the best FF_AGENT_URI value. If the environment
-#   variable FF_AGENT_URI is not set, a new URI is generated using a UUID. The result
-#   is either taken from the environment, discovered through secrets, or generated anew.
-#
-# DEPENDENCIES
-#   Requires 'uuidgen' for generating new URIs if not previously set.
-#
-# EXAMPLES
-#   FF_AGENT_URI=$( ff_agent_get_best_ff_agent_uri ) || { set_state "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_agent_uri"; return 1; }
-#
-# EXIT STATUS
-#   0 - Success, FF_AGENT_URI chosen and printed to standard output.
-#   1 - Failure, unable to determine FF_AGENT_URI.
-###############################################################################
-function ff_agent_get_best_ff_agent_uri {
-
-  # Try to get FF_AGENT_URI from environment or by secret_get()
-  discover_optional_environment_variable "FF_AGENT_URI" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable"; return 1; }
-
-  # Check if variable already set. If not set - generate new uuid
-  if [ -z "${FF_AGENT_URI}" ]; then
-      # Generate new uuid, check errors, export new value
-      local UUID
-      UUID="$( ff_uuid )" || { error "${FUNCNAME[0]}" "failed_to_generate_new_uuid"; return 1; }
-      FF_AGENT_URI="/agent/agent_uuid/${UUID}"
-  fi
-
-  # At this point we must have not empty FF_AGENT_URI value.
-  # Make sure the variable is now not empty or error out.
-  ensure_variable_not_empty 'FF_AGENT_URI' || { error "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_agent_uri"; return 1; }
-
-  # Print result to standard output, set state to 'success' and return success code.
-  echo "${FF_AGENT_URI}"
-}
-export -f ff_agent_get_best_ff_agent_uri
-
-###############################################################################
-# CATEGORY
-#   DISCOVERY
-#
-# NAME
-#   ff_agent_get_best_ff_content_url - Determines the best FF_CONTENT_URL value.
-#
-# SYNOPSIS
-#   ff_agent_get_best_ff_content_url
-#
-# DESCRIPTION
-#   Chooses the best FF_CONTENT_URL value by trying to retrieve it from the environment
-#   or adjusting it for proper usage. This is important for ensuring that content URLs
-#   are correctly formatted and accessible.
-#
-# EXAMPLES
-#   FF_CONTENT_URL=$( ff_agent_get_best_ff_content_url ) || { set_state "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_content_url"; return 1; }
-#  
-# EXIT STATUS
-#   0 - Success, FF_CONTENT_URL chosen and printed to standard output.
-#   1 - Failure, unable to determine FF_CONTENT_URL.
-###############################################################################
-function ff_agent_get_best_ff_content_url {
-
-  # Try to get FF_CONTENT_URL from environment or by secret_get()
-  discover_optional_environment_variable "FF_CONTENT_URL" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable"; return 1; }
-
-  # Remove trailing slash from FF_CONTENT_URL, so it works correctly when we concatenate
-  # FF_CONTENT_URL with other path components (e.g.: ${}/subfolder/file.txt)
-  # Note: its save to call trim_slash() even if FF_CONTENT_URL is empty at this step.
-  FF_CONTENT_URL="$( trim_slash "${FF_CONTENT_URL}" )" || { error "${FUNCNAME[0]}" "error_trim_slash_from_ff_content_url"; return 1; }
-
-  # Make sure the variable is now not empty or error out.
-  ensure_variable_not_empty 'FF_CONTENT_URL' || { error "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_content_url"; return 1; }
-
-  # Print result to standard output, set state to 'success' and return success code.
-  echo "${FF_CONTENT_URL}"
-}
-export -f ff_agent_get_best_ff_content_url
-
-###############################################################################
-# CATEGORY
-#   DISCOVERY
-#
-# NAME
-#   ff_agent_get_best_ff_host - Determines the best FF_HOST value.
-#
-# SYNOPSIS
-#   ff_agent_get_best_ff_host
-#
-# DESCRIPTION
-#   Chooses the best FF_HOST value by trying to retrieve it from the environment
-#   or using the hostname command. This ensures that the FF_HOST value accurately
-#   reflects the host's identity within the system or network.
-#
-# EXAMPLES
-#   UPLOAD_TO=$( ff_agent_get_best_ff_host ) || { set_state "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_host"; return 1; }
-#
-# EXIT STATUS
-#   0 - Success, FF_HOST chosen and printed to standard output.
-#   1 - Failure, unable to determine FF_HOST.
-###############################################################################
-function ff_agent_get_best_ff_host {
-
-  # Try to get FF_HOST from environment or by secret_get()
-  discover_optional_environment_variable "FF_HOST" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_host"; return 1; } # Note: FF_HOST: FF_HOST will be set to legacy portal hostname if this is a portal.
-
-  # Check if variable already set. If not try to get it's value by command 'hostname'
-  [ -z "${FF_HOST}" ] && { FF_HOST="$( hostname )"; }
-
-  # Make sure the variable is now not empty or error out.
-  ensure_variable_not_empty 'FF_HOST' || { error "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_host"; return 1; }
-
-  # Print result to standard output, set state to 'success' and return success code.
-  echo "${FF_HOST}"
-}
-export -f ff_agent_get_best_ff_host
-
-###############################################################################
-# CATEGORY
-#   DISCOVERY
-#
-# NAME
-#   ff_agent_get_best_ff_port - Determines the best FF_PORT value.
-#
-# SYNOPSIS
-#   ff_agent_get_best_ff_port
-#
-# DESCRIPTION
-#   Chooses the best FF_PORT value by trying to retrieve it from the environment
-#   or defaulting to a standard port if not explicitly defined. This is key for
-#   ensuring that connections and communications are made over the correct port.
-#
-# EXAMPLES
-#   FF_PORT=$(ff_agent_get_best_ff_port) || { set_state "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_port"; return 1; }
-#
-# EXIT STATUS
-#   0 - Success, FF_PORT chosen and printed to standard output.
-#   1 - Failure, unable to determine FF_PORT.
-###############################################################################
-function ff_agent_get_best_ff_port {
-  FF_PORT_DEFAULT=443
-
-  # Try to get FF_PORT from environment or by secret_get()
-  discover_optional_environment_variable "FF_PORT" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_port"; return 1; }
-
-  # Check if variable already set. If not then use default
-  [ -z "${FF_PORT}" ] && { FF_PORT="${FF_PORT_DEFAULT}"; }
-
-  # Print result to standard output, set state to 'success' and return success code.
-  echo "${FF_PORT}"
-}
-export -f ff_agent_get_best_ff_port
-
-###############################################################################
-# CATEGORY
-#   DISCOVERY
-#
-# NAME
-#   ff_agent_get_best_namespace - Determines the best NAMESPACE value.
-#
-# SYNOPSIS
-#   ff_agent_get_best_namespace
-#
-# DESCRIPTION
-#   Chooses the best NAMESPACE value by trying to retrieve it from the environment
-#   or defaulting to a predefined namespace. This ensures that the agent operates
-#   within the correct namespace context.
-#
-# EXAMPLES
-#   NAMESPACE=$(ff_agent_get_best_namespace) || { set_state "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_namespace"; return 1; }
-#
-# EXIT STATUS
-#   0 - Success, NAMESPACE chosen and printed to standard output.
-#   1 - Failure, unable to determine NAMESPACE.
-###############################################################################
-function ff_agent_get_best_namespace {
-
-  # Try to get value from environment or by secret_get()
-  discover_optional_environment_variable "NAMESPACE" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_namespace"; return 1; }
-
-  # Check if variable already set. If not set it to our default "system.local" namespace: '00000000-0000-0000-0000-000000000000'.
-  [ -z "${NAMESPACE}" ] && { NAMESPACE='00000000-0000-0000-0000-000000000000'; }
-
-  # Make sure the variable is now not empty or error out.
-  ensure_variable_not_empty 'NAMESPACE' || { error "${FUNCNAME[0]}" "error_ensure_variable_not_empty_namespace"; return 1; }
-
-  # Print result to standard output, set state to 'success' and return success code.
-  echo "${NAMESPACE}"
-}
-export -f ff_agent_get_best_namespace
-
-###############################################################################
-# CATEGORY
-#   DISCOVERY
-#
-# NAME
-#   ff_agent_get_best_organization - Determines the best ORGANIZATION value.
-#
-# SYNOPSIS
-#   ff_agent_get_best_organization
-#
-# DESCRIPTION
-#   Chooses the best ORGANIZATION value by trying to retrieve it from the environment
-#   or defaulting to a predefined organization. This is crucial for ensuring that the
-#   agent is associated with the correct organizational context.
-#
-# EXAMPLES
-#   ORGANIZATION=$(ff_agent_get_best_organization) || {
-#     set_state "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_organization"; return 1;
-#   }
-#
-# EXIT STATUS
-#   0 - Success, ORGANIZATION chosen and printed to standard output.
-#   1 - Failure, unable to determine ORGANIZATION.
-###############################################################################
-function ff_agent_get_best_organization {
-
-  # Try to get value from environment or by secret_get()
-  discover_optional_environment_variable "ORGANIZATION" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_organization"; return 1; }
-
-  # Check if variable already set. If not set it to our default organization "system.local"
-  [ -z "${ORGANIZATION}" ] && { ORGANIZATION='system.local'; }
-
-  # Make sure the variable is now not empty or error out.
-  ensure_variable_not_empty 'ORGANIZATION' || { error "${FUNCNAME[0]}" "error_ensure_variable_not_empty_organization"; return 1; }
-
-  # Print result to standard output, set state to 'success' and return success code.
-  echo "${ORGANIZATION}"
-}
-export -f ff_agent_get_best_organization
-
-###############################################################################
-# CATEGORY
-#   DISCOVERY
-#
-# NAME
-#   ff_uuid - Generates a unique UUID.
-#
-# SYNOPSIS
-#   ff_uuid
-#
-# DESCRIPTION
-#   Generates a universally unique identifier (UUID) using the uuidgen command.
-#   This function is a utility to provide unique identifiers for various use cases
-#   within the system.
-#
-# DEPENDENCIES
-#   Requires the uuidgen command; attempts to install if not present.
-#
-# EXAMPLES
-#   NEW_UUID=$(ff_uuid) || {
-#     set_state "${FUNCNAME[0]}" "failed_to_ff_uuid"; return 1;
-#   }
-#
-# EXIT STATUS
-#   0 - Success, UUID generated and printed to standard output.
-#   1 - Failure, unable to generate UUID.
-###############################################################################
-function ff_uuid {
-
-  # Check dependency: "uuidgen" we need to make sure it is installed ('uuidgen' is part of 'uuid-runtime' package)
-  if ! command_exists uuidgen >/dev/null; then
-
-    # Try to install missing dependency
-    apt_update >/dev/null
-    [ $? -ne 0 ] || { error "uuidgen is missing and failed to apt_update"; return 1; }
-
-    apt_install uuid-runtime >/dev/null  # Note: we mute output of apt-install otherwise it will be mixed into the ff_uuid() function result!
-    [ $? -ne 0 ] || { error "uuidgen is missing and failed to apt_install it"; return 1; }
-
-    # Check again
-    if ! command_exists uuidgen >/dev/null; then
-      # Still failing to find uuidgen, return error
-      return 1
-    fi
-  fi
-
-  # Generate uuid and return it's exit code as a return code
-  uuidgen
-}
-export -f ff_uuid
 
 ###############################################################################
 # CATEGORY
@@ -4287,6 +3767,7 @@ export -f ff_uuid
 # EXIT STATUS
 #   0 - Success, environment discovered and initialized.
 #   1 - Failure, unable to fully discover or initialize the environment.
+#
 ###############################################################################
 function discover_environment {
 
@@ -4295,13 +3776,13 @@ function discover_environment {
   #
   # Choose proper user to run as create "ff_agent" folder (known as ${FF_AGENT_HOME}).
   # The proper user is not root but user with sudo that can install packages.
-  # We need to get_best_ff_agent_home before we can set/get secrets.
+  # We need to ff_agent_home_get_best before we can set/get secrets.
   # This sets some of environment variables: FF_AGENT_USERNAME, FF_AGENT_HOME.
   # Also creates FF_AGENT_HOME directory.
   # Baseline installer must set the following environment variables:
-  #  [x] FF_AGENT_USERNAME  (see get_best_ff_agent_home())
-  #  [x] FF_AGENT_USER_HOME (see get_best_ff_agent_home())
-  #  [x] FF_AGENT_HOME      (see get_best_ff_agent_home())
+  #  [x] FF_AGENT_USERNAME  (see ff_agent_home_get_best())
+  #  [x] FF_AGENT_USER_HOME (see ff_agent_home_get_best())
+  #  [x] FF_AGENT_HOME      (see ff_agent_home_get_best())
   #  [x] FF_AGENT_URI (see ff_agent_get_best_ff_agent_uri())
   #  [x] FF_HOST (see ff_agent_get_best_ff_host())
   #  [x] FF_CONTENT_URL (see ff_agent_get_best_ff_content_url())
@@ -4319,7 +3800,7 @@ function discover_environment {
   #  FF_PROXY_USERNAME
   #  FF_PROXY_PASSWORD
   #
-  get_best_ff_agent_home || { abort "failed_to_get_best_ff_agent_home"; }
+  ff_agent_home_get_best || { abort "failed_to_ff_agent_home_get_best"; }
   assert_ff_agent_home_exists || { abort "failed_to_assert_ff_agent_home_exists"; }
 
   # Get best values, check errors, export and secret_set().
@@ -4349,10 +3830,6 @@ function discover_environment {
   FF_PORT=$( ff_agent_get_best_ff_port )               || { abort "failed_to_ff_agent_get_best_ff_port"; }
   secret_set ff_port "${FF_PORT}"
   export FF_PORT
-
-  # ######################################################################
-  # # Discover set of "ff environment" variables
-  # discover_ff_environment || { set_state "${FUNCNAME[0]}" "failed_to_discover_ff_environment"; return 1; }
 
 }
 export -f discover_environment
@@ -4426,6 +3903,7 @@ export -f discover_environment
 #
 # SEE ALSO
 #   discover_required_environment_variable
+#
 ###############################################################################
 function discover_optional_environment_variable {
   local NAME="${1}"
@@ -4489,12 +3967,13 @@ export -f discover_optional_environment_variable
 #
 # EXIT STATUS
 #   Echoes the identified operating system family or word "unknown" if it was not identified.
+#
 ###############################################################################
 function discover_os {
 
     local OS_FAMILY="unknown"
 
-    # Detect the platform based on "OSTYPE" variable
+    # Detect the platform based on "OSTYPE" variable. E.g. on a mac it might be 'darwin22.1.0'
     case "${OSTYPE}" in
     darwin*)  OS_FAMILY="macos" ;;
     linux*)   OS_FAMILY="linux" ;;
@@ -4507,14 +3986,17 @@ function discover_os {
 
     # If OS_FAMILY still not set, try to detect the platform based on "uname" output
     if [ "${OS_FAMILY}" == "unknown" ]; then
-        OS="`uname`"
+        OS=$( uname )
+        ## If the uname command fails, we don't know the OS, so we set it to unknown, which will work with the case below.
+        [[ $? == 0 ]] || { OS='unknown'; }
+
         case ${OS} in
         'Linux') OS_FAMILY='linux' ;;
         'FreeBSD') OS_FAMILY='bsd' ;;
         'WindowsNT') OS_FAMILY='windows' ;;
         'Darwin')  OS_FAMILY='macos' ;;
         #'AIX') OS_FAMILY='aix' ;;
-        *) ;;
+        *) OS_FAMILY='unknown';;
         esac
     fi
 
@@ -4548,6 +4030,7 @@ export -f discover_os
 #
 # SEE ALSO
 #   discover_optional_environment_variable
+#
 ###############################################################################
 function discover_required_environment_variable {
   local NAME="${1}"
@@ -4572,10 +4055,10 @@ export -f discover_required_environment_variable
 #   DISCOVERY
 #
 # NAME
-#   get_epoch_ms - Gets the current time in milliseconds since the Unix epoch.
+#   epoch_ms_get - Gets the current time in milliseconds since the Unix epoch.
 #
 # SYNOPSIS
-#   get_epoch_ms
+#   epoch_ms_get
 #
 # DESCRIPTION
 #   Returns the current Unix timestamp in milliseconds. This is useful for
@@ -4587,7 +4070,7 @@ export -f discover_required_environment_variable
 #   without GNU date (e.g., macOS without gdate).
 #
 # EXAMPLES
-#   EPOCH_MS=$(get_epoch_ms)
+#   EPOCH_MS=$(epoch_ms_get)
 #   echo "Current epoch in ms: ${EPOCH_MS}"
 #
 # TODO
@@ -4596,20 +4079,317 @@ export -f discover_required_environment_variable
 #   https://stackoverflow.com/questions/9804966/date-command-does-not-follow-linux-specifications-mac-os-x-lion
 #
 ###############################################################################
-function get_epoch_ms {
+function epoch_ms_get {
     echo "$( date +%s%N | cut -b1-13 )"  # https://serverfault.com/a/151112/413686>
 }
-export -f get_epoch_ms
+export -f epoch_ms_get
 
 ###############################################################################
 # CATEGORY
 #   DISCOVERY
 #
 # NAME
-#   get_hardware_architecture - Retrieves the hardware architecture.
+#   ff_agent_get_best_ff_agent_uri - Determines the best FF_AGENT_URI value.
 #
 # SYNOPSIS
-#   get_hardware_architecture
+#   ff_agent_get_best_ff_agent_uri
+#
+# DESCRIPTION
+#   Attempts to discover or generate the best FF_AGENT_URI value. If the environment
+#   variable FF_AGENT_URI is not set, a new URI is generated using a UUID. The result
+#   is either taken from the environment, discovered through secrets, or generated anew.
+#
+# DEPENDENCIES
+#   Requires 'uuidgen' for generating new URIs if not previously set.
+#
+# EXAMPLES
+#   FF_AGENT_URI=$( ff_agent_get_best_ff_agent_uri ) || { state_set "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_agent_uri"; return 1; }
+#
+# EXIT STATUS
+#   0 - Success, FF_AGENT_URI chosen and printed to standard output.
+#   1 - Failure, unable to determine FF_AGENT_URI.
+#
+###############################################################################
+function ff_agent_get_best_ff_agent_uri {
+
+  # Try to get FF_AGENT_URI from environment or by secret_get()
+  discover_optional_environment_variable "FF_AGENT_URI" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable"; return 1; }
+
+  # Check if variable already set. If not set - generate new uuid
+  if [ -z "${FF_AGENT_URI}" ]; then
+      # Generate new uuid, check errors, export new value
+      local UUID
+      UUID="$( ff_uuid )" || { error "${FUNCNAME[0]}" "failed_to_generate_new_uuid"; return 1; }
+      FF_AGENT_URI="/agent/agent_uuid/${UUID}"
+  fi
+
+  # At this point we must have not empty FF_AGENT_URI value.
+  # Make sure the variable is now not empty or error out.
+  ensure_variable_not_empty 'FF_AGENT_URI' || { error "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_agent_uri"; return 1; }
+
+  # Print result to standard output, set state to 'success' and return success code.
+  echo "${FF_AGENT_URI}"
+}
+export -f ff_agent_get_best_ff_agent_uri
+
+###############################################################################
+# CATEGORY
+#   DISCOVERY
+#
+# NAME
+#   ff_agent_get_best_ff_content_url - Determines the best FF_CONTENT_URL value.
+#
+# SYNOPSIS
+#   ff_agent_get_best_ff_content_url
+#
+# DESCRIPTION
+#   Chooses the best FF_CONTENT_URL value by trying to retrieve it from the environment
+#   or adjusting it for proper usage. This is important for ensuring that content URLs
+#   are correctly formatted and accessible.
+#
+# EXAMPLES
+#   FF_CONTENT_URL=$( ff_agent_get_best_ff_content_url ) || { state_set "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_content_url"; return 1; }
+#  
+# EXIT STATUS
+#   0 - Success, FF_CONTENT_URL chosen and printed to standard output.
+#   1 - Failure, unable to determine FF_CONTENT_URL.
+#
+###############################################################################
+function ff_agent_get_best_ff_content_url {
+
+  # Try to get FF_CONTENT_URL from environment or by secret_get()
+  discover_optional_environment_variable "FF_CONTENT_URL" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable"; return 1; }
+
+  # Remove trailing slash from FF_CONTENT_URL, so it works correctly when we concatenate
+  # FF_CONTENT_URL with other path components (e.g.: ${}/subfolder/file.txt)
+  # Note: its save to call trim_slash() even if FF_CONTENT_URL is empty at this step.
+  FF_CONTENT_URL="$( trim_slash "${FF_CONTENT_URL}" )" || { error "${FUNCNAME[0]}" "error_trim_slash_from_ff_content_url"; return 1; }
+
+  # Make sure the variable is now not empty or error out.
+  ensure_variable_not_empty 'FF_CONTENT_URL' || { error "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_content_url"; return 1; }
+
+  # Print result to standard output, set state to 'success' and return success code.
+  echo "${FF_CONTENT_URL}"
+}
+export -f ff_agent_get_best_ff_content_url
+
+###############################################################################
+# CATEGORY
+#   DISCOVERY
+#
+# NAME
+#   ff_agent_get_best_ff_host - Determines the best FF_HOST value.
+#
+# SYNOPSIS
+#   ff_agent_get_best_ff_host
+#
+# DESCRIPTION
+#   Chooses the best FF_HOST value by trying to retrieve it from the environment
+#   or using the hostname command. This ensures that the FF_HOST value accurately
+#   reflects the host's identity within the system or network.
+#
+# EXAMPLES
+#   UPLOAD_TO=$( ff_agent_get_best_ff_host ) || { state_set "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_host"; return 1; }
+#
+# EXIT STATUS
+#   0 - Success, FF_HOST chosen and printed to standard output.
+#   1 - Failure, unable to determine FF_HOST.
+#
+###############################################################################
+function ff_agent_get_best_ff_host {
+
+  # Try to get FF_HOST from environment or by secret_get()
+  discover_optional_environment_variable "FF_HOST" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_host"; return 1; } # Note: FF_HOST: FF_HOST will be set to legacy portal hostname if this is a portal.
+
+  # Check if variable already set. If not try to get it's value by command 'hostname'
+  [ -z "${FF_HOST}" ] && { FF_HOST="$( hostname )"; }
+
+  # Make sure the variable is now not empty or error out.
+  ensure_variable_not_empty 'FF_HOST' || { error "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_host"; return 1; }
+
+  # Print result to standard output, set state to 'success' and return success code.
+  echo "${FF_HOST}"
+}
+export -f ff_agent_get_best_ff_host
+
+###############################################################################
+# CATEGORY
+#   DISCOVERY
+#
+# NAME
+#   ff_agent_get_best_ff_port - Determines the best FF_PORT value.
+#
+# SYNOPSIS
+#   ff_agent_get_best_ff_port
+#
+# DESCRIPTION
+#   Chooses the best FF_PORT value by trying to retrieve it from the environment
+#   or defaulting to a standard port if not explicitly defined. This is key for
+#   ensuring that connections and communications are made over the correct port.
+#
+# EXAMPLES
+#   FF_PORT=$(ff_agent_get_best_ff_port) || { state_set "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_port"; return 1; }
+#
+# EXIT STATUS
+#   0 - Success, FF_PORT chosen and printed to standard output.
+#   1 - Failure, unable to determine FF_PORT.
+#
+###############################################################################
+function ff_agent_get_best_ff_port {
+  FF_PORT_DEFAULT=443
+
+  # Try to get FF_PORT from environment or by secret_get()
+  discover_optional_environment_variable "FF_PORT" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_port"; return 1; }
+
+  # Check if variable already set. If not then use default
+  [ -z "${FF_PORT}" ] && { FF_PORT="${FF_PORT_DEFAULT}"; }
+
+  # Print result to standard output, set state to 'success' and return success code.
+  echo "${FF_PORT}"
+}
+export -f ff_agent_get_best_ff_port
+
+###############################################################################
+# CATEGORY
+#   DISCOVERY
+#
+# NAME
+#   ff_agent_get_best_namespace - Determines the best NAMESPACE value.
+#
+# SYNOPSIS
+#   ff_agent_get_best_namespace
+#
+# DESCRIPTION
+#   Chooses the best NAMESPACE value by trying to retrieve it from the environment
+#   or defaulting to a predefined namespace. This ensures that the agent operates
+#   within the correct namespace context.
+#
+# EXAMPLES
+#   NAMESPACE=$(ff_agent_get_best_namespace) || { state_set "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_namespace"; return 1; }
+#
+# EXIT STATUS
+#   0 - Success, NAMESPACE chosen and printed to standard output.
+#   1 - Failure, unable to determine NAMESPACE.
+#
+###############################################################################
+function ff_agent_get_best_namespace {
+
+  # Try to get value from environment or by secret_get()
+  discover_optional_environment_variable "NAMESPACE" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_namespace"; return 1; }
+
+  # Check if variable already set. If not set it to our default "system.local" namespace: '00000000-0000-0000-0000-000000000000'.
+  [ -z "${NAMESPACE}" ] && { NAMESPACE='00000000-0000-0000-0000-000000000000'; }
+
+  # Make sure the variable is now not empty or error out.
+  ensure_variable_not_empty 'NAMESPACE' || { error "${FUNCNAME[0]}" "error_ensure_variable_not_empty_namespace"; return 1; }
+
+  # Print result to standard output, set state to 'success' and return success code.
+  echo "${NAMESPACE}"
+}
+export -f ff_agent_get_best_namespace
+
+###############################################################################
+# CATEGORY
+#   DISCOVERY
+#
+# NAME
+#   ff_agent_get_best_organization - Determines the best ORGANIZATION value.
+#
+# SYNOPSIS
+#   ff_agent_get_best_organization
+#
+# DESCRIPTION
+#   Chooses the best ORGANIZATION value by trying to retrieve it from the environment
+#   or defaulting to a predefined organization. This is crucial for ensuring that the
+#   agent is associated with the correct organizational context.
+#
+# EXAMPLES
+#   ORGANIZATION=$(ff_agent_get_best_organization) || {
+#     state_set "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_organization"; return 1;
+#   }
+#
+# EXIT STATUS
+#   0 - Success, ORGANIZATION chosen and printed to standard output.
+#   1 - Failure, unable to determine ORGANIZATION.
+#
+###############################################################################
+function ff_agent_get_best_organization {
+
+  # Try to get value from environment or by secret_get()
+  discover_optional_environment_variable "ORGANIZATION" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_organization"; return 1; }
+
+  # Check if variable already set. If not set it to our default organization "system.local"
+  [ -z "${ORGANIZATION}" ] && { ORGANIZATION='system.local'; }
+
+  # Make sure the variable is now not empty or error out.
+  ensure_variable_not_empty 'ORGANIZATION' || { error "${FUNCNAME[0]}" "error_ensure_variable_not_empty_organization"; return 1; }
+
+  # Print result to standard output, set state to 'success' and return success code.
+  echo "${ORGANIZATION}"
+}
+export -f ff_agent_get_best_organization
+
+###############################################################################
+# CATEGORY
+#   DISCOVERY
+#
+# NAME
+#   ff_uuid - Generates a unique UUID.
+#
+# SYNOPSIS
+#   ff_uuid
+#
+# DESCRIPTION
+#   Generates a universally unique identifier (UUID) using the uuidgen command.
+#   This function is a utility to provide unique identifiers for various use cases
+#   within the system.
+#
+# DEPENDENCIES
+#   Requires the uuidgen command; attempts to install if not present.
+#
+# EXAMPLES
+#   NEW_UUID=$(ff_uuid) || {
+#     state_set "${FUNCNAME[0]}" "failed_to_ff_uuid"; return 1;
+#   }
+#
+# EXIT STATUS
+#   0 - Success, UUID generated and printed to standard output.
+#   1 - Failure, unable to generate UUID.
+#
+###############################################################################
+function ff_uuid {
+
+  # Check dependency: "uuidgen" we need to make sure it is installed ('uuidgen' is part of 'uuid-runtime' package)
+  if ! command_exists uuidgen >/dev/null; then
+
+    # Try to install missing dependency
+    apt_update >/dev/null
+    [ $? -ne 0 ] || { error "uuidgen is missing and failed to apt_update"; return 1; }
+
+    apt_install uuid-runtime >/dev/null  # Note: we mute output of apt-install otherwise it will be mixed into the ff_uuid() function result!
+    [ $? -ne 0 ] || { error "uuidgen is missing and failed to apt_install it"; return 1; }
+
+    # Check again
+    if ! command_exists uuidgen >/dev/null; then
+      # Still failing to find uuidgen, return error
+      return 1
+    fi
+  fi
+
+  # Generate uuid and return it's exit code as a return code
+  uuidgen
+}
+export -f ff_uuid
+
+###############################################################################
+# CATEGORY
+#   DISCOVERY
+#
+# NAME
+#   hardware_architecture_get - Retrieves the hardware architecture.
+#
+# SYNOPSIS
+#   hardware_architecture_get
 #
 # DESCRIPTION
 #   Uses 'dpkg' to print the architecture of the hardware, such as amd64 or arm64.
@@ -4619,57 +4399,24 @@ export -f get_epoch_ms
 #   Requires 'dpkg' command, limiting its use to Debian-based systems.
 #
 # EXAMPLES
-#   ARCH=$(get_hardware_architecture)
+#   ARCH=$(hardware_architecture_get)
 #   echo "Hardware architecture: ${ARCH}"
 #
 ###############################################################################
-function get_hardware_architecture {
+function hardware_architecture_get {
     dpkg --print-architecture
 }
-export -f get_hardware_architecture
+export -f hardware_architecture_get
 
 ###############################################################################
 # CATEGORY
 #   DISCOVERY
 #
 # NAME
-#   get_os_name - Determines the operating system name.
+#   lsb_codename_get - Retrieves the LSB (Linux Standard Base) codename.
 #
 # SYNOPSIS
-#   get_os_name
-#
-# DESCRIPTION
-#   Extracts and returns the operating system's name in lowercase, such as 'linux' or 'darwin' 
-#   for macOS, based on the output of 'uname'. Echoes the name of the operating system.
-#
-# DEPENDENCIES
-#   Depends on 'uname' and 'tr' commands.
-#
-# EXAMPLES
-#   OS_NAME=$(get_os_name)
-#   echo "Operating system name: ${OS_NAME}"
-#
-###############################################################################
-function get_os_name {
-  local OS_NAME="$( basename $( uname --operating-system ) | tr '[:upper:]' '[:lower:]' )"
-  if [ -z "${OS_NAME}" ]; then
-    # Error, got empty string
-    return 1
-  fi
-
-  echo "${OS_NAME}"
-}
-export -f get_os_name
-
-###############################################################################
-# CATEGORY
-#   DISCOVERY
-#
-# NAME
-#   get_lsb_codename - Retrieves the LSB (Linux Standard Base) codename.
-#
-# SYNOPSIS
-#   get_lsb_codename
+#   lsb_codename_get
 #
 # DESCRIPTION
 #   Returns the codename for the current Linux distribution, such as 'focal' for Ubuntu 20.04,
@@ -4679,24 +4426,24 @@ export -f get_os_name
 #   Requires 'lsb_release' command, which might not be present in minimal installations.
 #
 # EXAMPLES
-#   CODENAME=$(get_lsb_codename)
+#   CODENAME=$(lsb_codename_get)
 #   echo "LSB codename: ${CODENAME}"
 #   
 ###############################################################################
-function get_lsb_codename {
+function lsb_codename_get {
     lsb_release --short --codename
 }
-export -f get_lsb_codename
+export -f lsb_codename_get
 
 ###############################################################################
 # CATEGORY
 #   DISCOVERY
 #
 # NAME
-#   get_lsb_id - Retrieves the LSB (Linux Standard Base) ID.
+#   lsb_id_get - Retrieves the LSB (Linux Standard Base) ID.
 #
 # SYNOPSIS
-#   get_lsb_id
+#   lsb_id_get
 #
 # DESCRIPTION
 #   Returns the ID for the current Linux distribution, such as 'Ubuntu',
@@ -4707,24 +4454,31 @@ export -f get_lsb_codename
 #   Requires 'lsb_release' command, which might not be included in minimal installations.
 #
 # EXAMPLES
-#   LSB_ID=$(get_lsb_id)
+#   LSB_ID=$(lsb_id_get)
 #   echo "LSB ID: ${LSB_ID}"
 #
 ###############################################################################
-function get_lsb_id {
-    lsb_release --short --id
+# Category: environment
+# Utility function - Get release - e.g. 16.04, 18.04, 20.04
+function lsb_id_get {
+    for DEPENDENCY in basename lsb_release
+    do
+      command_exists "${DEPENDENCY}" >/dev/null || { error "${FUNCNAME[0]} error dependency ${DEPENDENCY} not found."; return 1; }
+    done
+  
+    command_exists >/dev/null lsb_release && lsb_release --short --release
 }
-export -f get_lsb_id
+export -f lsb_id_get
 
 ###############################################################################
 # CATEGORY
 #   DISCOVERY
 #
 # NAME
-#   get_lsb_id_downcase - Retrieves and converts the LSB ID to lowercase.
+#   lsb_id_get_downcase - Retrieves and converts the LSB ID to lowercase.
 #
 # SYNOPSIS
-#   get_lsb_id_downcase
+#   lsb_id_get_downcase
 #
 # DESCRIPTION
 #   Fetches the distributor's ID from the Linux Standard Base information and
@@ -4735,30 +4489,30 @@ export -f get_lsb_id
 #   Depends on 'lsb_release' and 'tr' commands. 'lsb_release' might not be present in all distributions.
 #
 # EXAMPLES
-#   LSB_ID_LOWERCASE=$(get_lsb_id_downcase)
+#   LSB_ID_LOWERCASE=$(lsb_id_get_downcase)
 #   echo "LSB ID, lowercase: ${LSB_ID_LOWERCASE}"
 #
 ###############################################################################
-function get_lsb_id_downcase {
+function lsb_id_get_downcase {
   # Dependency check: 'tr' is installed
   if ! command_exists tr >/dev/null; then
-    set_state "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
+    error "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
     return 1
   fi
 
   lsb_release --short --id | tr '[:upper:]' '[:lower:]'
 }
-export -f get_lsb_id_downcase
+export -f lsb_id_get_downcase
 
 ###############################################################################
 # CATEGORY
 #   DISCOVERY
 #
 # NAME
-#   get_lsb_release - Retrieves the LSB release version.
+#   lsb_release_get - Retrieves the LSB release version.
 #
 # SYNOPSIS
-#   get_lsb_release
+#   lsb_release_get
 #
 # DESCRIPTION
 #   Returns the release version of the current Linux distribution as provided by the LSB,
@@ -4768,14 +4522,47 @@ export -f get_lsb_id_downcase
 #   Requires 'lsb_release' command, which might not be included in minimal or non-Debian based installations.
 #
 # EXAMPLES
-#   LSB_RELEASE=$(get_lsb_release)
+#   LSB_RELEASE=$(lsb_release_get)
 #   echo "LSB release version: ${LSB_RELEASE}"
 #
 ###############################################################################
-function get_lsb_release {
+function lsb_release_get {
     lsb_release --short --release
 }
-export -f get_lsb_release
+export -f lsb_release_get
+
+###############################################################################
+# CATEGORY
+#   DISCOVERY
+#
+# NAME
+#   os_name_get - Determines the operating system name.
+#
+# SYNOPSIS
+#   os_name_get
+#
+# DESCRIPTION
+#   Extracts and returns the operating system's name in lowercase, such as 'linux' or 'darwin' 
+#   for macOS, based on the output of 'uname'. Echoes the name of the operating system.
+#
+# DEPENDENCIES
+#   Depends on 'uname' and 'tr' commands.
+#
+# EXAMPLES
+#   OS_NAME=$(os_name_get)
+#   echo "Operating system name: ${OS_NAME}"
+#
+###############################################################################
+function os_name_get {
+  local OS_NAME="$( basename $( uname --operating-system ) | tr '[:upper:]' '[:lower:]' )"
+  if [ -z "${OS_NAME}" ]; then
+    # Error, got empty string
+    return 1
+  fi
+
+  echo "${OS_NAME}"
+}
+export -f os_name_get
 
 ### END DISCOVER FUNCTIONS
 
@@ -4806,6 +4593,7 @@ export -f get_lsb_release
 # EXIT STATUS
 #   0 on success, indicating all required environment variables are set.
 #   1 on failure, indicating one or more required environment variables are unset.
+#
 ###############################################################################
 function check_environment_variables_are_set {
 
@@ -4841,6 +4629,198 @@ export -f check_environment_variables_are_set
 #   SET ENVIRONMENT
 #
 # NAME
+#   check_nodejs_installation - Verifies the Node.js installation and version.
+#
+# SYNOPSIS
+#   check_nodejs_installation
+#
+# DESCRIPTION
+#   Checks if Node.js is installed at the expected path and version. It verifies
+#   the installation directory is not under /usr, matches the expected version
+#   against the actual version, and checks the npm installation.
+#   Function sets state to indicate success or error code (because it is a complex multi-step function).
+#
+# EXAMPLES
+#   check_nodejs_installation || abort "Node.js installation checks failed.";
+#
+# EXIT STATUS
+#   0 on success, indicating Node.js is correctly installed.
+#   1 on failure, indicating a problem with the Node.js installation.
+#
+###############################################################################
+function check_nodejs_installation {
+  state_set "${FUNCNAME[0]}" 'started'
+
+  local ERRORS_COUNT=0
+  # Check nodejs is installed
+  local WHICH_NODE="$( command_exists node )"
+  if [ "${WHICH_NODE}" == "" ]; then
+    # 'node' does not exist
+    ERROR_CODE="error_check_nodejs_installation_nodejs_not_installed"
+    state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
+    (( ERRORS_COUNT++ ))
+  else
+    # 'node' exists: run few more node-related checks
+    # Check nodejs is not installed under /usr
+    [[ "${WHICH_NODE}" =~ ^/usr/ ]] && {
+      ERROR_CODE="error_check_nodejs_installation_wrong_installation_dir"
+      state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
+      (( ERRORS_COUNT++ ))
+    }
+
+    # Get expected nodejs version
+    local EXPECTED_VERSION="$( nodejs_desired_version_get )"
+    [ -z "${EXPECTED_VERSION}" ] && {
+      ERROR_CODE="failed_to_nodejs_desired_version_get"
+      state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
+      (( ERRORS_COUNT++ ))
+    }
+
+    # Get actual nodejs version
+    local ACTUAL_VERSION="$( node --version )"
+    [ -z "${ACTUAL_VERSION}" ] && {
+      ERROR_CODE="failed_to_get_actual_nodejs_version"
+      state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
+      (( ERRORS_COUNT++ ))
+    }
+
+    # Compare expected vs actual nodejs versions
+    if [ "${EXPECTED_VERSION}" != "${ACTUAL_VERSION}" ]; then
+      # Version mismatch
+      ERROR_CODE="error_mismatching_nodejs_versions"
+      state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
+      (( ERRORS_COUNT++ ))
+    fi
+  fi
+
+  # Check npm is installed
+  WHICH_NPM=$( command_exists npm )
+  [ "${WHICH_NPM}" != "" ] || {
+    ERROR_CODE="error_check_npm_installation_nodejs_not_installed"
+    state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
+    (( ERRORS_COUNT++ ))
+  }
+
+  # Check npm is not installed under /usr
+  [[ "${WHICH_NPM}" =~ ^/usr/ ]] && {
+    ERROR_CODE="error_check_npm_installation_wrong_installation_dir"
+    state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
+    (( ERRORS_COUNT++ ))
+  }
+
+  # List of all the checks done with their statuses
+  if [ ${ERRORS_COUNT} -gt 0 ]; then
+    # We found errors
+    state_set "${FUNCNAME[0]}" 'failed'
+    return 1
+  fi
+
+  state_set "${FUNCNAME[0]}" 'success'
+}
+export -f check_nodejs_installation
+
+###############################################################################
+# CATEGORY
+#   SET ENVIRONMENT
+#
+# NAME
+#   check_secret_set_get - Tests the functionality of setting and getting a secret.
+#
+# SYNOPSIS
+#   check_secret_set_get
+#
+# DESCRIPTION
+#   Verifies the ability to set and retrieve a secret using secret_set and secret_get 
+#   functions, respectively. It uses a generated UUID as the secret value for the test.
+#
+# EXAMPLES
+#   if ! check_secret_set_get; then
+#     echo "Failed to set or get a secret.";
+#     exit 1;
+#   fi
+#
+# EXIT STATUS
+#   0 on success, indicating the secret was set and retrieved successfully.
+#   1 on failure, indicating an issue with setting or retrieving the secret.
+#
+###############################################################################
+function check_secret_set_get {
+  
+  # Define test name / value pair
+  SECRET_NAME="check_secret_set_get"
+  SECRET_VALUE=$( ff_uuid ) || { error "${FUNCNAME[0]}" 'failed_generate_uuid'; return 1; }
+
+  # Try to set the secret
+  secret_set "${SECRET_NAME}" "${SECRET_VALUE}" || { error "${FUNCNAME[0]}" 'failed_secret_set'; return 1; }
+
+  # Try to retrieve the secret
+  local RETRIEVED_VALUE
+  RETRIEVED_VALUE=$( secret_get "${SECRET_NAME}" ) || {
+    error "${FUNCNAME[0]}" 'failed_retrieve_secret'
+    return 1
+  }
+
+  # Compare retrieved state with expected
+  if [ "${RETRIEVED_VALUE}" != "${SECRET_VALUE}" ]; then
+    # Mismatch (error)
+    error "${FUNCNAME[0]}" 'error_retrieved_value_mismatch'
+    return 1
+  fi
+}
+export -f check_secret_set_get
+
+###############################################################################
+# CATEGORY
+#   SET ENVIRONMENT
+#
+# NAME
+#   current_user_get - Retrieves the current user name, avoiding reliance on the $USER variable.
+#
+# SYNOPSIS
+#   current_user_get
+#
+# DESCRIPTION
+#   A more reliable alternative to the ${USER} environment variable for obtaining the current
+#   user's name. This function is particularly useful in environments like Docker, where $USER
+#   might not be set. It attempts to use the 'whoami' command as a fallback.
+#   Prints the current user's name to standard output.
+#   For more details see discussion:
+#   https://stackoverflow.com/questions/54411218/docker-why-isnt-user-environment-variable-set
+#
+# EXAMPLES
+#   URRENT_USER="$(current_user_get)" || { error "Can not get current user"; return 1; }
+#
+# EXIT STATUS
+#   0 on success.
+#   1 on failure.
+#
+###############################################################################
+function current_user_get {
+
+  # Check if environment variable USER is set, then use it.
+  if [ -z "${USER}" ]; then
+    # The USER environment variable is blank.
+    # Use command_exists to check if 'whoami' is available
+    if ! command_exists whoami >/dev/null; then
+      error "${FUNCNAME[0]}" 'whoami is not installed'
+      return 1
+    fi
+
+    # Try to get current username by 'whoami'
+    USER="$( whoami )" || { error "${FUNCNAME[0]}" "ERROR whoami command failed"; return 1; }
+    [ ! -z "${USER}" ] || { error "${FUNCNAME[0]}" "failed_to_current_user_get"; return 1; }
+  fi
+
+  # Print username to standard output
+  echo "${USER}"
+}
+export -f current_user_get
+
+###############################################################################
+# CATEGORY
+#   SET ENVIRONMENT
+#
+# NAME
 #   ff_agent_check_bin_is_in_the_path - Checks if FF_AGENT_BIN is in the system PATH.
 #
 # SYNOPSIS
@@ -4859,6 +4839,7 @@ export -f check_environment_variables_are_set
 # EXIT STATUS
 #   0 if FF_AGENT_BIN is in PATH.
 #   1 if FF_AGENT_BIN is not in PATH or if an error occurs.
+#
 ###############################################################################
 function ff_agent_check_bin_is_in_the_path {
 
@@ -4876,258 +4857,10 @@ export -f ff_agent_check_bin_is_in_the_path
 #   SET ENVIRONMENT
 #
 # NAME
-#   check_nodejs_installation - Verifies the Node.js installation and version.
+#   ff_agent_home_get_best - Determines the best FF_AGENT_HOME directory based on the current user.
 #
 # SYNOPSIS
-#   check_nodejs_installation
-#
-# DESCRIPTION
-#   Checks if Node.js is installed at the expected path and version. It verifies
-#   the installation directory is not under /usr, matches the expected version
-#   against the actual version, and checks the npm installation.
-#
-# EXAMPLES
-#   check_nodejs_installation || abort "Node.js installation checks failed.";
-#
-# EXIT STATUS
-#   0 on success, indicating Node.js is correctly installed.
-#   1 on failure, indicating a problem with the Node.js installation.
-###############################################################################
-function check_nodejs_installation {
-  set_state "${FUNCNAME[0]}" 'started'
-
-  local ERRORS_COUNT=0
-  # Check nodejs is installed
-  local WHICH_NODE="$( command_exists node )"
-  if [ "${WHICH_NODE}" == "" ]; then
-    # 'node' does not exist
-    ERROR_CODE="error_check_nodejs_installation_nodejs_not_installed"
-    set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-    (( ERRORS_COUNT++ ))
-  else
-    # 'node' exists: run few more node-related checks
-    # Check nodejs is not installed under /usr
-    [[ "${WHICH_NODE}" =~ ^/usr/ ]] && {
-      ERROR_CODE="error_check_nodejs_installation_wrong_installation_dir"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-      (( ERRORS_COUNT++ ))
-    }
-
-    # Get expected nodejs version
-    local EXPECTED_VERSION="$( get_expected_nodejs_version )"
-    [ -z "${EXPECTED_VERSION}" ] && {
-      ERROR_CODE="failed_to_get_expected_nodejs_version"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-      (( ERRORS_COUNT++ ))
-    }
-
-    # Get actual nodejs version
-    local ACTUAL_VERSION="$( node --version )"
-    [ -z "${ACTUAL_VERSION}" ] && {
-      ERROR_CODE="failed_to_get_actual_nodejs_version"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-      (( ERRORS_COUNT++ ))
-    }
-
-    # Compare expected vs actual nodejs versions
-    if [ "${EXPECTED_VERSION}" != "${ACTUAL_VERSION}" ]; then
-      # Version mismatch
-      ERROR_CODE="error_mismatching_nodejs_versions"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-      (( ERRORS_COUNT++ ))
-    fi
-  fi
-
-  # Check npm is installed
-  WHICH_NPM=$( command_exists npm )
-  [ "${WHICH_NPM}" != "" ] || {
-    ERROR_CODE="error_check_npm_installation_nodejs_not_installed"
-    set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-    (( ERRORS_COUNT++ ))
-  }
-
-  # Check npm is not installed under /usr
-  [[ "${WHICH_NPM}" =~ ^/usr/ ]] && {
-    ERROR_CODE="error_check_npm_installation_wrong_installation_dir"
-    set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
-    (( ERRORS_COUNT++ ))
-  }
-
-  # List of all the checks done with their statuses
-  if [ ${ERRORS_COUNT} -gt 0 ]; then
-    # We found errors
-    set_state "${FUNCNAME[0]}" 'failed'
-    return 1
-  fi
-
-  set_state "${FUNCNAME[0]}" 'success'
-}
-export -f check_nodejs_installation
-
-###############################################################################
-# CATEGORY
-#   SET ENVIRONMENT
-#
-# NAME
-#   check_set_get_secret - Tests the functionality of setting and getting a secret.
-#
-# SYNOPSIS
-#   check_set_get_secret
-#
-# DESCRIPTION
-#   Verifies the ability to set and retrieve a secret using set_secret and get_secret 
-#   functions, respectively. It uses a generated UUID as the secret value for the test.
-#
-# EXAMPLES
-#   if ! check_set_get_secret; then
-#     echo "Failed to set or get a secret.";
-#     exit 1;
-#   fi
-#
-# EXIT STATUS
-#   0 on success, indicating the secret was set and retrieved successfully.
-#   1 on failure, indicating an issue with setting or retrieving the secret.
-###############################################################################
-function check_set_get_secret {
-  
-  # Define test name / value pair
-  SECRET_NAME="check_set_get_secret"
-  SECRET_VALUE=$( ff_uuid ) || { error "${FUNCNAME[0]}" 'failed_generate_uuid'; return 1; }
-
-  # Try to set the secret
-  set_secret "${SECRET_NAME}" "${SECRET_VALUE}" || { error "${FUNCNAME[0]}" 'failed_set_secret'; return 1; }
-
-  # Try to retrieve the secret
-  local RETRIEVED_VALUE
-  RETRIEVED_VALUE=$( get_secret "${SECRET_NAME}" ) || {
-    error "${FUNCNAME[0]}" 'failed_retrieve_secret'
-    return 1
-  }
-
-  # Compare retrieved state with expected
-  if [ "${RETRIEVED_VALUE}" != "${SECRET_VALUE}" ]; then
-    # Mismatch (error)
-    error "${FUNCNAME[0]}" 'error_retrieved_value_mismatch'
-    return 1
-  fi
-}
-export -f secret_check_set_and_get
-
-###############################################################################
-# CATEGORY
-#   SET ENVIRONMENT
-#
-# NAME
-#   state_check_set_and_get - Tests the functionality of setting and getting a state.
-#
-# SYNOPSIS
-#   state_check_set_and_get
-#
-# DESCRIPTION
-#   Verifies the ability to set and retrieve a state using set_state and get_state 
-#   functions, respectively. It utilizes a randomly generated UUID, with dashes removed, 
-#   as the state value for the test.
-#
-# DEPENDENCIES
-#   Requires 'uuidgen' and 'tr' to be installed on the system.
-#
-# EXAMPLES
-#   if ! state_check_set_and_get; then
-#     echo "Failed to set or get a state.";
-#     exit 1;
-#   fi
-#
-# EXIT STATUS
-#   0 on success, indicating the state was set and retrieved successfully.
-#   1 on failure, indicating an issue with setting or retrieving the state.
-#
-###############################################################################
-function state_check_set_and_get {
-
-  # Check tr is installed
-  if ! command_exists tr >/dev/null; then
-    error "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
-    return 1
-  fi
-
-  STATE_NAME="state_check_set_and_get"
-  STATE_VALUE=$( ff_uuid | tr -d '-' )
-
-  # Check generated STATE_VALUE is not empty
-  [ ! -z "${STATE_VALUE}" ] || { error "${FUNCNAME[0]}" 'failed_generate_random_state_value'; return 1; }
-
-  # Set state and try to retrieve value
-  error "${STATE_NAME}" "${STATE_VALUE}" || { return 1; }
-
-  local RETRIEVED_VALUE
-  RETRIEVED_VALUE=$( get_state "${STATE_NAME}" ) || { error "${FUNCNAME[0]}" 'failed_retrieve_state'; return 1; }
-
-  # Compare retrieved and expected values
-  if [ "${RETRIEVED_VALUE}" != "${STATE_VALUE}" ]; then
-    # Mismatch (error)
-    error "${FUNCNAME[0]}" 'error_retrieved_value_mismatch'
-    return 1
-  fi
-}
-export -f state_check_set_and_get
-
-###############################################################################
-# CATEGORY
-#   SET ENVIRONMENT
-#
-# NAME
-#   get_current_user - Retrieves the current user name, avoiding reliance on the $USER variable.
-#
-# SYNOPSIS
-#   get_current_user
-#
-# DESCRIPTION
-#   A more reliable alternative to the ${USER} environment variable for obtaining the current
-#   user's name. This function is particularly useful in environments like Docker, where $USER
-#   might not be set. It attempts to use the 'whoami' command as a fallback.
-#   Prints the current user's name to standard output.
-#   For more details see discussion:
-#   https://stackoverflow.com/questions/54411218/docker-why-isnt-user-environment-variable-set
-#
-# EXAMPLES
-#   URRENT_USER="$(get_current_user)" || { error "Can not get current user"; return 1; }
-#
-# EXIT STATUS
-#   0 on success.
-#   1 on failure.
-#
-###############################################################################
-function get_current_user {
-  # set_state "${FUNCNAME[0]}" 'started'
-
-  # Check if environment variable USER is set, then use it.
-  if [ -z "${USER}" ]; then
-    # The USER environment variable is blank.
-    # Use command_exists to check if 'whoami' is available
-    if ! command_exists whoami >/dev/null; then
-      # set_state "${FUNCNAME[0]}" 'error_whoami_not_installed'
-      return 1
-    fi
-
-    # Try to get current username by 'whoami'
-    USER="$( whoami )" || { error "ERROR whoami command failed"; return 1; }
-    [ ! -z "${USER}" ] || { error "failed_to_get_current_user"; return 1; }
-  fi
-
-  # Print username to standard output
-  echo "${USER}"
-}
-export -f get_current_user
-
-###############################################################################
-# CATEGORY
-#   SET ENVIRONMENT
-#
-# NAME
-#   get_best_ff_agent_home - Determines the best FF_AGENT_HOME directory based on the current user.
-#
-# SYNOPSIS
-#   get_best_ff_agent_home
+#   ff_agent_home_get_best
 #
 # DESCRIPTION
 #   Sets the FF_AGENT_USERNAME (example: ubuntu) and FF_AGENT_HOME (/home/ubuntu/ff_agent)
@@ -5136,7 +4869,7 @@ export -f get_current_user
 #   is appropriate for the user. It exports FF_AGENT_USERNAME and FF_AGENT_HOME.
 #
 # EXAMPLES
-#   get_best_ff_agent_home || {
+#   ff_agent_home_get_best || {
 #     echo "Failed to determine the FF_AGENT_HOME.";
 #     exit 1;
 #   }
@@ -5146,23 +4879,23 @@ export -f get_current_user
 #   1 on failure.
 #
 ###############################################################################
-function get_best_ff_agent_home {
+function ff_agent_home_get_best {
 
     # These exports are our "return values"
     # Note: we should not get value from subprocess and call 'export' on the same 1-line like this: "export SOMEVAR=$( some_function_call ) || { error "error details"; return 1; } "
     #       because export would hide actual exit call of the "some_function_call" and thus we'll miss an error!
-    FF_AGENT_USERNAME="$(get_current_user)" || { error "terminal_error_failed_to_get_current_user"; return 1; }
+    FF_AGENT_USERNAME="$(current_user_get)" || { error "terminal_error_failed_to_current_user_get"; return 1; }
     export FF_AGENT_USERNAME
 
     # Even if this function run by some other/not-chosen" user, the FF_AGENT_USER_HOME would point to the "right/choosen" home. Example: /home/ubuntu
     # Only when we run as ritgh/choosen user the FF_AGENT_USER_HOME and HOME have the same values.
-    FF_AGENT_USER_HOME=$( get_home_directory_for_user "${FF_AGENT_USERNAME}" ) || { error "terminal_error_failed_to_get_agent_user_home"; return 1; }
+    FF_AGENT_USER_HOME=$( home_directory_for_user_get "${FF_AGENT_USERNAME}" ) || { error "terminal_error_failed_to_get_agent_user_home"; return 1; }
     export FF_AGENT_USER_HOME
           
     local AGENT_DIR_NAME="ff_agent"
     export FF_AGENT_HOME="${FF_AGENT_USER_HOME}/${AGENT_DIR_NAME}"
 }
-export -f get_best_ff_agent_home
+export -f ff_agent_home_get_best
 
 ###############################################################################
 # CATEGORY
@@ -5215,30 +4948,7 @@ function ff_api_get {
 }
 export -f ff_api_get
 
-###############################################################################
-# CATEGORY
-#   SET ENVIRONMENT
-#
-# NAME
-#   get_expected_nodejs_version - Outputs the expected Node.js version for the environment.
-#
-# SYNOPSIS
-#   get_expected_nodejs_version
-#
-# DESCRIPTION
-#   Provides the version of Node.js that is expected to be installed on the system,
-#   aiding in the installation and verification processes by defining a target version.
-#   Echoes the expected Node.js version (e.g., 'v18.4.0') to standard output.
-#
-# EXAMPLES
-#   EXPECTED_VERSION=$(get_expected_nodejs_version)
-#   echo "The expected Node.js version is $EXPECTED_VERSION."
-#
-###############################################################################
-function get_expected_nodejs_version {
-  echo 'v18.4.0'
-}
-export -f get_expected_nodejs_version
+
 
 ###############################################################################
 # CATEGORY
@@ -5284,6 +4994,191 @@ function is_framework_api_defined {
   return 1
 }
 export -f is_framework_api_defined
+
+###############################################################################
+# CATEGORY
+#   SET ENVIRONMENT
+#
+# NAME
+#   nodejs_desired_version_get - Outputs the desired Node.js version for the environment.
+#
+# SYNOPSIS
+#   nodejs_desired_version_get
+#
+# DESCRIPTION
+#   Provides the version of Node.js that is desired to be installed on the system,
+#   aiding in the installation and verification processes by defining a target version.
+#   Echoes the expected Node.js version (e.g., 'v18.4.0') to standard output.
+#
+# EXAMPLES
+#   DESIRED_VERSION=$(nodejs_desired_version_get)
+#   echo "The desired Node.js version is ${DESIRED_VERSION}."
+#
+###############################################################################
+function nodejs_desired_version_get {
+  local RELEASE=$( lsb_release_get ) # Will give us the version of ubuntu.
+  case "${RELEASE}" in
+    18.*) echo 'v17'
+    ;;
+    20.*) echo 'v18.4.0'
+    ;;
+    21.*) echo 'v18.4.0'
+    ;;
+    22.*) echo "v20.5.1"
+    ;;
+    *) echo 'v18.4.0';;
+  esac
+}
+export -f nodejs_desired_version_get
+
+###############################################################################
+# CATEGORY
+#   SET ENVIRONMENT
+#
+# NAME
+#   publish_message - Sends a JSON message to the FF_HOST.
+#
+# SYNOPSIS
+#   echo '{"example": "data"}' | publish_message
+#
+# DESCRIPTION
+#   Accepts a JSON payload through stdin and wraps it in a delivery message format
+#   before POSTing it to the configured FF_HOST. Requires FF_API_USERNAME, FF_API_PASSWORD,
+#   and FF_HOST to be set.
+#
+# DEPENDENCIES
+#   Requires 'curl' to be installed on the system.
+#
+# EXAMPLES
+#   echo '{"a": 1, "b": true}' | publish_message
+#   cat  "/path/to/file.json"  | publish_message
+#
+# EXIT STATUS
+#   0 upon successfully sending the message.
+#   1 if there is a failure in sending the message.
+#
+###############################################################################
+function publish_message {
+
+  # Preserve current bash echo settings and enable bash echo setting
+  # Note: can't use state_set here otherwize will fall into recursive loop
+  BASH_ECHO_SETTINGS=$( bash_echo_setting_get ) || { error "${FUNCNAME[0]}" "failed_to_bash_echo_setting_get"; return 1; }
+
+  bash_echo_off_set || { error "${FUNCNAME[0]}" "failed_to_bash_echo_off_set"; return 1; }
+
+  # Read piped json
+  INPUT_JSON=`cat`
+
+  # Check inputs
+  local FF_API_USERNAME=$( secret_get ff_api_username )
+  if [ "${FF_API_USERNAME}" == "" ]; then
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    error "${FUNCNAME[0]}" "FF_API_USERNAME is missing"
+    return 1
+  fi
+
+  local FF_API_PASSWORD=$( secret_get ff_api_password )
+  if [ "${FF_API_PASSWORD}" == "" ]; then
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    error "${FUNCNAME[0]}" "FF_API_PASSWORD is missing"
+    return 1
+  fi
+
+  if [ "${INPUT_JSON}" == "" ]; then
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    error "${FUNCNAME[0]}" "INPUT_JSON is missing"
+    return 1
+  fi
+
+  if [ "${FF_HOST}" == "" ]; then
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    error "${FUNCNAME[0]}" "FF_HOST is missing"
+    return 1
+  fi
+
+  local UUID="$( ff_uuid )"
+  if [ "${UUID}" == "" ]; then
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    error "${FUNCNAME[0]}" "failed to generate UUID"
+    return 1
+  fi
+
+  local TRANSACTION_ID="$( ff_uuid )"
+  if [ "${TRANSACTION_ID}" == "" ]; then
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    error "${FUNCNAME[0]}" "failed to generate TRANSACTION_ID"
+    return 1
+  fi
+
+  if ! command_exists curl >/dev/null; then
+    log "WARNING: curl is not yet isntalled. Skppping publishing JSON: ${INPUT_JSON}"
+    return 0
+  fi
+
+  # Wrap input JSON into the MESSAGE
+  local MESSAGE=$(
+    # Part 1/3: headers and start of payload
+    cat <<- EOF
+    {
+      "uri": "/organization/${ORGANIZATION}/delivery/message/${UUID}",
+      "mime_type": "delivery/message",
+      "header": {
+        "mime_type": "delivery/request_header",
+        "transaction_id": "${TRANSACTION_ID}",
+
+        ${HAS_ERRORS_ELEMENT}
+
+        "from": "/service/set_environment/instance/${UUID}",
+        "to":"/service/storage"
+      },
+      "payload": [
+EOF
+    # Part 2/3: payload
+    echo "${INPUT_JSON}"
+
+    # Part 3/3: footer: closing payload array and message envelop
+    cat <<- EOF
+      ]
+    }
+EOF
+  )
+
+  # Run command, capture server response as ${RESULT} and curl exit code as ${STATUS}
+
+  local RESULT
+  RESULT=$(
+    curl \
+      --silent   \
+      --retry 5    \
+      --request POST \
+      --header "Content-Type: application/json" \
+      --data "${MESSAGE}" \
+      --user "${FF_API_USERNAME}:${FF_API_PASSWORD}" \
+      https://${FF_HOST}/
+  ) || {
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    error "${FUNCNAME[0]}" "Failed to post to https://${FF_HOST}/"
+    return 1
+  }
+
+  # Even if curl succeed, check some edge cases, when server replied with some JSON error
+  if [[ ${RESULT} =~ (^Cannot GET) ]]; then
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    error "${FUNCNAME[0]}" "Failed to post to https://${FF_HOST}/"
+    return 1
+  fi
+
+  # Check if resut has error mime_type (TODO: improve it to rely on actual response http_code, see implemented in url_get())
+  if [[ ${RESULT} =~ (^.*"mime_type".+"rest/error") ]]; then
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    error "${FUNCNAME[0]}" "Failed to post to https://${FF_HOST}/"
+    return 1
+  fi
+
+  # Return success
+  bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+}
+export -f publish_message
 
 ###############################################################################
 # CATEGORY
@@ -5348,7 +5243,7 @@ function set_environment_is_working {
     # Check nodejs installation
     nodejs_check_installation
 
-    # Check set_state() / get_state() by setting random value to some test state and then retrieving it back
+    # Check state_set() / state_get() by setting random value to some test state and then retrieving it back
     state_check_set_and_get
 
     # Check secret_set() / secret_get() by setting random value to some test secret and then retrieving it back
@@ -5380,7 +5275,7 @@ function set_environment_is_working {
   # Check if we have any errors
   if [ "${HAS_ERRORS}" == "true" ]; then
     # We have errors
-    #set_state "${FUNCNAME[0]}" 'failed'  # commented since set_state was already called by concrete check with better (more precise) error code
+    error "${FUNCNAME[0]}" 'Failed: has_errors'
     return 1
   fi
 }
@@ -5391,147 +5286,58 @@ export -f set_environment_is_working
 #   SET ENVIRONMENT
 #
 # NAME
-#   publish_message - Sends a JSON message to the FF_HOST.
+#   state_check_set_and_get - Tests the functionality of setting and getting a state.
 #
 # SYNOPSIS
-#   echo '{"example": "data"}' | publish_message
+#   state_check_set_and_get
 #
 # DESCRIPTION
-#   Accepts a JSON payload through stdin and wraps it in a delivery message format
-#   before POSTing it to the configured FF_HOST. Requires FF_API_USERNAME, FF_API_PASSWORD,
-#   and FF_HOST to be set.
+#   Verifies the ability to set and retrieve a state using state_set and state_get 
+#   functions, respectively. It utilizes a randomly generated UUID, with dashes removed, 
+#   as the state value for the test.
 #
 # DEPENDENCIES
-#   Requires 'curl' to be installed on the system.
+#   Requires 'uuidgen' and 'tr' to be installed on the system.
 #
 # EXAMPLES
-#   echo '{"a": 1, "b": true}' | publish_message
-#   cat  "/path/to/file.json"  | publish_message
+#   if ! state_check_set_and_get; then
+#     echo "Failed to set or get a state.";
+#     exit 1;
+#   fi
 #
 # EXIT STATUS
-#   0 upon successfully sending the message.
-#   1 if there is a failure in sending the message.
+#   0 on success, indicating the state was set and retrieved successfully.
+#   1 on failure, indicating an issue with setting or retrieving the state.
 #
 ###############################################################################
-function publish_message {
+function state_check_set_and_get {
 
-  # Preserve current bash echo settings and enable bash echo setting
-  BASH_ECHO_SETTINGS=$( get_bash_echo_setting ) || { return 1; } # Note: can't use set_state here otherwize will fall into recursive loop
-
-  set_bash_echo_off || { return 1; } # Disable xtrace to avoid priting secrets. Note: can't use set_state here otherwize will fall into recursive loop
-
-  # Read piped json
-  INPUT_JSON=`cat`
-
-  # Check inputs
-  local FF_API_USERNAME=$( secret_get ff_api_username )
-  if [ "${FF_API_USERNAME}" == "" ]; then
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    # error: FF_API_USERNAME is missing
-    # can't use set_state here otherwize will fall into recursive loop
+  # Check tr is installed
+  if ! command_exists tr >/dev/null; then
+    error "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
     return 1
   fi
 
-  local FF_API_PASSWORD=$( secret_get ff_api_password )
-  if [ "${FF_API_PASSWORD}" == "" ]; then
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    # error: FF_API_PASSWORD is missing
-    # can't use set_state here otherwize will fall into recursive loop
+  STATE_NAME="state_check_set_and_get"
+  STATE_VALUE=$( ff_uuid | tr -d '-' )
+
+  # Check generated STATE_VALUE is not empty
+  [ ! -z "${STATE_VALUE}" ] || { error "${FUNCNAME[0]}" 'failed_generate_random_state_value'; return 1; }
+
+  # Set state and try to retrieve value
+  error "${STATE_NAME}" "${STATE_VALUE}" || { return 1; }
+
+  local RETRIEVED_VALUE
+  RETRIEVED_VALUE=$( state_get "${STATE_NAME}" ) || { error "${FUNCNAME[0]}" 'failed_retrieve_state'; return 1; }
+
+  # Compare retrieved and expected values
+  if [ "${RETRIEVED_VALUE}" != "${STATE_VALUE}" ]; then
+    # Mismatch (error)
+    error "${FUNCNAME[0]}" 'error_retrieved_value_mismatch'
     return 1
   fi
-
-  if [ "${INPUT_JSON}" == "" ]; then
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    # error: INPUT_JSON is missing
-    return 1
-  fi
-
-  if [ "${FF_HOST}" == "" ]; then
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    # error: FF_HOST is missing
-    return 1
-  fi
-
-  local UUID="$( ff_uuid )"
-  if [ "${UUID}" == "" ]; then
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    # error: failed to generate UUID
-    return 1
-  fi
-
-  local TRANSACTION_ID="$( ff_uuid )"
-  if [ "${TRANSACTION_ID}" == "" ]; then
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    # error: failed to generate TRANSACTION_ID
-    return 1
-  fi
-
-  if ! command_exists curl >/dev/null; then
-    log "WARNING: curl is not yet isntalled. Skppping publishing JSON: ${INPUT_JSON}"
-    return 0
-  fi
-
-  # Wrap input JSON into the MESSAGE
-  local MESSAGE=$(
-    # Part 1/3: headers and start of payload
-    cat <<- EOF
-    {
-      "uri": "/organization/${ORGANIZATION}/delivery/message/${UUID}",
-      "mime_type": "delivery/message",
-      "header": {
-        "mime_type": "delivery/request_header",
-        "transaction_id": "${TRANSACTION_ID}",
-
-        ${HAS_ERRORS_ELEMENT}
-
-        "from": "/service/set_environment/instance/${UUID}",
-        "to":"/service/storage"
-      },
-      "payload": [
-EOF
-    # Part 2/3: payload
-    echo "${INPUT_JSON}"
-
-    # Part 3/3: footer: closing payload array and message envelop
-    cat <<- EOF
-      ]
-    }
-EOF
-  )
-
-  # Run command, capture server response as ${RESULT} and curl exit code as ${STATUS}
-
-  local RESULT
-  RESULT=$(
-    curl \
-      --silent   \
-      --retry 5    \
-      --request POST \
-      --header "Content-Type: application/json" \
-      --data "${MESSAGE}" \
-      --user "${FF_API_USERNAME}:${FF_API_PASSWORD}" \
-      https://${FF_HOST}/
-  ) || {
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    return 1
-  }
-
-  # Even if curl succeed, check some edge cases, when server replied with some JSON error
-  if [[ ${RESULT} =~ (^Cannot GET) ]]; then
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    return 1
-  fi
-
-  # Check if resut has error mime_type (TODO: improve it to rely on actual response http_code, see implemented in get_by_url())
-  if [[ ${RESULT} =~ (^.*"mime_type".+"rest/error") ]]; then
-    set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    return 1
-  fi
-
-  # Return success
-  set_bash_echo_setting "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
 }
-export -f publish_message
+export -f state_check_set_and_get
 
 ### END SET ENVIRONMENT FUNCTIONS
 

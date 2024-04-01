@@ -100,7 +100,7 @@ export -f add_to_install_if_missing
 #
 function apt_install_basic_packages {
 
-  set_state "${FUNCNAME[0]}" 'started'
+  state_set "${FUNCNAME[0]}" 'started'
 
   # Update apt index and installed components, before installing additional packages.
   assert_clean_exit apt_update
@@ -143,9 +143,9 @@ function apt_install_basic_packages {
   done
 
   # Install only missing packages
-  apt_install ${MISSING_PACKAGES[@]} || { set_state "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
+  apt_install ${MISSING_PACKAGES[@]} || { state_set "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
 
-  set_state "${FUNCNAME[0]}" 'success'
+  state_set "${FUNCNAME[0]}" 'success'
   return 0
 }
 export -f apt_install_basic_packages
@@ -156,9 +156,9 @@ export -f apt_install_basic_packages
 # different means (example: docker, n, npm, nodejs)), bash functions, .bashrc and .profile files.
 #
 function assert_baseline_components {
-  set_state "${FUNCNAME[0]}" 'started'
+  state_set "${FUNCNAME[0]}" 'started'
 
-  # Install basic packages before installing anything else. This will install "curl", thus "set_state" will be able to POST JSON.
+  # Install basic packages before installing anything else. This will install "curl", thus "state_set" will be able to POST JSON.
   assert_clean_exit apt_install_basic_packages
 
   # Install NTP and make sure timesyncd is disabled (not working in parallel)
@@ -177,7 +177,7 @@ function assert_baseline_components {
   ## # Install npm package "@ff/ff_agent" -> ff_agent/
   ## assert_clean_exit install_ff_agent
 
-  set_state "${FUNCNAME[0]}" 'success'
+  state_set "${FUNCNAME[0]}" 'success'
 }
 export -f assert_baseline_components
 
@@ -186,13 +186,13 @@ export -f assert_baseline_components
 # Assert core credentials (npmrc, docker, ...)
 #
 function assert_core_credentials {
-    set_state "${FUNCNAME[0]}" 'started'
+    state_set "${FUNCNAME[0]}" 'started'
 
     # [Q] We should be part of docker group. That's about it I think.
     # [A] Nope, we don't install docker as a 'baseline' environment, thus assection of core credentials will
     #     only take care of user being part of the 'docker group' in case corresponding environment was installed.
 
-    set_state "${FUNCNAME[0]}" 'success'
+    state_set "${FUNCNAME[0]}" 'success'
 }
 export -f assert_core_credentials
 
@@ -207,7 +207,7 @@ export -f assert_core_credentials
 function service_is_running {
   local SERVICE_NAME="$1"
   # Check inputs (must be non-empty string)
-  [ ! -z "${SERVICE_NAME}" ] || { set_state "${FUNCNAME[0]}" 'error_empty_argument'; return 1; }
+  [ ! -z "${SERVICE_NAME}" ] || { state_set "${FUNCNAME[0]}" 'error_empty_argument'; return 1; }
   systemctl is-active --quiet "${SERVICE_NAME}"
 }
 export -f service_is_running
@@ -218,7 +218,7 @@ export -f service_is_running
 #
 function set_environment_ensure_ff_agent_bin_exists {
 
-  set_state "${FUNCNAME[0]}" 'started'
+  state_set "${FUNCNAME[0]}" 'started'
 
   # Define dependencies
   local DEPENDENCIES=(
@@ -242,7 +242,7 @@ function set_environment_ensure_ff_agent_bin_exists {
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
       local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
       return 1
     }
   done
@@ -253,10 +253,10 @@ function set_environment_ensure_ff_agent_bin_exists {
   # Check if target directory exists
   [ -d "${TARGET_DIR}" ] || {
     # Does not exist. Create new.
-    mkdir "${TARGET_DIR}" || { set_state "${FUNCNAME[0]}" 'failed_to_create_directory'; return 1; }
+    mkdir "${TARGET_DIR}" || { state_set "${FUNCNAME[0]}" 'failed_to_create_directory'; return 1; }
   }
 
-  set_state "${FUNCNAME[0]}" 'success'
+  state_set "${FUNCNAME[0]}" 'success'
 }
 export -f set_environment_ensure_ff_agent_bin_exists
 
@@ -269,7 +269,7 @@ export -f set_environment_ensure_ff_agent_bin_exists
 #
 function set_environment_ensure_install_exists {
 
-  set_state "${FUNCNAME[0]}" 'started'
+  state_set "${FUNCNAME[0]}" 'started'
 
   # Define required variables
   local REQUIRED_VARIABLES=(
@@ -280,7 +280,7 @@ function set_environment_ensure_install_exists {
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
       local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
       return 1
     }
   done
@@ -294,16 +294,16 @@ function set_environment_ensure_install_exists {
   # Check symlink exists. Note: -L returns true if the "file" exists and is a symbolic link (the linked file may or may not exist).
   [ -L "${SYMLINK}" ] || {
       # SYMLINK is missing. Try to create new symlink.
-      ln -s "${TARGET_FILE}" "${SYMLINK}" || { set_state "${FUNCNAME[0]}" 'failed_to_create_symlink'; return 1; }
+      ln -s "${TARGET_FILE}" "${SYMLINK}" || { state_set "${FUNCNAME[0]}" 'failed_to_create_symlink'; return 1; }
   }
 
   # Check the target file is present (symlink is not broken)
-  [ -f "${TARGET_FILE}" ] || { set_state "${FUNCNAME[0]}" 'error_target_file_missing'; return 1; }
+  [ -f "${TARGET_FILE}" ] || { state_set "${FUNCNAME[0]}" 'error_target_file_missing'; return 1; }
 
   # Check the target file is executable. Note: extra "-f" check added here since "-x" can say "yes, executable", but target points to directory.
-  [[ -f "${TARGET_FILE}" && -x "${TARGET_FILE}" ]] || { set_state "${FUNCNAME[0]}" 'error_target_file_not_executable'; return 1; }
+  [[ -f "${TARGET_FILE}" && -x "${TARGET_FILE}" ]] || { state_set "${FUNCNAME[0]}" 'error_target_file_not_executable'; return 1; }
 
-  set_state "${FUNCNAME[0]}" 'success'
+  state_set "${FUNCNAME[0]}" 'success'
 }
 export -f set_environment_ensure_install_exists
 
@@ -311,17 +311,17 @@ export -f set_environment_ensure_install_exists
 #
 # Function installs "build_tools" project. 
 function install_build_tools {
-  set_state "${FUNCNAME[0]}" 'started'
+  state_set "${FUNCNAME[0]}" 'started'
 
   GIT_URL="git@github.com:redwolfsecurity/build_tools.git"
 
-  cd /tmp                 || { set_state "${FUNCNAME[0]}" 'failed_to_change_directory_to_temporary_folder'; return 1; }
-  rm -fr /tmp/build_tools || { set_state "${FUNCNAME[0]}" 'failed_to_cleanup_old_project_temporary_folder'; return 1; }
-  git clone "${GIT_URL}"  || { set_state "${FUNCNAME[0]}" 'failed_to_git_clone_project'; return 1; }
-  cd build_tools          || { set_state "${FUNCNAME[0]}" 'failed_to_change_directory_to_project_folder'; return 1; }
-  ./install               || { set_state "${FUNCNAME[0]}" 'failed_to_install'; return 1; }
+  cd /tmp                 || { state_set "${FUNCNAME[0]}" 'failed_to_change_directory_to_temporary_folder'; return 1; }
+  rm -fr /tmp/build_tools || { state_set "${FUNCNAME[0]}" 'failed_to_cleanup_old_project_temporary_folder'; return 1; }
+  git clone "${GIT_URL}"  || { state_set "${FUNCNAME[0]}" 'failed_to_git_clone_project'; return 1; }
+  cd build_tools          || { state_set "${FUNCNAME[0]}" 'failed_to_change_directory_to_project_folder'; return 1; }
+  ./install               || { state_set "${FUNCNAME[0]}" 'failed_to_install'; return 1; }
 
-  set_state "${FUNCNAME[0]}" 'success'
+  state_set "${FUNCNAME[0]}" 'success'
 }
 export -f install_build_tools
 
@@ -330,12 +330,12 @@ export -f install_build_tools
 # Install npm package "@ff/ff_agent" -> ff_agent/
 #
 function install_ff_agent {
-  set_state "${FUNCNAME[0]}" 'started'
+  state_set "${FUNCNAME[0]}" 'started'
 
   # Define the version of ff_agent npm package to install from CDN
   VERSION='latest'
 
-  local ARCHITECTURE=$( get_hardware_architecture ) || { set_state "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
+  local ARCHITECTURE=$( hardware_architecture_get ) || { state_set "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
   
   # If we are on arm64, we likely need to install some extra packages
   # This is done as a case, just in case we have other such architectural changes for other architectures.
@@ -345,16 +345,16 @@ function install_ff_agent {
         libcurl4-openssl-dev
         build-essential
       )
-      apt_install ${PACKAGES_TO_INSTALL[@]} || { set_state "${FUNCNAME[0]}" 'terminal_error_unable_to_install_ff_agent_dependencies'; abort; }
+      apt_install ${PACKAGES_TO_INSTALL[@]} || { state_set "${FUNCNAME[0]}" 'terminal_error_unable_to_install_ff_agent_dependencies'; abort; }
     ;;
     *)
     ;;
   esac
 
   # Install ff_agent
-  npm install --global "${FF_CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}.tgz" || { set_state "${FUNCNAME[0]}" 'terminal_error_failed_to_install_ff_agent'; abort; }
+  npm install --global "${FF_CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}.tgz" || { state_set "${FUNCNAME[0]}" 'terminal_error_failed_to_install_ff_agent'; abort; }
 
-  set_state "${FUNCNAME[0]}" 'success'
+  state_set "${FUNCNAME[0]}" 'success'
   return 0
 }
 export -f install_ff_agent
@@ -368,7 +368,7 @@ export -f install_ff_agent
 #   - FF_AGENT_HOME
 #
 function install_ff_agent_bashrc {
-  set_state "${FUNCNAME[0]}" 'started'
+  state_set "${FUNCNAME[0]}" 'started'
 
   # Define required variables
   local REQUIRED_VARIABLES=(
@@ -380,7 +380,7 @@ function install_ff_agent_bashrc {
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
       local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
       return 1
     }
   done
@@ -389,7 +389,7 @@ function install_ff_agent_bashrc {
   if [ ! -d "${FF_AGENT_HOME}" ]; then
     # ${FF_AGENT_HOME} folder is missing. Don't try to create it (it is not our responsibility)
     # Report an error and abort.
-    set_state "${FUNCNAME[0]}" 'terminal_error_ff_agent_home_folder_does_not_exist'
+    state_set "${FUNCNAME[0]}" 'terminal_error_ff_agent_home_folder_does_not_exist'
     error "FF_AGENT_HOME='${FF_AGENT_HOME}' directory Does not exist. Aborting."
     abort
   fi
@@ -413,7 +413,7 @@ function install_ff_agent_bashrc {
         cat <<EOT
 # File ${TARGET_FILE} created by set_environment ${FUNCNAME[0]}() on $(date --utc).
 EOT
-      ) > "${TARGET_FILE}" || { set_state "${FUNCNAME[0]}" "failed_to_create_file"; return 1; }
+      ) > "${TARGET_FILE}" || { state_set "${FUNCNAME[0]}" "failed_to_create_file"; return 1; }
     fi
 
     PATTERN="^source \"${FF_AGENT_PROFILE_FILE}\""
@@ -426,7 +426,7 @@ EOT
     ERROR_CODE='error_injecting_source_custom_profile'
 
     # Do injection and check result
-    inject_into_file "${TARGET_FILE}" "${PATTERN}" "${INJECT_CONTENT}" || { set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; return 1; }
+    inject_into_file "${TARGET_FILE}" "${PATTERN}" "${INJECT_CONTENT}" || { state_set "${FUNCNAME[0]}" "${ERROR_CODE}"; return 1; }
   done
   #
   # --------------------------------------------------------------------
@@ -455,11 +455,11 @@ EOT
       cat <<EOT
 # File ${TARGET_FILE} created by set_environment ${FUNCNAME[0]}() on $(date --utc).
 EOT
-    ) > "${TARGET_FILE}" || { set_state "${FUNCNAME[0]}" "failed_to_create_file"; return 1; }
+    ) > "${TARGET_FILE}" || { state_set "${FUNCNAME[0]}" "failed_to_create_file"; return 1; }
   fi
 
   # Do injection and check result
-  inject_into_file "${TARGET_FILE}" "${PATTERN}" "${INJECT_CONTENT}" || { set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; return 1; }
+  inject_into_file "${TARGET_FILE}" "${PATTERN}" "${INJECT_CONTENT}" || { state_set "${FUNCNAME[0]}" "${ERROR_CODE}"; return 1; }
   #
   # --------------------------------------------------------------------
 
@@ -475,7 +475,7 @@ EOT
   ERROR_CODE='error_injecting_discover_environment_call_to_custom_profile'
 
   # Do injection and check result
-  inject_into_file "${TARGET_FILE}" "${PATTERN}" "${INJECT_CONTENT}" || { set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; return 1; }
+  inject_into_file "${TARGET_FILE}" "${PATTERN}" "${INJECT_CONTENT}" || { state_set "${FUNCNAME[0]}" "${ERROR_CODE}"; return 1; }
   #
   # --------------------------------------------------------------------
 
@@ -488,7 +488,7 @@ EOT
   # Update PATH variable (if it not yet contains expected string)
   printenv PATH | grep --quiet "${FF_AGENT_BIN}"
   if [ ${?} -ne 0 ]; then
-    export PATH="${FF_AGENT_BIN}:${PATH}" || { set_state "${FUNCNAME[0]}" 'error_modifying_path'; return 1; }
+    export PATH="${FF_AGENT_BIN}:${PATH}" || { state_set "${FUNCNAME[0]}" 'error_modifying_path'; return 1; }
   fi
 
   TARGET_FILE="${FF_AGENT_PROFILE_FILE}"
@@ -501,12 +501,12 @@ EOT
   ERROR_CODE='error_injecting_ff_agent_bin_path_to_custom_profile'
 
   # Do injection and check result
-  inject_into_file "${TARGET_FILE}" "${PATTERN}" "${INJECT_CONTENT}" || { set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; return 1; }
+  inject_into_file "${TARGET_FILE}" "${PATTERN}" "${INJECT_CONTENT}" || { state_set "${FUNCNAME[0]}" "${ERROR_CODE}"; return 1; }
   #
   # --------------------------------------------------------------------
 
   # Chage state and return success
-  set_state "${FUNCNAME[0]}" 'success'
+  state_set "${FUNCNAME[0]}" 'success'
   return 0
 }
 export -f install_ff_agent_bashrc
@@ -519,7 +519,7 @@ export -f install_ff_agent_bashrc
 # In case of any errors script prints error to standard error stream and exit with code 1.
 #
 function install_go {
-  set_state "${FUNCNAME[0]}" 'started'
+  state_set "${FUNCNAME[0]}" 'started'
 
   # Define required variables
   local REQUIRED_VARIABLES=(
@@ -530,7 +530,7 @@ function install_go {
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
       local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
       return 1
     }
   done
@@ -539,46 +539,46 @@ function install_go {
   # 1st with version (example: go1.21.0)
   # 2nd useless line that breaks it if not supressed (example: time 2023-08-04T20:14:06Z)
   local URL="https://go.dev/VERSION?m=text"
-  local EXPECTED_VERSION=$( get_by_url "${URL}" '-' | head -n1 )
+  local EXPECTED_VERSION=$( url_get "${URL}" '-' | head -n1 )
   
   # Check status of 1st command in the excuted bove pipeline
   if [ ${PIPESTATUS[0]} -ne 0 ]; then
-    set_state "${FUNCNAME[0]}" 'failed_to_get_latest_version_number'
+    state_set "${FUNCNAME[0]}" 'failed_to_get_latest_version_number'
     return 1
   fi
 
-  [ ! -z "${EXPECTED_VERSION}" ] || { set_state "${FUNCNAME[0]}" 'failed_to_get_latest_version_number'; return 1; }
+  [ ! -z "${EXPECTED_VERSION}" ] || { state_set "${FUNCNAME[0]}" 'failed_to_get_latest_version_number'; return 1; }
 
   # Check if go is already installed and has expected vesrion
   if command_exists go >/dev/null; then
       # Yes, 'go' is installed. Check if installed version matches expected one.
-      INSTALLED_VERSION="$( go version )" || { set_state "${FUNCNAME[0]}" 'failed_to_get_existing_version_number'; return 1; }
+      INSTALLED_VERSION="$( go version )" || { state_set "${FUNCNAME[0]}" 'failed_to_get_existing_version_number'; return 1; }
 
       # Compare to expected version
       if [[ "${INSTALLED_VERSION}" =~ ${EXPECTED_VERSION} ]]; then
         # Match. Version is up to date, nothing to do.
-        set_state "${FUNCNAME[0]}" 'success'
+        state_set "${FUNCNAME[0]}" 'success'
         return 0
       fi
       # Version mismatch, simply continue installation (to upgrade)...
   fi
 
   # Create temporary folder (for downloading 'go' archive)
-  local TEMP_DIR="$( mktemp --directory )" || { set_state "${FUNCNAME[0]}" 'failed_to_create_temp_dir'; return 1; }
+  local TEMP_DIR="$( mktemp --directory )" || { state_set "${FUNCNAME[0]}" 'failed_to_create_temp_dir'; return 1; }
 
   # Check temporary folder created and we can write to it
   if ! is_writable "${TEMP_DIR}"; then
-    set_state "${FUNCNAME[0]}" "error_temp_dir_is_not_writable"
+    state_set "${FUNCNAME[0]}" "error_temp_dir_is_not_writable"
     return 1
   fi
 
   # Get OS
-  local OS="$( get_os_name )" || { set_state "${FUNCNAME[0]}" "failed_to_get_os_name"; return 1; }
-  [ ! -z "${OS}" ] || { set_state "${FUNCNAME[0]}" "failed_to_get_os_name"; return 1; }
+  local OS="$( os_name_get )" || { state_set "${FUNCNAME[0]}" "failed_to_os_name_get"; return 1; }
+  [ ! -z "${OS}" ] || { state_set "${FUNCNAME[0]}" "failed_to_os_name_get"; return 1; }
 
   # Get ARCHITECTURE
-  local ARCHITECTURE="$( get_hardware_architecture )" || { set_state "${FUNCNAME[0]}" "failed_to_get_hardware_architecture"; return 1; }
-  [ ! -z "${OS}" ] || { set_state "${FUNCNAME[0]}" "failed_to_get_hardware_architecture"; return 1; }
+  local ARCHITECTURE="$( hardware_architecture_get )" || { state_set "${FUNCNAME[0]}" "failed_to_hardware_architecture_get"; return 1; }
+  [ ! -z "${OS}" ] || { state_set "${FUNCNAME[0]}" "failed_to_hardware_architecture_get"; return 1; }
 
   # Define archive filename
   TARBALL_FILENAME="${EXPECTED_VERSION}.${OS}-${ARCHITECTURE}.tar.gz"
@@ -594,15 +594,15 @@ function install_go {
     --max-time 185 \
     --connect-timeout 12 \
     -o "${TEMP_DIR}/${TARBALL_FILENAME}" \
-    "${URL}" || { set_state "${FUNCNAME[0]}" "failed_to_download_archive"; return 1; }
+    "${URL}" || { state_set "${FUNCNAME[0]}" "failed_to_download_archive"; return 1; }
 
   # Check if file downloaded (in case of "404 not found" curl return code 0 and will not create "-o file")
-  [ -f "${TEMP_DIR}/${TARBALL_FILENAME}" ] || { set_state "${FUNCNAME[0]}" "failed_to_download_archive"; return 1; }
+  [ -f "${TEMP_DIR}/${TARBALL_FILENAME}" ] || { state_set "${FUNCNAME[0]}" "failed_to_download_archive"; return 1; }
 
   # Remove previous local version of 'go' if exists
   # 1st "blind assumption" to remove go from expected place
   if [ -d "${FF_AGENT_HOME}/go" ]; then
-    rm -fr "${FF_AGENT_HOME}/go" || { set_state "${FUNCNAME[0]}" "failed_to_remove_existing_go"; return 1; }
+    rm -fr "${FF_AGENT_HOME}/go" || { state_set "${FUNCNAME[0]}" "failed_to_remove_existing_go"; return 1; }
   fi
   # 2nd remove "go" if it is in the path
   if command_exists go >/dev/null; then
@@ -617,7 +617,7 @@ function install_go {
   # Install 'go'
 
   # Unzip downloaded archive (the "bin" folder of the golang will be available here: ${FF_AGENT_HOME}/go/bin/ )
-  tar -C "${FF_AGENT_HOME}" -xzf "${TEMP_DIR}/${TARBALL_FILENAME}" || { set_state "${FUNCNAME[0]}" "failed_to_extract_archive"; return 1; }
+  tar -C "${FF_AGENT_HOME}" -xzf "${TEMP_DIR}/${TARBALL_FILENAME}" || { state_set "${FUNCNAME[0]}" "failed_to_extract_archive"; return 1; }
 
   # Remove temporary folder
   rm -fr "${TEMP_DIR}" || { error "Warning: failed to remove temporary folder: '${TEMP_DIR}'"; }
@@ -631,7 +631,7 @@ function install_go {
       cat <<EOT
 # File ${TARGET_FILE} created by set_environment ${FUNCNAME[0]}() on $( date --utc ).
 EOT
-    ) > "${TARGET_FILE}" || { set_state "${FUNCNAME[0]}" "failed_to_create_file"; return 1; }
+    ) > "${TARGET_FILE}" || { state_set "${FUNCNAME[0]}" "failed_to_create_file"; return 1; }
   fi
 
   # Check if expected line was already injected into the profile.
@@ -649,7 +649,7 @@ EOT
   inject_into_file  \
     "${TARGET_FILE}" \
     "${PATTERN}" \
-    "${INJECT_CONTENT}" || { set_state "${FUNCNAME[0]}" "${ERROR_CODE}"; return 1; }
+    "${INJECT_CONTENT}" || { state_set "${FUNCNAME[0]}" "${ERROR_CODE}"; return 1; }
 
   # Also inject path to 'go' into current PATH (if missing in PATH)
   # do the export, so we don't have to relogin in order to call "go version"
@@ -660,16 +660,16 @@ EOT
   fi
 
   # Check installed 'go' version
-  INSTALLED_VERSION="$( go version )" || { set_state "${FUNCNAME[0]}" 'failed_to_get_installed_version_number'; return 1; }
+  INSTALLED_VERSION="$( go version )" || { state_set "${FUNCNAME[0]}" 'failed_to_get_installed_version_number'; return 1; }
 
   # Compare to the expected version
   if [[ "${INSTALLED_VERSION}" =~ ${EXPECTED_VERSION} ]]; then
     # Good - expected version installed.
-    set_state "${FUNCNAME[0]}" 'success'
+    state_set "${FUNCNAME[0]}" 'success'
     return 0
   else
     # Mismatch.
-    set_state "${FUNCNAME[0]}" 'failed_to_match_expected_vs_installed_version'
+    state_set "${FUNCNAME[0]}" 'failed_to_match_expected_vs_installed_version'
     return 1
   fi
 }
@@ -690,7 +690,7 @@ export -f install_go
 #   https://github.com/tj/n#installation
 #
 function install_n {
-  set_state "${FUNCNAME[0]}" "start"
+  state_set "${FUNCNAME[0]}" "start"
 
   # Define required variables
   local REQUIRED_VARIABLES=(
@@ -701,7 +701,7 @@ function install_n {
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
       local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
       return 1
     }
   done
@@ -713,13 +713,13 @@ function install_n {
   if [ ! -f "${FF_AGENT_PROFILE_FILE}" ]; then
     # Let's not try to re-create it if missing.
     # It should have been created by existing install_ff_agent_bashrc()
-  	set_state "${FUNCNAME[0]}" "error_custom_ff_agent_profile_does_not_exist"
+  	state_set "${FUNCNAME[0]}" "error_custom_ff_agent_profile_does_not_exist"
     return 1
   fi
 
   # Create tmp folder and change directory into it
   TMPDIR="$( mktemp -d )"
-  pushd "${TMPDIR}" || { set_state "${FUNCNAME[0]}" 'error_pushd_to_tmp_directory'; return 1; }
+  pushd "${TMPDIR}" || { state_set "${FUNCNAME[0]}" 'error_pushd_to_tmp_directory'; return 1; }
 
   # Attempt 1: download 'n' from FF_CONTENT_URL
   # Try FF_CONTENT_URL first because it gives more control over what version of 'n' will be executed.
@@ -739,7 +739,7 @@ function install_n {
 
   # Check curl exit code
   if [ ${?} -ne 0 ]; then
-      set_state "${FUNCNAME[0]}" 'failed_to_download_n_from_content_server'
+      state_set "${FUNCNAME[0]}" 'failed_to_download_n_from_content_server'
 
       # Attempt 2: download 'n' from from github
       URL="https://raw.githubusercontent.com/tj/n/master/bin/n"
@@ -758,9 +758,9 @@ function install_n {
       if [ ${?} -ne 0 ]; then
         # The 2nd attempt failed too, giving up.
         # Error: clean up tmp folder, report an error and return error code 1
-        popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }
-        rm -fr "${TMPDIR}" || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
-        set_state "${FUNCNAME[0]}" 'warning_failed_to_download_n_from_github'
+        popd || { state_set "${FUNCNAME[0]}" 'error_popd'; return 1; }
+        rm -fr "${TMPDIR}" || { state_set "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
+        state_set "${FUNCNAME[0]}" 'warning_failed_to_download_n_from_github'
         return 1
       fi
   fi
@@ -788,9 +788,9 @@ EOT
     "${PATTERN}" \
     "${INJECT_CONTENT}" || {
       # Error: clean up tmp folder, report an error and return error code 1
-      popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }
-      rm -fr "${TMPDIR}" || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      popd || { state_set "${FUNCNAME[0]}" 'error_popd'; return 1; }
+      rm -fr "${TMPDIR}" || { state_set "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
+      state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
       return 1
   }
 
@@ -819,9 +819,9 @@ EOT
     "${PATTERN}" \
     "${INJECT_CONTENT}" || {
       # Error: clean up tmp folder, report an error and return error code 1
-      popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }
-      rm -fr "${TMPDIR}" || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
-      set_state "${FUNCNAME[0]}" "${ERROR_CODE}"
+      popd || { state_set "${FUNCNAME[0]}" 'error_popd'; return 1; }
+      rm -fr "${TMPDIR}" || { state_set "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
+      state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
       return 1
   }
   # ------------------ Export NODE_PATH and inject that export into FF_AGENT_PROFILE_FILE (end) ----------------
@@ -834,8 +834,8 @@ EOT
   if [ ${?} -ne 0 ]; then
     export PATH="${N_PREFIX}/bin:${PATH}" || {
         # Error: clean up tmp folder, report an error and return error code 1
-        popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
-        set_state "${FUNCNAME[0]}" 'error_modifying_path'; return 1;
+        popd || { state_set "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { state_set "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
+        state_set "${FUNCNAME[0]}" 'error_modifying_path'; return 1;
     }
   fi
 
@@ -852,21 +852,21 @@ ${EXPECTED_LINE}
 EOT
     ) >> "${TARGET_FILE}" || {
         # Error: clean up tmp folder, report an error and return error code 1
-        popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
-        set_state "${FUNCNAME[0]}" 'error_injecting_n_prefix_bin_to_ff_agent_profile'; return 1;
+        popd || { state_set "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { state_set "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
+        state_set "${FUNCNAME[0]}" 'error_injecting_n_prefix_bin_to_ff_agent_profile'; return 1;
     }
   fi
   # ------------------ Inject "ff_agent/.n/bin" into PATH and inject that export into FF_AGENT_PROFILE_FILE (end) ----------------
 
   #
   VERSION=$( get_desired_nodejs_version )
-  [ -z "${VERSION}" ] && { set_state "${FUNCNAME[0]}" 'failed_to_get_desired_nodejs_version'; abort; }
+  [ -z "${VERSION}" ] && { state_set "${FUNCNAME[0]}" 'failed_to_get_desired_nodejs_version'; abort; }
 
   # Install 'n_lts' using dowloaded into TMPDIR 'n' ('n_lts' will be installed into ff_agent/.n)
   retry_command 5 15 bash n "${VERSION}" || {
     # Error: clean up tmp folder, report an error and return error code 1
-    popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
-    set_state "${FUNCNAME[0]}" 'error_installing_n'; return 1;
+    popd || { state_set "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { state_set "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
+    state_set "${FUNCNAME[0]}" 'error_installing_n'; return 1;
   }
 
   # Install 'n' into ff_agent/.n  (yes, we have downloaded 'n' into TMPDIR,
@@ -874,15 +874,15 @@ EOT
   # The proper installed 'n' will reisde under ff_agent/.n/ folder)
   npm install --verbose --global n || {
     # Error: clean up tmp folder, report an error and return error code 1
-    popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
-    set_state "${FUNCNAME[0]}" 'error_installing_n'; return 1;
+    popd || { state_set "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { state_set "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
+    state_set "${FUNCNAME[0]}" 'error_installing_n'; return 1;
   }
 
   # Clean up tmp folder
-  popd || { set_state "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { set_state "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
+  popd || { state_set "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { state_set "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
 
   # Chage state and return success
-  set_state "${FUNCNAME[0]}" 'success'
+  state_set "${FUNCNAME[0]}" 'success'
   return 0
 }
 export -f install_n
@@ -890,20 +890,20 @@ export -f install_n
 ###############################################################################
 #
 function install_nodejs {
-  set_state "${FUNCNAME[0]}" 'started'
+  state_set "${FUNCNAME[0]}" 'started'
 
   # Get desired nodejs version
   local VERSION="$( get_desired_nodejs_version )"
-  [ -z "${VERSION}" ] && { set_state "${FUNCNAME[0]}" 'failed_to_get_desired_nodejs_version'; abort; }
+  [ -z "${VERSION}" ] && { state_set "${FUNCNAME[0]}" 'failed_to_get_desired_nodejs_version'; abort; }
 
 
   # # We need to stop pm2 before replacing location of nodejs, otherwise any pm2 command would faild
   # stop_pm2
-  # uninstall_n_outside_ff_agent_home  || { set_state "${FUNCNAME[0]}" 'terminal_error_uninstall_n_outside_ff_agent_home'; abort; }
-  install_n || { set_state "${FUNCNAME[0]}" 'terminal_error_install_n'; abort; }
-  n install "${VERSION}" || { set_state "${FUNCNAME[0]}" 'terminal_error_switching_node_version'; abort; }
+  # uninstall_n_outside_ff_agent_home  || { state_set "${FUNCNAME[0]}" 'terminal_error_uninstall_n_outside_ff_agent_home'; abort; }
+  install_n || { state_set "${FUNCNAME[0]}" 'terminal_error_install_n'; abort; }
+  n install "${VERSION}" || { state_set "${FUNCNAME[0]}" 'terminal_error_switching_node_version'; abort; }
 
-  set_state "${FUNCNAME[0]}" 'success'
+  state_set "${FUNCNAME[0]}" 'success'
   return 0
 }
 export -f install_nodejs
@@ -912,11 +912,11 @@ export -f install_nodejs
 #
 # Install nodejs latest environment
 function install_nodejs_suite {
-  set_state "${FUNCNAME[0]}" 'started'
+  state_set "${FUNCNAME[0]}" 'started'
 
-  install_nodejs || { set_state "${FUNCNAME[0]}" 'terminal_error_install_node'; abort; }
+  install_nodejs || { state_set "${FUNCNAME[0]}" 'terminal_error_install_node'; abort; }
 
-  set_state "${FUNCNAME[0]}" 'success'
+  state_set "${FUNCNAME[0]}" 'success'
   return 0
 }
 export -f install_nodejs_suite
@@ -924,23 +924,23 @@ export -f install_nodejs_suite
 ###############################################################################
 #
 # Continuation of the "set_environment". Installing baseline components.
-# On errror: function aborts (so no need to errorcheck on caller side)
+# On error: function aborts (so no need to errorcheck on caller side)
 #
 function install_set_environment_baseline {
 
   # Discover environment (choose user, make sure it's home folder exists, check FF_CONTENT_URL is set etc.)
   discover_environment || { abort "terminal_error_failed_to_discover_environment"; }
 
-  # Now we can set_state()
-  set_state "${FUNCNAME[0]}" 'started'
+  # Now we can state_set()
+  state_set "${FUNCNAME[0]}" 'started'
 
   # Put logs in best location
-  setup_logging || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_setup_logging"; abort; }
+  setup_logging || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_setup_logging"; abort; }
 
   # Install set of basic packages, bash functions, .bashrc and .profile files
-  assert_clean_exit assert_baseline_components || { set_state "${FUNCNAME[0]}" "terminal_error_failed_to_assert_baseline_components"; abort; }
+  assert_clean_exit assert_baseline_components || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_assert_baseline_components"; abort; }
 
-  set_state "${FUNCNAME[0]}" 'success'
+  state_set "${FUNCNAME[0]}" 'success'
 }
 export -f install_set_environment_baseline
 
@@ -952,7 +952,7 @@ export -f install_set_environment_baseline
 function pm2_is_installed {
     local STATUS=0
     local PACKAGE="pm2"
-    local NPM=$( command_exists npm ) || { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
+    local NPM=$( command_exists npm ) || { state_set "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
 
     # If it not installed, set STATUS=1
     ${NPM} list "${PACKAGE}" --global >/dev/null
@@ -1031,10 +1031,10 @@ export -f pm2_is_installed
 # #
 # # Return value: 0 = success, 1 = failure
 # #
-# # Note: f-n also uses set_state()
+# # Note: f-n also uses state_set()
 # #
 # function replace_timesyncd_with_ntpd {
-#     set_state "${FUNCNAME[0]}" 'started'
+#     state_set "${FUNCNAME[0]}" 'started'
 
 #     # Check if timesyncd is active (disable if active)
 #     IS_TIMESYNCD_ACTIVE=$( systemctl status systemd-timesyncd.service | grep -i active | awk '{print $2}' )  # returns 'active' or 'inactive'
@@ -1053,7 +1053,7 @@ export -f pm2_is_installed
 #         IS_TIMESYNCD_ACTIVE=$( systemctl status systemd-timesyncd.service | grep -i active | awk '{print $2}' )  # returns 'active' or 'inactive'
 #         if [ "${IS_TIMESYNCD_ACTIVE}" == "active" ]; then
 #             # Still active! Error out
-#             set_state "${FUNCNAME[0]}" 'failed_stop_timesyncd'
+#             state_set "${FUNCNAME[0]}" 'failed_stop_timesyncd'
 #             return 1
 #         fi
 
@@ -1069,7 +1069,7 @@ export -f pm2_is_installed
 #         IS_NTP_INSTALLED=$( dpkg --get-selections ntp | grep -v deinstall | grep install | awk '{print $2}' )  # returns 'install' if is installed or emptry string if not
 #         if [ "${IS_NTP_INSTALLED}" != "install" ]; then
 #             # Still not isntalled! Error out
-#             set_state "${FUNCNAME[0]}" 'failed_to_install_ntp'
+#             state_set "${FUNCNAME[0]}" 'failed_to_install_ntp'
 #             return 1
 #         fi
 #     fi
@@ -1077,13 +1077,13 @@ export -f pm2_is_installed
 #     # Enble NTP (this will make it to autostart on reboot)
 #     sudo systemctl enable ntp
 #     if [ ${?} -ne 0 ]; then
-#         set_state "${FUNCNAME[0]}" 'failed_to_enable_ntp'
+#         state_set "${FUNCNAME[0]}" 'failed_to_enable_ntp'
 #     fi
 
 #     # Start NTP (note: it is safe to try to start in case it is already running - this might happen if ntp was not installed and was just added 1st time by apt)
 #     sudo systemctl start ntp
 #     if [ ${?} -ne 0 ]; then
-#         set_state "${FUNCNAME[0]}" 'failed_to_start_ntp'
+#         state_set "${FUNCNAME[0]}" 'failed_to_start_ntp'
 #     fi
 
 #     # Last status check: query local ntpd
@@ -1091,11 +1091,11 @@ export -f pm2_is_installed
 #     LOCAL_NTP_QUERY_STATUS_EXIT_CODE=${?}
 
 #     if [ ${LOCAL_NTP_QUERY_STATUS_EXIT_CODE} -ne 0 ]; then
-#         set_state "${FUNCNAME[0]}" 'failed_to_query_ntp'
+#         state_set "${FUNCNAME[0]}" 'failed_to_query_ntp'
 #         return 1
 #     fi
 
-#     set_state "${FUNCNAME[0]}" 'success'
+#     state_set "${FUNCNAME[0]}" 'success'
 #     return 0
 # }
 
@@ -1104,7 +1104,7 @@ export -f pm2_is_installed
 # pm2_is_running_as_me
 # Will return 0 if it is, 1 if it is not
 function pm2_is_running_as_me {
-    set_state "${FUNCNAME[0]}" 'started'
+    state_set "${FUNCNAME[0]}" 'started'
     # Process will look like PM2 v4.5.5: God Daemon (/home/user/.pm2)
     local PATTERN="PM2 .*: God Daemon"
 
@@ -1112,7 +1112,7 @@ function pm2_is_running_as_me {
     process_is_running_as_me "${PATTERN}"
     local STATUS=${?}
 
-    set_state "${FUNCNAME[0]}" 'success'
+    state_set "${FUNCNAME[0]}" 'success'
 
     return ${STATUS}
 }
@@ -1123,28 +1123,28 @@ export -f pm2_is_running_as_me
 # pm2_configure
 # Configures pm2 the way we want it configured
 function pm2_configure {
-    set_state "${FUNCNAME[0]}" 'started'
+    state_set "${FUNCNAME[0]}" 'started'
     # Now it is installed, and command is in path. So we shall configure it
     # Configure it to automatically save state
-    timeout 30 pm2 set pm2:autodump true            || { set_state "${FUNCNAME[0]}" "pm2_configure_autodump_error"; return 1; }
+    timeout 30 pm2 set pm2:autodump true            || { state_set "${FUNCNAME[0]}" "pm2_configure_autodump_error"; return 1; }
 
     # Configure it to rotate logs
-    timeout 45 pm2 install pm2-logrotate            || { set_state "${FUNCNAME[0]}" "pm2_install_logrotate_error"; return 1; }
-    timeout 30 pm2 set pm2-logrotate:max_size 20M   || { set_state "${FUNCNAME[0]}" "pm2_configure_logrotate_error"; return 1; }
-    timeout 30 pm2 set pm2-logrotate:retain 7       || { set_state "${FUNCNAME[0]}" "pm2_configure_logrotate_error"; return 1; }
-    timeout 30 pm2 set pm2-logrotate:compress true  || { set_state "${FUNCNAME[0]}" "pm2_configure_logrotate_error"; return 1; }
+    timeout 45 pm2 install pm2-logrotate            || { state_set "${FUNCNAME[0]}" "pm2_install_logrotate_error"; return 1; }
+    timeout 30 pm2 set pm2-logrotate:max_size 20M   || { state_set "${FUNCNAME[0]}" "pm2_configure_logrotate_error"; return 1; }
+    timeout 30 pm2 set pm2-logrotate:retain 7       || { state_set "${FUNCNAME[0]}" "pm2_configure_logrotate_error"; return 1; }
+    timeout 30 pm2 set pm2-logrotate:compress true  || { state_set "${FUNCNAME[0]}" "pm2_configure_logrotate_error"; return 1; }
 
     # configure it to rotate logs every hour
-    timeout 30 pm2 set pm2-logrotate:rotateInterval '0 0 * * * *'  || { set_state "${FUNCNAME[0]}" "pm2_configure_logrotate_error"; return 1; }
+    timeout 30 pm2 set pm2-logrotate:rotateInterval '0 0 * * * *'  || { state_set "${FUNCNAME[0]}" "pm2_configure_logrotate_error"; return 1; }
     
     # pm2 update sometimes fail on 1st attempt, but then works on the 2nd. Let's add 3 attempts to make sure.
     local IS_PM2_UPDATED=false MAX_ATTEMPTS=3 ATTEMPT
     for ATTEMPT in $( seq 1 ${MAX_ATTEMPTS} ); do
       timeout 55 pm2 update && { IS_PM2_UPDATED=true; break; }
     done
-    [ "${IS_PM2_UPDATED}" == "true" ] || { set_state "${FUNCNAME[0]}" "pm2_update_error"; return 1; } # "Error: failed to update pm2 after ${ATTEMPT} attempts"
+    [ "${IS_PM2_UPDATED}" == "true" ] || { state_set "${FUNCNAME[0]}" "pm2_update_error"; return 1; } # "Error: failed to update pm2 after ${ATTEMPT} attempts"
 
-    set_state "${FUNCNAME[0]}" 'success'
+    state_set "${FUNCNAME[0]}" 'success'
 }
 export -f pm2_configure
 
@@ -1154,31 +1154,31 @@ export -f pm2_configure
 # This ensures that pm2 is running, and working as we wish. aborts otherwise.
 # If it is not installed, we install it.
 function pm2_ensure {
-    set_state "${FUNCNAME[0]}" 'started'
+    state_set "${FUNCNAME[0]}" 'started'
 
     # If pm2 is running, then we ensure it is properly configured. It might have been running already, but not properly configured.
     pm2_is_running_as_me
     if [ ${?} == 0 ]; then
-        pm2_configure || { set_state "${FUNCNAME[0]}" 'error_configuring_pm2'; abort 'error_configuring_pm2'; }
-        set_state "${FUNCNAME[0]}" 'success'
+        pm2_configure || { state_set "${FUNCNAME[0]}" 'error_configuring_pm2'; abort 'error_configuring_pm2'; }
+        state_set "${FUNCNAME[0]}" 'success'
         return 0
     fi
 
     # It is not running as me, it might not be installed. If that's the case, we install it.
     # Is pm2 installed? If not, install it
-    pm2_is_installed || pm2_install || { set_state "${FUNCNAME[0]}" 'error_failed_to_install_pm2'; abort; }
+    pm2_is_installed || pm2_install || { state_set "${FUNCNAME[0]}" 'error_failed_to_install_pm2'; abort; }
 
     # Now it has to at least be installed, and not running, so we try to start it.
-    pm2_start || { set_state "${FUNCNAME[0]}" 'failed_to_start_pm2'; abort 'failed_to_start_pm2'; }
+    pm2_start || { state_set "${FUNCNAME[0]}" 'failed_to_start_pm2'; abort 'failed_to_start_pm2'; }
 
     # Check if pm2 started and running by expected user
-    pm2_is_running_as_me || { set_state "${FUNCNAME[0]}" 'error_pm2_not_running_as_user'; abort 'error_pm2_not_running_as_user'; }
+    pm2_is_running_as_me || { state_set "${FUNCNAME[0]}" 'error_pm2_not_running_as_user'; abort 'error_pm2_not_running_as_user'; }
 
     # Now it is running, so let's configure it
-    pm2_configure || { set_state "${FUNCNAME[0]}" 'error_configuring_pm2'; abort 'error_configuring_pm2'; }
+    pm2_configure || { state_set "${FUNCNAME[0]}" 'error_configuring_pm2'; abort 'error_configuring_pm2'; }
 
     # If all above works, we have it running
-    set_state "${FUNCNAME[0]}" 'success'
+    state_set "${FUNCNAME[0]}" 'success'
 }
 export -f pm2_ensure
 
@@ -1188,7 +1188,7 @@ export -f pm2_ensure
 # Will install pm2 if there is no command 'pm2'
 # Will not start it
 function pm2_install {
-    set_state "${FUNCNAME[0]}" 'started'
+    state_set "${FUNCNAME[0]}" 'started'
 
     local NPM_PACKAGE="pm2"
     local VERSION="latest"
@@ -1200,19 +1200,19 @@ function pm2_install {
     # pm2_is_running_as_me && stop_pm2
 
     local PM2=$( command_exists "${NPM_PACKAGE}" )
-    [ "${PM2}" != "" ] && { set_state "${FUNCNAME[0]}" 'success_no_action_already_installed'; return 0; }
+    [ "${PM2}" != "" ] && { state_set "${FUNCNAME[0]}" 'success_no_action_already_installed'; return 0; }
 
     local NPM=$( command_exists npm )
-    [ "${NPM}" == "" ] && { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
+    [ "${NPM}" == "" ] && { state_set "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
 
     # Actually install it -- globally
-    ${NPM} install --global "${NPM_PACKAGE}@${VERSION}"  || { set_state "${FUNCNAME[0]}" 'error_installing_pm2_npm'; return 1; }
+    ${NPM} install --global "${NPM_PACKAGE}@${VERSION}"  || { state_set "${FUNCNAME[0]}" 'error_installing_pm2_npm'; return 1; }
 
     # Verify command actually exists in path after we have installed it
     local PM2=$( command_exists "${NPM_PACKAGE}" )
-    [ "${PM2}" == "" ] && { set_state "${FUNCNAME[0]}" 'error_installing_pm2_command_not_found'; return 1; }
+    [ "${PM2}" == "" ] && { state_set "${FUNCNAME[0]}" 'error_installing_pm2_command_not_found'; return 1; }
 
-    set_state "${FUNCNAME[0]}" 'success'
+    state_set "${FUNCNAME[0]}" 'success'
 }
 export -f pm2_install
 
@@ -1220,21 +1220,21 @@ export -f pm2_install
 # Category: process
 # pm2_start
 function pm2_start {
-    set_state "${FUNCNAME[0]}" 'started'
+    state_set "${FUNCNAME[0]}" 'started'
 
     # Check if it is running. If it is, we're happy.
-    pm2_is_running_as_me && { set_state "${FUNCNAME[0]}" 'success_no_action_pm2_is_running'; return 0; }
+    pm2_is_running_as_me && { state_set "${FUNCNAME[0]}" 'success_no_action_pm2_is_running'; return 0; }
 
     local PM2=$( command_exists pm2 )
-    [ -z "${PM2}" ] && { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_pm2_command'; return 1; }
+    [ -z "${PM2}" ] && { state_set "${FUNCNAME[0]}" 'error_dependency_not_met_pm2_command'; return 1; }
     ${PM2} start
 
     # Check if it is running. If it is, we're happy.
     # Note: pm2 can start and still return non-zero (i.e. it started but there was no ecosystem.config.js
     # So it is not sufficient to test for return code, but if it is running as me, then it is at least started
-    pm2_is_running_as_me && { set_state "${FUNCNAME[0]}" 'success'; return 0; }
+    pm2_is_running_as_me && { state_set "${FUNCNAME[0]}" 'success'; return 0; }
 
-    set_state "${FUNCNAME[0]}" 'error_failed_to_start_pm2'
+    state_set "${FUNCNAME[0]}" 'error_failed_to_start_pm2'
 }
 export -f pm2_start
 
@@ -1244,23 +1244,23 @@ export -f pm2_start
 # does not stop any root level or other user pm2 daemons.
 #
 function pm2_stop {
-    set_state "${FUNCNAME[0]}" 'started'
+    state_set "${FUNCNAME[0]}" 'started'
 
     # Check if it is running. If it isn't, we finish.
-    pm2_is_running_as_me || { set_state "${FUNCNAME[0]}" 'success_no_action_pm2_not_running'; return 0; }
+    pm2_is_running_as_me || { state_set "${FUNCNAME[0]}" 'success_no_action_pm2_not_running'; return 0; }
 
     # Check if we have the pm2 command. We need it to be able to stop pm2
-    local PM2=$( command_exists pm2 ) || { set_state "${FUNCNAME[0]}" 'error_pm2_command_not_found'; return 1; }
+    local PM2=$( command_exists pm2 ) || { state_set "${FUNCNAME[0]}" 'error_pm2_command_not_found'; return 1; }
 
     # Try and kill pm2
     # Todo: do this with timeout - sometimes pm2 hangs. We ask it to kill itself, but sometimes the cat comes back :)
-    ${PM2} kill || { set_state "${FUNCNAME[0]}" 'error_pm2_kill_failed'; return 1; }
+    ${PM2} kill || { state_set "${FUNCNAME[0]}" 'error_pm2_kill_failed'; return 1; }
 
     # Verify that it is actually stopped. If it is still running after we killed it, it is a problem.
-    pm2_is_running_as_me || { set_state "${FUNCNAME[0]}" 'error_unable_to_validate_pm2_daemon_gone_postcondition_pm2_still_running'; return 1; }
+    pm2_is_running_as_me || { state_set "${FUNCNAME[0]}" 'error_unable_to_validate_pm2_daemon_gone_postcondition_pm2_still_running'; return 1; }
 
     # We have stopped it, and it is not running.
-    set_state "${FUNCNAME[0]}" 'success'
+    state_set "${FUNCNAME[0]}" 'success'
 }
 export -f pm2_stop
 
@@ -1269,22 +1269,22 @@ export -f pm2_stop
 # pm2_uninstall
 # Removes PM2
 function pm2_uninstall {
-    set_state "${FUNCNAME[0]}" 'started'
+    state_set "${FUNCNAME[0]}" 'started'
 
     local PACKAGE="pm2"
 
     # If it is not installed, we are done.
-    pm2_is_installed || { set_state "${FUNCNAME[0]}" 'success_no_action_not_installed'; return 0; }
+    pm2_is_installed || { state_set "${FUNCNAME[0]}" 'success_no_action_not_installed'; return 0; }
 
     # It's installed, so we will try to remove it
     local NPM=$( command_exists npm)
-    [ "${NPM}" = "" ] && { set_state "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
-    ${NPM} remove --global "${PACKAGE}" || { set_state "${FUNCNAME[0]}" 'error_uninstalling_package'; return 1; }
+    [ "${NPM}" = "" ] && { state_set "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
+    ${NPM} remove --global "${PACKAGE}" || { state_set "${FUNCNAME[0]}" 'error_uninstalling_package'; return 1; }
 
     # Verify it is removed. If this returns 1, it is not found. If it returns 0, we still have it.
-    pm2_is_installed || { set_state "${FUNCNAME[0]}" 'success'; return 0; }
+    pm2_is_installed || { state_set "${FUNCNAME[0]}" 'success'; return 0; }
 
-    set_state "${FUNCNAME[0]}" 'error_validating_uninstallation'
+    state_set "${FUNCNAME[0]}" 'error_validating_uninstallation'
 }
 export -f pm2_uninstall
 
@@ -1296,17 +1296,17 @@ export -f pm2_uninstall
 # it will preserve source code into appropriate folder for future use (updates etc.).
 #
 function set_environment_preserve_source_code {
-  set_state "${FUNCNAME[0]}" 'started'
+  state_set "${FUNCNAME[0]}" 'started'
 
   # Get passed parameters (path to currently installed project folder)
   PROJECT_ROOT_DIR="${1}"
-  [ -d "${PROJECT_ROOT_DIR}" ] || { set_state "${FUNCNAME[0]}" 'failed_to_set_environment_preserve_source_code'; return 1; }
+  [ -d "${PROJECT_ROOT_DIR}" ] || { state_set "${FUNCNAME[0]}" 'failed_to_set_environment_preserve_source_code'; return 1; }
 
   # As a preparation to preserve project source files (used during this installation), let's change directory to the project root directory.
-  pushd "${PROJECT_ROOT_DIR}" || { set_state "${FUNCNAME[0]}" 'failed_to_cd_into_project'; return 1; }
+  pushd "${PROJECT_ROOT_DIR}" || { state_set "${FUNCNAME[0]}" 'failed_to_cd_into_project'; return 1; }
 
   # Make sure ${FF_AGENT_HOME} is set
-  [ ! -z "${FF_AGENT_HOME}" ] || { set_state "${FUNCNAME[0]}" 'error_ff_agen_home_not_set'; return 1; }
+  [ ! -z "${FF_AGENT_HOME}" ] || { state_set "${FUNCNAME[0]}" 'error_ff_agen_home_not_set'; return 1; }
 
   # We need to trust github.com to avoid errors like this:
   # The authenticity of host 'github.com (140.82.113.4)' can't be established.
@@ -1321,10 +1321,10 @@ function set_environment_preserve_source_code {
 
   # Extract project owner from github repository URL
   local URL=$( git remote show origin | grep 'Fetch URL:' | awk -F'Fetch URL: ' '{print $2}' )
-  [ ! -z "${URL}" ] || { set_state "${FUNCNAME[0]}" 'failed_to_extract_project_url'; return 1; }
+  [ ! -z "${URL}" ] || { state_set "${FUNCNAME[0]}" 'failed_to_extract_project_url'; return 1; }
 
-  local OWNER=$( parse_github_repository_url "${URL}" "OWNER" )
-  [ ! -z "${OWNER}" ] || { set_state "${FUNCNAME[0]}" 'failed_to_extract_project_owner'; return 1; }
+  local OWNER=$( github_repository_url_parse "${URL}" --owner )
+  [ ! -z "${OWNER}" ] || { state_set "${FUNCNAME[0]}" 'failed_to_extract_project_owner'; return 1; }
 
   # All projects sources got preserved in this folder
   local PRESERVED_PROJECTS_DIR="${FF_AGENT_HOME}/git"
@@ -1336,13 +1336,13 @@ function set_environment_preserve_source_code {
   # Make sure the project-specific folder exists
   if [ ! -d "${PRESERVED_PROJECT_DIR}" ]; then
     # Does not exist, try to create it
-    mkdir -p "${PRESERVED_PROJECT_DIR}" || { set_state "${FUNCNAME[0]}" 'failed_to_create_folder_for_code_preservation'; return 1; }
+    mkdir -p "${PRESERVED_PROJECT_DIR}" || { state_set "${FUNCNAME[0]}" 'failed_to_create_folder_for_code_preservation'; return 1; }
   fi
 
   # Check PWD is set or try to use $(pwd) or error out
   if [ -z "${PWD}" ]; then
     # PWD is not set, try to set it by "pwd" call
-    PWD="$( pwd )" || { set_state "${FUNCNAME[0]}" 'failed_to_get_pwd'; return 1; }
+    PWD="$( pwd )" || { state_set "${FUNCNAME[0]}" 'failed_to_get_pwd'; return 1; }
   fi
 
   # Check if installer running from unexpected folder
@@ -1354,18 +1354,18 @@ function set_environment_preserve_source_code {
       if [ -d "${PRESERVED_PROJECT_DIR}" ]; then
           # Remove old project source folder content (leaving the folder itself)
           # Note: we don't rm -fr some/path/* since this would miss hidden files. The 'find' gets them all!
-          find "${PRESERVED_PROJECT_DIR}" -mindepth 1 -delete || { set_state "${FUNCNAME[0]}" 'failed_to_remove_old_project_source_folder'; return 1; }
+          find "${PRESERVED_PROJECT_DIR}" -mindepth 1 -delete || { state_set "${FUNCNAME[0]}" 'failed_to_remove_old_project_source_folder'; return 1; }
       fi
 
       # Copy newly installed source folder (to preserve it)
       # Note: the "/." is here to copy all files including hidden (which starts with dot). Just '*' would not work.
-      cp -a "${PWD}/." "${PRESERVED_PROJECT_DIR}" || { set_state "${FUNCNAME[0]}" 'failed_to_preserve_source_folder'; return 1; }
+      cp -a "${PWD}/." "${PRESERVED_PROJECT_DIR}" || { state_set "${FUNCNAME[0]}" 'failed_to_preserve_source_folder'; return 1; }
   fi
 
   # Restore the original folder
-  popd || { set_state "${FUNCNAME[0]}" 'failed_to_popd_after_preserving_source_folder'; return 1; }
+  popd || { state_set "${FUNCNAME[0]}" 'failed_to_popd_after_preserving_source_folder'; return 1; }
 
-  set_state "${FUNCNAME[0]}" 'success'
+  state_set "${FUNCNAME[0]}" 'success'
   return 0
 }
 export -f set_environment_preserve_source_code
@@ -1374,8 +1374,8 @@ export -f set_environment_preserve_source_code
 # Log this script standard output and standard error to a log file AND system logger
 function set_script_logging {
 
-  # Note: we can not yet call "set_state" on that early stages
- 	#set_state "${FUNCNAME[0]}" 'started'
+  # Note: we can not yet call "state_set" on that early stages
+ 	#state_set "${FUNCNAME[0]}" 'started'
 
   # Let's find a good directory for logs. This assumes zero knowledge.
   # The _best_ place for these logs would be in "${HOME}/ff_agent/logs" -- if we can write to it we'll create it
@@ -1397,16 +1397,16 @@ function set_script_logging {
       error "Unable to find a place to log! Tried: ${POTENTIAL_LOG_DIRECTORIES[@]}"
       export LOG_PATH=$( tty )
   else
-      # Get current epoch ms. (note: we can't yet use   # "$( get_epoch_ms )" because ff_bash_functions arent installed/updated yet)
-      TIMESTAMP_EPOCH_MS="$( get_epoch_ms )"
+      # Get current epoch ms. (note: we can't yet use   # "$( epoch_ms_get )" because ff_bash_functions arent installed/updated yet)
+      TIMESTAMP_EPOCH_MS="$( epoch_ms_get )"
       LOG_FILE="set_environment.${TIMESTAMP_EPOCH_MS}.log"
       export LOG_PATH="${LOG_DIRECTORY}/${LOG_FILE}"
       # PREVIOUSLY THIS WAS exec &> >(tee -a "${LOG_PATH}")
       exec &> >(tee >(tee -a "${LOG_PATH}" | logger -t set_environment ))
   fi
 
-  # Note: we can not yet call "set_state" on that early stages
- 	#set_state "${FUNCNAME[0]}" 'success'
+  # Note: we can not yet call "state_set" on that early stages
+ 	#state_set "${FUNCNAME[0]}" 'success'
 }
 export -f set_script_logging
 
