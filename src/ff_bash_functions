@@ -80,6 +80,7 @@
 #    - terminal_reset 
 ## END UTILITY FUNCTIONS: TERMINAL / SHELL
 ## BEGIN UTILITY FUNCTIONS: PROCESS
+#    - check_dependencies
 #    - process_is_running_as_me 
 #    - retry_command 
 ## END UTILITY FUNCTIONS: PROCESS
@@ -163,6 +164,10 @@
 #
 ###############################################################################
 function ask_for_value {
+    # Check dependencies
+    local DEPENDENCIES="log read eval"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
     local VALUE=""
 
     local  __RESULTVAR=${1}
@@ -216,6 +221,11 @@ export -f ask_for_value
 #
 ###############################################################################
 function ask_for_yn {
+
+    # Check dependencies
+    local DEPENDENCIES="log"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
     local QUESTION=${1}
     local ANSWER=""
 
@@ -260,11 +270,19 @@ export -f ask_for_yn
 #
 ###############################################################################
 function command_exists {
+  # Check dependencies
+  # Note: do not use check_dependencies here to avoid recursion
+  #local DEPENDENCIES="hash"
+  #check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
+  # -n - true if the length of string is nonzero
+  [ -n "$(command -v hash )" ] || { error "${FUNCNAME[0]}: error_no_hash_command"; return 1; }
+    
   local COMMAND=${1}
 
   # Force bash to un-hash any previously memorized commands. This will require bash to look it up again.
   # This is for cases where it has 'memoried' a command that has actually been deleted.
-  hash -d ${COMMAND} >/dev/null 2>/dev/null
+  hash -d "${COMMAND}" >/dev/null 2>/dev/null
   hash -d $(command -v "${COMMAND}" ) >/dev/null 2>/dev/null
 
   local COMMAND_RESOLVED=$(command -v "${COMMAND}" )
@@ -316,6 +334,10 @@ export -f command_exists
 ###############################################################################
 function file_toc {
 
+  # Check dependencies
+  local DEPENDENCIES="cat grep sed error"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   # Define path to ff_bash_functions file
   local FILEPATH="${1}"
   [ ! -f "${FILEPATH}" ] && {
@@ -351,6 +373,11 @@ export -f file_toc
 #
 ###############################################################################
 function help {
+
+    # Check dependencies
+    local DEPENDENCIES="cut typeset"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
     echo "Builtin functions:"
     typeset -F | cut -d' ' -f3
 }
@@ -380,6 +407,10 @@ export -f help
 #
 ###############################################################################
 function help_toc {
+
+  # Check dependencies
+  local DEPENDENCIES="cat grep sed error ensure_variable_not_empty"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Check FF_AGENT_HOME is set
   ensure_variable_not_empty 'FF_AGENT_HOME' || {
@@ -426,6 +457,11 @@ export -f help_toc
 #
 ###############################################################################
 function apt_dist_upgrade {
+
+  # Check dependencies
+  local DEPENDENCIES="apt_update apt_upgrade error"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+  
   local APT_COMMAND=dist-upgrade
 
   #        --force-yes is deprecetaed now.
@@ -467,11 +503,16 @@ export -f apt_dist_upgrade
 #
 ###############################################################################
 function apt_install {
+
+  # Check dependencies
+  local DEPENDENCIES="error sudo apt-get"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+  
   PACKAGES=${@}
   APT_COMMAND=install
 
-  for PACKAGE in "${PACKAGES}"
-  do
+  # Note: don't wrap ${PACKAGES} in quotes, otherwise it will not word split, and the loop will only run once.
+  for PACKAGE in ${PACKAGES}; do
       # Note: we suppress stdout noise (only stderr will still be "visible", but TODO: think of better way to collect evidences insted of just 1 large pile)
       sudo DEBIAN_FRONTEND=noninteractive \
       apt-get \
@@ -480,7 +521,7 @@ function apt_install {
         --no-install-recommends \
         --no-install-suggests \
         -o Acquire::ForceIPv4=true \
-        ${APT_COMMAND} ${PACKAGE} > /dev/null || { error "${FUNCNAME[0]}" "failed_to_apt_install"; return 1; }
+        "${APT_COMMAND}" "${PACKAGE}" > /dev/null || { error "${FUNCNAME[0]}" "failed_to_apt_install"; return 1; }
   done
 }
 export -f apt_install
@@ -510,6 +551,10 @@ export -f apt_install
 #
 ###############################################################################
 function apt_list {
+
+  # Check dependencies
+  local DEPENDENCIES="apt-get error awk xargs grep dpkg-deb"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Check inputs:
   local PACKAGE_NAME="${1}"
@@ -569,10 +614,16 @@ export -f apt_list
 #
 ###############################################################################
 function apt_reinstall {
+
+    # Check dependencies
+    local DEPENDENCIES="sudo apt-get error"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
     PACKAGES=${@}
     APT_COMMAND=reinstall
 
-    for PACKAGE in "${PACKAGES}"; do
+    # Note: don't wrap ${PACKAGES} in quotes, otherwise it will not word split, and the loop will only run once.
+    for PACKAGE in ${PACKAGES}; do
         sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} ${PACKAGE}
         if [ ${?} -ne 0 ]; then
             error "Error reinstalling packages: ${PACKAGE}"
@@ -605,10 +656,16 @@ export -f apt_reinstall
 #
 ###############################################################################
 function apt_remove {
+
+    # Check dependencies
+    local DEPENDENCIES="sudo apt-get error"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
     PACKAGES=${@}
     APT_COMMAND=remove
 
-    for PACKAGE in "${PACKAGES}"
+    # Note: don't wrap ${PACKAGES} in quotes, otherwise it will not word split, and the loop will only run once.
+    for PACKAGE in ${PACKAGES}
     do
         sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} "${PACKAGE}"
         if [ ${?} -ne 0 ]; then
@@ -643,6 +700,11 @@ export -f apt_remove
 #
 ###############################################################################
 function apt_update {
+
+    # Check dependencies
+    local DEPENDENCIES="sudo apt-get error"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
     local APT_COMMAND=update
 
     #        --force-yes is deprecetaed now.
@@ -682,6 +744,11 @@ export -f apt_update
 #
 ###############################################################################
 function apt_upgrade {
+
+    # Check dependencies
+    local DEPENDENCIES="sudo apt-get error"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
     local APT_COMMAND=upgrade
 
     #        --force-yes is deprecetaed now.
@@ -732,7 +799,7 @@ function in_array {
     local hay needle=${1}
     shift
     for hay; do
-        [[ ${hay} == ${needle} ]] && return 0
+        [[ "${hay}" == "${needle}" ]] && return 0
     done
     return 1
 }
@@ -830,8 +897,8 @@ function github_repository_url_parse {
   local KEY="${2}"
 
   # Check required arguments are not empty
-  [ ! -z "${URL}" ] || { return 1; }
-  [ ! -z "${KEY}" ] || { return 1; }
+  [ -n "${URL}" ] || { error "${FUNCNAME[0]}" "called with no URL argument"; return 1; }
+  [ -n "${KEY}" ] || { error "${FUNCNAME[0]}" "called with no KEY argument"; return 1; }
 
   # Lowercase key
   KEY="${KEY,,}"
@@ -903,6 +970,10 @@ export -f github_repository_url_parse
 ###############################################################################
 function semantic_version_parse {
 
+  # Check dependencies
+  local DEPENDENCIES="error cut in_array"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   # Check we get exactly 2 arguments
   [ $# -eq 2 ] || { error "${FUNCNAME[0]}" 'error_wrong_number_of_arguments'; return 1; }
 
@@ -911,8 +982,8 @@ function semantic_version_parse {
   local FULL_VERSION="$2"
 
   # Check we got non-empty arguments
-  [ ! -z ${VERSION_COMPONENT_NAME} ] || { error "${FUNCNAME[0]}" 'error_empty_argument_component_name'; return 1; }
-  [ ! -z ${FULL_VERSION} ] || { error "${FUNCNAME[0]}" 'error_empty_argument_full_version'; return 1; }
+  [ -n "${VERSION_COMPONENT_NAME}" ] || { error "${FUNCNAME[0]}" 'error_empty_argument_component_name'; return 1; }
+  [ -n "${FULL_VERSION}" ] || { error "${FUNCNAME[0]}" 'error_empty_argument_full_version'; return 1; }
 
   # Define an array of all supported version component names
   local SUPPORTED_VERSION_COMPONENT_NAMES=("--major" "--minor" "--patch")
@@ -950,7 +1021,7 @@ function semantic_version_parse {
   esac
   
   # Check extracted EXTRACTED_COMPONENT_VERSION is not blank
-  [ ! -z "${EXTRACTED_COMPONENT_VERSION}" ] || { error "${FUNCNAME[0]}" 'error_got_empty_component_version'; return 1; }
+  [ -n "${EXTRACTED_COMPONENT_VERSION}" ] || { error "${FUNCNAME[0]}" 'error_got_empty_component_version'; return 1; }
 
   # Print result to standard output
   echo -n "${EXTRACTED_COMPONENT_VERSION}"
@@ -990,6 +1061,11 @@ export -f semantic_version_parse
 #
 ###############################################################################
 function trim_slash {
+
+  # Check dependencies
+  local DEPENDENCIES="sed"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+  
   for s; do
     sed -E 's:(^/)?/*$:\1:' <<< "${s}"
   done
@@ -1023,6 +1099,10 @@ export -f trim_slash
 #
 ###############################################################################
 function assert_cd {
+
+  # Check dependencies
+  local DEPENDENCIES="abort assert_clean_exit"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Check first if it is a directory.
   if [ ! -d "${1}" ]; then
@@ -1060,6 +1140,11 @@ export -f assert_cd
 #
 ###############################################################################
 function assert_makedir {
+
+  # Check dependencies
+  local DEPENDENCIES="log assert_clean_exit"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   if [ -d "${1}" ]; then
      log "INFO: Directory \"${1}\" exists, skipping creation."
   else
@@ -1106,6 +1191,10 @@ export -f assert_makedir
 ###############################################################################
 function does_file_have_eol_at_the_end {
 
+  # Check dependencies
+  local DEPENDENCIES="tail error"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   # Define exit codes (both success and errors)
   local EOL_PRESENT_OR_EMPTY_FILE=0
   local EOL_MISSING=1
@@ -1116,7 +1205,7 @@ function does_file_have_eol_at_the_end {
   FILENAME="${1}"
 
   # Check required arguments are not empty
-  [ ! -z "${FILEPATH}" ] || { error "${FUNCNAME[0]}" "error_target_filepath_is_blank"; return ${ERROR_BAD_ARGUMENTS}; }
+  [ -n "${FILEPATH}" ] || { error "${FUNCNAME[0]}" "error_target_filepath_is_blank"; return ${ERROR_BAD_ARGUMENTS}; }
 
   # Check if file is empty
   if [ ! -s "${FILENAME}" ]; then
@@ -1160,11 +1249,17 @@ export -f does_file_have_eol_at_the_end
 #
 ###############################################################################
 function f {
+
+    # Check dependencies
+    local DEPENDENCIES="find"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
     FILE_PREFIX="${1}"
     if [ "${FILE_PREFIX}" != "" ]; then
         find . -iname "${FILE_PREFIX}*"
         return ${?}
     else
+        # Note: we use echo to stderr, not error() because error() will print misleading "Error: " prefix
         echo "Find files with prefix, starting from current working directory down recursively." 1>&2
         echo "Usage: f index" 1>&2
         return 1
@@ -1198,6 +1293,11 @@ export -f f
 #
 ###############################################################################
 function file_contains_pattern {
+
+    # Check dependencies
+    local DEPENDENCIES="grep"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
     FILE="${1}"
     PATTERN="${2}"
 
@@ -1225,7 +1325,7 @@ export -f file_contains_pattern
 #   Uses 'apt-file' to search across all packages in the repository to find which one(s) contain
 #   the specified FILENAME. Requires 'apt-file' to be installed and updated.
 #
-# USAGE EXAMPLES
+# EXAMPLES
 #   find_file_owner_in_all_packages realpath
 #   find_file_owner_in_all_packages hping3
 #   find_file_owner_in_all_packages netstat
@@ -1235,6 +1335,11 @@ export -f file_contains_pattern
 #
 ###############################################################################
 function find_file_owner_in_all_packages {
+
+    # Check dependencies
+    local DEPENDENCIES="error apt-file command_exists sudo"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
     # Take filename argument
     FILE="${1}"
 
@@ -1279,7 +1384,7 @@ export -f find_file_owner_in_all_packages
 #  'find_file_owner_in_all_packages' by only searching among packages that are already installed on the system
 #  and by using "dpkg" instead of "apt-file".
 #
-# USAGE EXAMPLES
+# EXAMPLES
 #   find_file_owner_in_installed_packages realpath
 #   find_file_owner_in_installed_packages hping3
 #   find_file_owner_in_installed_packages netstat
@@ -1290,6 +1395,10 @@ export -f find_file_owner_in_all_packages
 ###############################################################################
 
 function find_file_owner_in_installed_packages {
+    # Check dependencies
+    local DEPENDENCIES="error dpkg"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
     # Take filename argument
     FILE="${1}"
 
@@ -1332,7 +1441,12 @@ export -f find_file_owner_in_installed_packages
 #
 ###############################################################################
 function glob_matches {
-	compgen -G ${@} >/dev/null
+
+  # Check dependencies
+  local DEPENDENCIES="compgen"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
+	compgen -G "${@}" >/dev/null
 	return ${?}
 }
 export -f glob_matches
@@ -1377,6 +1491,10 @@ export -f glob_matches
 #
 ###############################################################################
 function inject_into_file {
+
+  # Check dependencies
+  local DEPENDENCIES="ensure_variable_not_empty file_contains_pattern error tee"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Take arguments
   local FILEPATH="${1}"
@@ -1468,11 +1586,12 @@ export -f inject_into_file
 #
 ###############################################################################
 function is_writable {
+
   # Get argument
   local TARGET="${1}"
 
   # Check argument is not blank
-  [ ! -z "${TARGET}" ] || { return 1; }
+  [ -n "${TARGET}" ] || { return 1; }
   
   # If file/directory is writable, then return 0
   [ -w "${TARGET}" ] && { return 0; }
@@ -1508,6 +1627,11 @@ export -f is_writable
 #
 ###############################################################################
 function path_to_absolute_path {
+
+  # Check dependencies
+  local DEPENDENCIES="realpath"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   local TARGET="$1"
   realpath --canonicalize-missing "${TARGET}"
 }
@@ -1531,7 +1655,7 @@ export -f path_to_absolute_path
 #             but with platform-specific extensions (which vary in extent and can be incompatible).
 #             On Linux platforms (GNU userland), see man grep; on macOS/BSD platforms, see man re_format.#
 #
-# USAGE EXAMPLES
+# EXAMPLES
 #   remove_all_lines_by_regexp "/path/to/config.txt" "^#.*"
 #   remove_all_lines_by_regexp /some/path/to/the/file.txt "Some line matcher regexp \(.*\)"
 #
@@ -1549,6 +1673,10 @@ export -f path_to_absolute_path
 #
 ###############################################################################
 function remove_all_lines_by_regexp {
+
+  # Check dependencies
+  local DEPENDENCIES="error grep cat wc sed"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Get regexp argument
   local FILEPATH="${1}"
@@ -1686,6 +1814,10 @@ export -f remove_all_lines_by_regexp
 ###############################################################################
 function replace_all_lines_by_regexp {
 
+  # Check dependencies
+  local DEPENDENCIES="error grep sed ensure_variable_not_empty diff"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   # Take arguments
   local FILEPATH="${1}"
   local REGEX="${2}"
@@ -1804,6 +1936,11 @@ export -f replace_all_lines_by_regexp
 ###############################################################################
 function s {
 #!/bin/bash -
+
+    # Check dependencies
+    local DEPENDENCIES="find grep"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
     GREP_OPTIONS="--color=always"
     PATTERN="${1}"
     if [ "${PATTERN}" != "" ]; then
@@ -1847,6 +1984,11 @@ export -f s
 #
 ###############################################################################
 function truncate_file {
+
+  # Check dependencies
+  local DEPENDENCIES="truncate error"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   # Get filename argument
   local FILEPATH="${1}"
 
@@ -1937,6 +2079,11 @@ export -f truncate_file
 #
 ###############################################################################
 function url_get {
+
+  # Check dependencies
+  local DEPENDENCIES="curl sudo state_set error mktemp"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   # Indicate: function started
   state_set "${FUNCNAME[0]}" 'started'
 
@@ -2056,10 +2203,15 @@ export -f url_get
 #
 ###############################################################################
 function abort {
-    error "abort called - aborting ${@}"
+
+    # Check dependencies
+    local DEPENDENCIES="error state_set"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
+    error "abort called - aborting ${*}"
 
     # Check if the SERVICE is set (not blank string), then also set corresponding state
-    if [ ! -z "${SERVICE}" ]; then
+    if [ -n "${SERVICE}" ]; then
         state_set ${SERVICE} abort
     fi
     exit 1
@@ -2090,11 +2242,15 @@ export -f abort
 #
 ###############################################################################
 function assert_clean_exit {
-  #echo "TRY: ${@}"
+
+  # Check dependencies
+  local DEPENDENCIES="log abort"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   "${@}"
   local STATUS=${?}
   if [ ${STATUS} -ne 0 ]; then
-     log "ERROR: Command \"${@}\" did not exit cleanly."
+     log "ERROR: Command \"${*}\" did not exit cleanly."
      abort
   # else
   # 	log "SUCCESS: ${@}"
@@ -2159,6 +2315,11 @@ export -f banner
 #
 ###############################################################################
 function error {
+
+    # Check dependencies
+    local DEPENDENCIES="log"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
     echo -n "${FONT_STYLE_RED}"
     log error: "${@}"
     echo -n "${FONT_STYLE_NORMAL}"
@@ -2186,6 +2347,10 @@ export -f error
 ###############################################################################
 function log {
 
+  # Check dependencies
+  local DEPENDENCIES="tee"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   # Check if optional environment SERVICE is defined, then use it as a tag for logger
   if [ "${SERVICE}" != "" ]; then
     local LOGGER_TAG="--tag '${SERVICE}'"
@@ -2194,7 +2359,7 @@ function log {
     local SERVICE_PREFIX=''
   fi
 
-  echo "${SERVICE_PREFIX}${@}" | tee >(logger ${LOGGER_TAG} ) >&2
+  echo "${SERVICE_PREFIX}${*}" | tee >(logger ${LOGGER_TAG} ) >&2
 }
 export -f log
 
@@ -2254,6 +2419,10 @@ export -f step
 ###############################################################################
 function successful_exit {
 
+  # Check dependencies
+  local DEPENDENCIES="state_set"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   # Check if SERVICE is defined
   if [ "${SERVICE}" != "" ]; then
     local SERVICE_SUFFIX="${SERVICE}_"
@@ -2284,6 +2453,10 @@ export -f successful_exit
 #
 ###############################################################################
 function warning {
+
+    # Check dependencies
+    local DEPENDENCIES="log"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
     # Check input: not empty
     if [ -z "${@}" ]; then
@@ -2369,6 +2542,11 @@ export -f bash_echo_on_set
 #
 ###############################################################################
 function bash_echo_setting_get {
+
+  # Check dependencies
+  local DEPENDENCIES="is_shell_attribute_set"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   # Preserve current xtrace state
   if is_shell_attribute_set x; then
     echo -n " XTRACE_ENABLED "
@@ -2399,6 +2577,11 @@ export -f bash_echo_setting_get
 #
 ###############################################################################
 function bash_echo_setting_set {
+
+  # Check dependencies
+  local DEPENDENCIES="bash_echo_off_set bash_echo_on_set"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   # Get all provided arguments (it supports multiple arguments)
   local BASH_ECHO_SETTINGS="${@}"
 
@@ -2438,11 +2621,9 @@ export -f bash_echo_setting_set
 ###############################################################################
 function ensure_variable_defined {
   
-  # Dependency check: 'tr' is installed
-  if ! command_exists tr >/dev/null; then
-    error "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
-    return 1
-  fi
+  # Check dependencies
+  local DEPENDENCIES="tr error"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   local NAME="${1}"
   [[ -z "${NAME}" ]] && { error "error_ensure_variable_defined_no_arguments"; return 1; }  # Check: NAME is not blank
@@ -2481,9 +2662,14 @@ export -f ensure_variable_defined
 #
 ###############################################################################
 function ensure_variable_not_empty {
+
+  # Check dependencies
+  local DEPENDENCIES="error"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   local NAME="${1}"
   [[ -z "${NAME}" ]] && { error "error_ensure_variable_not_empty_no_arguments"; return 1; }  # Check: NAME itself is not blank
-  [[ -v "${NAME}" ]] && [[ ! -z "${!NAME}" ]] && { return 0; }  # Check: variable by NAME is defined and isn't empty
+  [[ -v "${NAME}" ]] && [[ -n "${!NAME}" ]] && { return 0; }  # Check: variable by NAME is defined and isn't empty
 
   # Create meaningful error code, which include lowcase variable name
   local ERROR_CODE=$( echo "error_ensure_variable_not_empty_${NAME}" | tr '[:upper:]' '[:lower:]' )
@@ -2559,6 +2745,11 @@ export -f is_shell_attribute_set
 #
 ###############################################################################
 function is_shell_option_set {
+
+  # Check dependencies
+  local DEPENDENCIES="grep"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   case "$(set -o | grep "${1}")" in
     *on) return 0 ;;
     *)   return 1 ;;
@@ -2587,6 +2778,10 @@ export -f is_shell_option_set
 #
 ###############################################################################
 function terminal_initialize {
+
+  # Check dependencies
+  local DEPENDENCIES="terminal_is_tty command_exists"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # If we do not have a terminal type, set up dumb
   if [ -z "${TERM}" ]; then
@@ -2632,6 +2827,10 @@ export -f terminal_initialize
 #
 ###############################################################################
 function terminal_is_interactive {
+  # Check dependencies
+  local DEPENDENCIES="command_exists"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   command_exists tty >/dev/null && tty -s && return 0 || return 1
   return 1 # Default, it isn't.
 }
@@ -2682,6 +2881,11 @@ export -f terminal_is_tty
 #
 ###############################################################################
 function terminal_reset {
+
+  # Check dependencies
+  local DEPENDENCIES="terminal_is_tty command_exists"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   terminal_is_tty && command_exists tput >/dev/null && tput reset && tput sane
 }
 export -f terminal_reset
@@ -2690,6 +2894,105 @@ export -f terminal_reset
 
 
 ### BEGIN UTILITY FUNCTIONS: PROCESS
+
+###############################################################################
+# CATEGORY
+#   UTILITY FUNCTIONS: PROCESS
+#
+# NAME
+#   check_dependencies - Checks for the presence of required command-line dependencies.
+#
+# SYNOPSIS
+#   check_dependencies CALLER_FUNCTION_NAME DEPENDENCIES...
+#
+# DESCRIPTION
+#   This function verifies whether all specified command-line tools or dependencies
+#   are installed and available in the system's PATH. It is designed to be used
+#   within scripts to ensure all required dependencies are met before proceeding
+#   with script execution. The function accepts a caller function name for error
+#   context and a list of dependencies as a space-separated strings.
+#   If any dependencies are missing, it errors out, listing all missing dependencies to standard error,
+#   and returns 1.
+#
+# DEPENDENCIES
+#   Requires 'error' function to be defined elsewhere for reporting errors.
+#
+# EXAMPLES
+#
+#    # Check dependencies defined as an array
+#    local DEPENDENCIES=( 
+#      "error" 
+#      "epoch_ms_get" 
+#      "mkdir" 
+#      "is_framework_api_defined" 
+#      "ensure_variable_not_empty" 
+#      "publish_message" 
+#      "ff_uuid" 
+#      "command_exists" 
+#      "ff_metric"
+#   )
+#   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || return 1   # Note: check_dependencies will report missing dependencies
+#
+#   # Check dependencies defined as a string
+#   local DEPENDENCIES="dd uudecode sed cut"
+#   check_dependencies "${FUNCNAME[0]}" ${DEPENDENCIES} || return 1
+#
+# EXIT STATUS
+#   0 - Success, all dependencies are met.
+#   1 - Error, one or more dependencies are not met.
+#
+###############################################################################
+function check_dependencies {
+
+    # Get 1st argument: caller function name
+    local CALLER_FUNCTION_NAME="${1}"
+    shift
+
+    # Get all the rest of the arguments and turn them into array of strings
+    local DEPENDENCIES_STRING="${@}"
+    local DEPENDENCIES=($DEPENDENCIES_STRING)  # Split string into an array
+
+    local MISSING_DEPENDENCIES=()
+    local MISSING_DEPENDENCY_COUNT=0
+
+    # Ensure the caller function name is provided
+    if [[ -z "${CALLER_FUNCTION_NAME}" ]]; then
+        error "${CALLER_FUNCTION_NAME}" "CALLER_FUNCTION_NAME must not be empty"
+        return 1
+    fi
+
+    # Ensure there is at least one dependency to check
+    if [[ ${#DEPENDENCIES[@]} -eq 0 ]]; then
+        error "${CALLER_FUNCTION_NAME}" "At least one dependency must be specified"
+        return 1
+    fi
+
+    # Check each dependency
+    for DEPENDENCY in "${DEPENDENCIES[@]}"; do
+      # Ignore empty array elements
+      if [[ -n "${DEPENDENCY}" ]]; then
+        if ! command_exists "${DEPENDENCY}" &> /dev/null; then
+            MISSING_DEPENDENCIES+=("${DEPENDENCY}")
+            ((MISSING_DEPENDENCY_COUNT++))
+        fi
+      fi
+    done
+
+    # Report missing dependencies, if any
+    if [[ "${MISSING_DEPENDENCY_COUNT}" -gt 0 ]]; then
+        # Convert the array to a string with spaces separating elements
+        local MISSING_LIST=$(IFS=' ' ; echo "${MISSING_DEPENDENCIES[*]}")
+        if [[ "${MISSING_DEPENDENCY_COUNT}" -eq 1 ]]; then
+            error "${CALLER_FUNCTION_NAME}" "Dependency not met: ${MISSING_LIST}"
+        else
+            error "${CALLER_FUNCTION_NAME}" "Dependencies not met: ${MISSING_LIST}"
+        fi
+        return 1
+    fi
+}
+
+# Export the function if you need to use it in scripts sourced from this script
+export -f check_dependencies
 
 ###############################################################################
 # CATEGORY
@@ -2715,8 +3018,13 @@ export -f terminal_reset
 #
 ###############################################################################
 function process_is_running_as_me {
+
+    # Check dependencies
+    local DEPENDENCIES="command_exists ps grep current_user_get error"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
     local COMMAND_PATTERN="${1}"
-    [ ! -z "${COMMAND_PATTERN}" ] || { error "${FUNCNAME[0]}" 'error_require_pattern_to_search_for'; return 1; }
+    [ -n "${COMMAND_PATTERN}" ] || { error "${FUNCNAME[0]}" 'error_require_pattern_to_search_for'; return 1; }
 
     # We require PS and GREP commands
     local PS
@@ -2764,6 +3072,10 @@ export -f process_is_running_as_me
 ###############################################################################
 function retry_command {
 
+    # Check dependencies
+    local DEPENDENCIES="error"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
     # Get number of max attempts
     RETRY_ATTEMPTS_MAX=$1
     # Shift all arguments to the left (original $1 gets lost)
@@ -2785,7 +3097,7 @@ function retry_command {
     local COMMAND_AS_ARRAY=("$@")
 
     # Check: the command as array must be non-empty
-    [ ! -z "${COMMAND_AS_ARRAY}" ] || { error "${FUNCNAME[0]}" 'error_got_empty_command'; return 1; }
+    [ -n "${COMMAND_AS_ARRAY}" ] || { error "${FUNCNAME[0]}" 'error_got_empty_command'; return 1; }
 
     # Attempts loop: we will break out of the loop only if command is succeed or 
     local ATTEMPT_COUNT=0
@@ -2823,53 +3135,59 @@ export -f retry_command
 #   UTILITY FUNCTIONS: PROCESS
 #
 # NAME
-#   generate_strong_password - Generates a 16-character strong password.
+#   generate_strong_password - Generates a strong password with a default length of 16 characters or a specified length.
 #
 # SYNOPSIS
-#   generate_strong_password
+#   generate_strong_password [PASSWORD_LENGTH]
 #
 # DESCRIPTION
 #   Utilizes a combination of 'dd', 'uudecode', 'sed', and 'cut' to generate
-#   a 16-character password, printed to standard output. Suitable for creating
-#   secure passwords for applications and services.
+#   a strong password of specified length, printed to standard output. If no length
+#   is specified, a 16-character password is generated by default. Suitable for creating
+#   secure passwords for applications and services. PASSWORD_LENGTH must be a number
+#   in the range [1..660]. If outside the range, it defaults to 1 or 660 depending on the input.
 #
 # DEPENDENCIES
 #   Requires 'dd', 'uudecode', 'sed', and 'cut' to be installed on the system.
 #
 # EXAMPLES
-#   PASSWORD=$(generate_strong_password)
+#   PASSWORD=$(generate_strong_password) || { error "failed to generate password"; return 1; }
+#   CUSTOM_PASSWORD=$(generate_strong_password 20) || { error "failed to generate password"; return 1; }
 #
 # EXIT STATUS
 #   0 - Success, password generated.
-#   Non-zero - Error, possibly due to a missing dependency.
-#
-# Example of generated passwords:
-#   /1/JvZ15LwXklSxx
-#   Pd/09PmvGhXxMfBz
-#   btRaFaOLs9zGLtVn
-#   OJVT51iMHaE8nc5d
-#   eE75MMQY8oIffoQA
-#   mySB9+mic1mTmls7
-#   l3JWm41xmzXdzQOq
-#   47Fetd0UGs1wk24Q
-#   F8Jak2Wc9JM3CiWb
-#   jYY5yq6nYjK2TOWn
+#   1 - Error, invalid input or dependency not met.
 #
 ###############################################################################
 function generate_strong_password {
+
+    # Check dependencies
+    local DEPENDENCIES="dd uudecode sed cut error"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
     # Works on Linux and Mac
-    # Makes password 16 characters long
-    # XXXX
-    local DEPENDENCIES="dd uudecode sed cut"
-    for DEPENDENCY in ${DEPENDENCIES}
-    do
-      if ! command_exists ${DEPENDENCY} >/dev/null; then
-          error "${FUNCNAME[0]}" "error_dependency_not_met_command_${DEPENDENCY}_not_found"
-          return 1
-      fi
-    done
+    local PASSWORD_LENGTH_DEFAULT=16
+    local PASSWORD_LENGTH_MIN=1
+    local PASSWORD_LENGTH_MAX=660
+
+    # Use the first argument as PASSWORD_LENGTH, default to PASSWORD_LENGTH_DEFAULT if not provided
+    local PASSWORD_LENGTH=${1:-${PASSWORD_LENGTH_DEFAULT}}
+
+    # Validate PASSWORD_LENGTH is a number and in the correct range
+    if ! [[ ${PASSWORD_LENGTH} =~ ^[0-9]+$ ]]; then
+        error "${FUNCNAME[0]}" "error_invalid_argument_PASSWORD_LENGTH_must_be_a_number"
+        return 1
+    elif (( PASSWORD_LENGTH < PASSWORD_LENGTH_MIN )); then
+        PASSWORD_LENGTH=${PASSWORD_LENGTH_MIN}
+    elif (( PASSWORD_LENGTH > PASSWORD_LENGTH_MAX )); then
+        PASSWORD_LENGTH=${PASSWORD_LENGTH_MAX}
+    fi
       
-    dd if=/dev/urandom count=1 2> /dev/null | uuencode -m - | sed -ne 2p | cut -c-16
+    # The following command produces a 660 characters long random string
+    local RANDOM_STRING=$(dd if=/dev/urandom count=1 2> /dev/null | uuencode -m - | sed -ne '2,12p' | tr -d '\n') || { error "${FUNCNAME[0]}" 'failed_to_generate_random_string'; return 1; }
+
+    # Cut the first PASSWORD_LENGTH characters
+    echo "${RANDOM_STRING}" | cut -c 1-${PASSWORD_LENGTH}
 }
 export -f generate_strong_password
 
@@ -2902,42 +3220,44 @@ export -f generate_strong_password
 #
 ###############################################################################
 function secret_get {
-  
+
+  # Check dependencies
+  local DEPENDENCIES="error command_exists bash_echo_setting_get bash_echo_off_set"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   # Dependency check: 'tr' is installed
   if ! command_exists tr >/dev/null; then
-    state_set "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
+    error "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
     return 1
   fi
 
   # Preserve current bash echo settings and enable bash echo setting
-  BASH_ECHO_SETTINGS=$( bash_echo_setting_get ) || { state_set "${FUNCNAME[0]}" 'failed_to_bash_echo_setting_gets'; return 1; }
+  BASH_ECHO_SETTINGS=$( bash_echo_setting_get ) || { error "${FUNCNAME[0]}" 'failed_to_bash_echo_setting_gets'; return 1; }
 
-  state_set "${FUNCNAME[0]}" 'started'
-
-  bash_echo_off_set || { state_set "${FUNCNAME[0]}" 'failed_to_bash_echo_off_set'; return 1; } # Disable xtrace to avoid priting secrets
+  bash_echo_off_set || { error "${FUNCNAME[0]}" 'failed_to_bash_echo_off_set'; return 1; } # Disable xtrace to avoid priting secrets
 
   local KEY="${1}"
 
   # Check KEY is not blank
-  [ ! -z "${KEY}" ] || { error "secret_get(): blank KEY argument"; return 1; }
+  [ -n "${KEY}" ] || { error "secret_get(): blank KEY argument"; return 1; }
 
   # Check if KEY contains any prohibited symbols, then error out.
   [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { 
-    state_set "${FUNCNAME[0]}" 'error_bad_argument_illigal_charaacters_in_key'
+    error "${FUNCNAME[0]}" 'error_bad_argument_illigal_charaacters_in_key'
     return 1
   }
 
   # Check if FF_AGENT_HOME is not empty
   if [ "${FF_AGENT_HOME}" == "" ]; then
     bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    state_set "${FUNCNAME[0]}" 'error_ff_agent_home_not_set'
+    error "${FUNCNAME[0]}" 'error_ff_agent_home_not_set'
     return 1
   fi
 
   # Check if key is not empty
   if [ "${KEY}" == "" ]; then
     bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    state_set "${FUNCNAME[0]}" 'error_empty_key'
+    error "${FUNCNAME[0]}" 'error_empty_key'
     return 1
   fi
 
@@ -2957,8 +3277,7 @@ function secret_get {
   if [ -e "${FF_AGENT_HOME}/secrets/${KEY}" ]; then
       cat "${FF_AGENT_HOME}/secrets/${KEY}"
       bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-      state_set "${FUNCNAME[0]}" 'success'
-      return
+      return 0
   fi
 
   # Case: cloud user-data JSON exists: search value by given KEY in it under "agent/configuration"
@@ -2968,11 +3287,10 @@ function secret_get {
       VALUE=$( sudo cat /var/lib/cloud/instance/user-data.txt | jq '.[] | select(.mime_type=="agent/configuration")' | jq -r ".${KEY}" | grep -v -e '^null$' )
       # Note: -z - true if the length of string is zero
       #       -n - true if the length of string is nonzero
-      if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
+      if [ -n "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
           echo ${VALUE}
           bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-          state_set "${FUNCNAME[0]}" 'success'
-          return
+          return 0
       fi
 
       # Special case for "ff_api_username" and "ff_api_password" - these 2 values
@@ -2980,21 +3298,19 @@ function secret_get {
       if [ "${KEY}" == "ff_api_username" ] || [ "${KEY}" == "FF_API_USERNAME" ]; then
         # TODO: here we rely on provisioning JSON on agent to have "control_api_user", which is incorrectly named and must be redesigned completely.
         VALUE=$( sudo cat /var/lib/cloud/instance/user-data.txt | jq -r '.[] | select(.mime_type == "agent/configuration") | .roles[] | select(.role_name == "AgentRole") | .services[] | select(.service_name == "ActionManager") | .control_api_user' )
-        if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
+        if [ -n "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
             echo ${VALUE}
             bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-            state_set "${FUNCNAME[0]}" 'success'
-            return
+            return 0
         fi
       fi
       if [ "${KEY}" == "ff_api_password" ] || [ "${KEY}" == "FF_API_PASSWORD" ]; then
         # TODO: here we rely on provisioning JSON on agent to have "control_api_password", which is incorrectly named and must be redesigned completely.
         VALUE=$( sudo cat /var/lib/cloud/instance/user-data.txt | jq -r '.[] | select(.mime_type == "agent/configuration") | .roles[] | select(.role_name == "AgentRole") | .services[] | select(.service_name == "ActionManager") | .control_api_password' )
-        if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
+        if [ -n "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
             echo ${VALUE}
             bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-            state_set "${FUNCNAME[0]}" 'success'
-            return
+            return 0
         fi
       fi
   fi
@@ -3004,11 +3320,10 @@ function secret_get {
       VALUE=$( sudo cat /var/lib/cloud/instance/user-data.txt | jq '.[] | select(.mime_type=="provisioning/instance")' | jq -r ".${KEY}" | grep -v -e '^null$' )
       # Note: -z - true if the length of string is zero
       #       -n - true if the length of string is nonzero
-      if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
+      if [ -n "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
           echo ${VALUE}
           bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-          state_set "${FUNCNAME[0]}" 'success'
-          return
+          return 0
       fi
   fi
 
@@ -3016,22 +3331,20 @@ function secret_get {
   USER_DATA="/etc/ff/configuration/user_data.editor_answers.json"
   if [ -e "${USER_DATA}" ]; then
     VALUE=$( cat "${USER_DATA}" | jq ".${KEY}" | cut -d'"' -f2 )
-      if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
+      if [ -n "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
           bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
           echo ${VALUE}
-          state_set "${FUNCNAME[0]}" 'success'
-          return
+          return 0
       fi
   fi
 
   # Case: We are on a new build (blank cloud box with user_data.json injected as: /etc/ff/configuration/user_data.json )
   if [ -f /etc/ff/configuration/user_data.json ]; then
       VALUE=$( sudo cat /etc/ff/configuration/user_data.json | jq '.[] | select(.mime_type=="agent/configuration")' | jq -r ".${KEY}" | grep -v -e '^null$' )
-      if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
+      if [ -n "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
           bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
           echo ${VALUE}
-          state_set "${FUNCNAME[0]}" 'success'
-          return
+          return 0
       fi
   fi
 
@@ -3041,12 +3354,11 @@ function secret_get {
   if [ "${KEY}" == "ff_agent_uri" ] && [ -f /etc/ff/configuration/agent_uri ]; then
     FF_AGENT_URI="$( cat /etc/ff/configuration/agent_uri )"
     # Store "agent" to proper unified place for secrets, so we don't have to look for it in random places again next time.
-    if [ ! -z "${FF_AGENT_URI}" ]; then
+    if [ -n "${FF_AGENT_URI}" ]; then
       secret_set ff_agent_uri "${FF_AGENT_URI}"
       bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
       echo "${FF_AGENT_URI}"
-      state_set "${FUNCNAME[0]}" 'success'
-      return
+      return 0
     fi
   fi
 
@@ -3056,17 +3368,16 @@ function secret_get {
       ENVPATH="${HOME}/.control/environment/${environment}"
       if [ -e "${ENVPATH}" ]; then
           VALUE=$( grep -i "^${KEY}=" ${ENVPATH}/* | cut -d= -f2 | head -1 )
-          if [ ! -z "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
+          if [ -n "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
               echo ${VALUE}
               bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-              state_set "${FUNCNAME[0]}" 'success'
-              return
+              return 0
           fi
       fi
   done
 
   bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-  state_set "${FUNCNAME[0]}" 'failed_to_find_secret_value'
+  error "${FUNCNAME[0]}" 'failed_to_find_secret_value'
   return 1
 }
 export -f secret_get
@@ -3100,6 +3411,10 @@ export -f secret_get
 ###############################################################################
 function secret_set {
 
+  # Check dependencies
+  local DEPENDENCIES="bash_echo_setting_get bash_echo_off_set bash_echo_setting_set mkdir error"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   # Preserve current bash echo settings and enable bash echo setting
   BASH_ECHO_SETTINGS=$( bash_echo_setting_get ) || { error "${FUNCNAME[0]}" 'failed_to_bash_echo_setting_gets'; return 1; }
 
@@ -3110,14 +3425,14 @@ function secret_set {
   local SECRET="${2}"
 
   # Check FF_AGENT_HOME is set
-  [ ! -z "${FF_AGENT_HOME}" ] || {
+  [ -n "${FF_AGENT_HOME}" ] || {
     bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     error "${FUNCNAME[0]}" 'error_envirnment_not_set_ff_agent_home'
     return 1
   }
 
   # Check URI is not blank
-  [ ! -z "${URI}" ] || {
+  [ -n "${URI}" ] || {
     bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     error "${FUNCNAME[0]}" 'error_blank_uri_argument'
     return 1
@@ -3181,6 +3496,10 @@ export -f secret_set
 ###############################################################################
 function state_get {
 
+  # Check dependencies
+  local DEPENDENCIES="error bash_echo_setting_get bash_echo_off_set bash_echo_setting_set"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   # Preserve current bash echo settings and enable bash echo setting
   BASH_ECHO_SETTINGS=$( bash_echo_setting_get ) || { error "${FUNCNAME[0]}" 'failed_to_bash_echo_setting_gets'; return 1; }
 
@@ -3190,7 +3509,7 @@ function state_get {
   STATE_NAME="${1}"
 
   # Check state name isn't
-  [ ! -z "${STATE_NAME}" ] || { error "state_get(): blank state name argument"; return 1; }
+  [ -n "${STATE_NAME}" ] || { error "state_get(): blank state name argument"; return 1; }
 
   # Check if state name contains any prohibited symbols, then error out.
   [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { error "state_get(): illigal characters in the state name argument: '${BASH_REMATCH[1]}'"; return 1; }
@@ -3258,13 +3577,27 @@ export -f state_get
 ###############################################################################
 function state_set {
 
+  # Check dependencies
+  local DEPENDENCIES=( 
+    "error" 
+    "epoch_ms_get" 
+    "mkdir" 
+    "is_framework_api_defined" 
+    "ensure_variable_not_empty" 
+    "publish_message" 
+    "ff_uuid" 
+    "command_exists" 
+    "ff_metric"
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || return 1  # Note: check_dependencies will report missing dependencies
+
   # Get 2 arguments: state and value
   local STATE_NAME="${1}"
   local STATE_VALUE="${2}"
 
   # Check state name / value aren't blank
-  [ ! -z "${STATE_NAME}" ] || { error "state_set(): blank state name argument"; return 1; }
-  [ ! -z "${STATE_VALUE}" ] || { error "state_set(): blank state value argument"; return 1; }
+  [ -n "${STATE_NAME}" ] || { error "state_set(): blank state name argument"; return 1; }
+  [ -n "${STATE_VALUE}" ] || { error "state_set(): blank state value argument"; return 1; }
 
   # Check if state name / vaue contains any prohibited symbols, then error out.
   [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { error "state_set(): illigal characters in the state name argument: '${BASH_REMATCH[1]}'"; return 1; }
@@ -3306,7 +3639,7 @@ function state_set {
   local TIMESTAMP_EPOCH_MS="$( epoch_ms_get )"
   
   # Check if we actually got non-empty string?
-  [ ! -z "${TIMESTAMP_EPOCH_MS}" ] || { error "${FUNCNAME[0]}: failed_to_epoch_ms_get"; return 1; }
+  [ -n "${TIMESTAMP_EPOCH_MS}" ] || { error "${FUNCNAME[0]}: failed_to_epoch_ms_get"; return 1; }
   
   # If state value contains: success|running, then: "is_success": true
   # else
@@ -3446,6 +3779,12 @@ export -f state_set
 #
 ###############################################################################
 function can_sudo {
+
+    # Check dependencies
+    local DEPENDENCIES="sudo groups grep"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
+    # Take argument
     local USER_TO_CHECK="${1}"
 
     local USER_CAN_SUDO=1  # Assume they can't. 1 is an error code meaning we can't.
@@ -3502,6 +3841,11 @@ export -f can_sudo
 #
 ###############################################################################
 function check_group_exists {
+
+  # Check dependencies
+  local DEPENDENCIES="error getent"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   # Take argument
   local GROUP="${1}"
 
@@ -3544,8 +3888,14 @@ export -f check_group_exists
 #
 ###############################################################################
 function create_user {
+
+  # Check dependencies
+  local DEPENDENCIES="can_sudo sudo adduser"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
+  # Get argument
   local USERNAME="${1}"
-	if [ ! -z "${USERNAME}" ]; then
+	if [ -n "${USERNAME}" ]; then
 		if can_sudo "${USERNAME}"; then
         	# TODO: Make this multiplatform. Check what happens if we do this in a docker.
         	sudo adduser --disabled-password --gecos "" "${USERNAME}"
@@ -3584,9 +3934,15 @@ export -f create_user
 #
 ###############################################################################
 function home_directory_for_user_get {
+
+    # Check dependencies
+    local DEPENDENCIES="getent error cut"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
     # TODO: OSX doesn't have getent. Find Equivalent
     HOME_DIR=$( getent passwd "${1}" | cut -d: -f6 )
     if [ -z "${HOME_DIR}" ]; then
+        error "${FUNCNAME[0]}" "Failed to retrieve home directory for user '${1}'."
         return 1
     else
         echo "${HOME_DIR}"
@@ -3653,11 +4009,22 @@ export -f is_effectively_root
 #
 ###############################################################################
 function is_user_in_group {
+
+  # Check dependencies
+  local DEPENDENCIES="getent grep"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
+  # Get arguments
   local USERNAME="${1}"
   local GROUP="${2}"
+
+  # Check arguments are not empty
   [ -z "${USERNAME}" ] && return 1
   [ -z "${GROUP}" ] && return 1
+
+  # Check if user is in group
   if getent group "${GROUP}" | grep --quiet "\b${USERNAME}\b"; then
+      # Yes, user is in group
       return 0
   else
       return 1
@@ -3693,6 +4060,11 @@ export -f is_user_in_group
 #
 ###############################################################################
 function ppid_command_get {
+
+    # Check dependencies
+    local DEPENDENCIES="cat"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
     local PPID_CMD=$( cat /proc/${PPID}/cmdline )
     echo "${PPID_CMD}"
 }
@@ -3728,6 +4100,11 @@ export -f ppid_command_get
 #
 ###############################################################################
 function user_exists {
+
+    # Check dependencies
+    local DEPENDENCIES="getent"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
     # TODO: OSX doesn't have getent. Find Equivalent
     if [ -z "$(getent passwd ${1})" ]; then
         return 1 # User does not exist
@@ -3770,6 +4147,10 @@ export -f user_exists
 #
 ###############################################################################
 function discover_environment {
+
+  # Check dependencies
+  local DEPENDENCIES="ff_agent_home_get_best ff_agent_get_best_ff_agent_uri ff_agent_get_best_ff_host ff_agent_get_best_ff_content_url abort"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   ######################################################################
   # Choose user, agent home and make sure agent home folder exists
@@ -3906,6 +4287,12 @@ export -f discover_environment
 #
 ###############################################################################
 function discover_optional_environment_variable {
+  
+  # Check dependencies
+  local DEPENDENCIES="error tr secret_get"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
+  # Get arguments
   local NAME="${1}"
   local DEFAULT_VALUE="${2}"
 
@@ -3930,14 +4317,14 @@ function discover_optional_environment_variable {
   # Try to get value by "secret_get()"
   local NAME_LOWERCASE="$( echo "${NAME}" | tr '[:upper:]' '[:lower:]' )"
   local RESTORED_VALUE=$( secret_get "${NAME_LOWERCASE}" )
-  if [ ! -z "${RESTORED_VALUE}" ]; then
+  if [ -n "${RESTORED_VALUE}" ]; then
       # Got non-empty value from secrets, use it to export variable
       export "${NAME}"="${RESTORED_VALUE}"
       return 0
   fi
 
   # Variable not yet defined, define it using default value
-  if [ ! -z "${DEFAULT_VALUE}" ]; then
+  if [ -n "${DEFAULT_VALUE}" ]; then
       export "${NAME}"="${DEFAULT_VALUE}"
       return 0
   fi
@@ -4033,18 +4420,24 @@ export -f discover_os
 #
 ###############################################################################
 function discover_required_environment_variable {
+
+  # Check dependencies
+  local DEPENDENCIES="error discover_optional_environment_variable"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
+  # Get arguments
   local NAME="${1}"
   local DEFAULT_VALUE="${2}"
 
-  # Check inputs: NAME can be empty
-  [ -z "${NAME}" ] && { return 1; }
+  # Check inputs: NAME can not be empty
+  [ -n "${NAME}" ] || { error "${FUNCNAME[0]}" "Missing required argument 'NAME'"; return 1; }
 
   # Try to discover
   discover_optional_environment_variable "${NAME}" "${DEFAULT_VALUE}"
 
   # Check: must be discovered, otherwise error out
   if [[ ! -v "${NAME}" ]]; then
-      # Variable '${NAME}' is not defined, but required. Return an error.
+      error "Variable '${NAME}' is not defined, but required."
       return 1
   fi
 }
@@ -4070,7 +4463,7 @@ export -f discover_required_environment_variable
 #   without GNU date (e.g., macOS without gdate).
 #
 # EXAMPLES
-#   EPOCH_MS=$(epoch_ms_get)
+#   EPOCH_MS=$(epoch_ms_get) || { error "epoch_ms_get() failed"; return 1; }
 #   echo "Current epoch in ms: ${EPOCH_MS}"
 #
 # TODO
@@ -4080,7 +4473,12 @@ export -f discover_required_environment_variable
 #
 ###############################################################################
 function epoch_ms_get {
-    echo "$( date +%s%N | cut -b1-13 )"  # https://serverfault.com/a/151112/413686>
+
+  # Check dependencies
+  local DEPENDENCIES="date cut"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
+  echo "$( date +%s%N | cut -b1-13 )"  # https://serverfault.com/a/151112/413686>
 }
 export -f epoch_ms_get
 
@@ -4111,6 +4509,10 @@ export -f epoch_ms_get
 #
 ###############################################################################
 function ff_agent_get_best_ff_agent_uri {
+
+  # Check dependencies
+  local DEPENDENCIES="discover_optional_environment_variable uuidgen error ensure_variable_not_empty"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Try to get FF_AGENT_URI from environment or by secret_get()
   discover_optional_environment_variable "FF_AGENT_URI" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable"; return 1; }
@@ -4157,6 +4559,10 @@ export -f ff_agent_get_best_ff_agent_uri
 ###############################################################################
 function ff_agent_get_best_ff_content_url {
 
+  # Check dependencies
+  local DEPENDENCIES="discover_optional_environment_variable trim_slash error ensure_variable_not_empty"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   # Try to get FF_CONTENT_URL from environment or by secret_get()
   discover_optional_environment_variable "FF_CONTENT_URL" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable"; return 1; }
 
@@ -4198,6 +4604,10 @@ export -f ff_agent_get_best_ff_content_url
 ###############################################################################
 function ff_agent_get_best_ff_host {
 
+  # Check dependencies
+  local DEPENDENCIES="discover_optional_environment_variable error ensure_variable_not_empty hostname"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   # Try to get FF_HOST from environment or by secret_get()
   discover_optional_environment_variable "FF_HOST" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_host"; return 1; } # Note: FF_HOST: FF_HOST will be set to legacy portal hostname if this is a portal.
 
@@ -4236,6 +4646,12 @@ export -f ff_agent_get_best_ff_host
 #
 ###############################################################################
 function ff_agent_get_best_ff_port {
+
+  # Check dependencies
+  local DEPENDENCIES="discover_optional_environment_variable error"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
+  # Define default FF_PORT
   FF_PORT_DEFAULT=443
 
   # Try to get FF_PORT from environment or by secret_get()
@@ -4273,6 +4689,10 @@ export -f ff_agent_get_best_ff_port
 #
 ###############################################################################
 function ff_agent_get_best_namespace {
+
+  # Check dependencies
+  local DEPENDENCIES="discover_optional_environment_variable error ensure_variable_not_empty"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Try to get value from environment or by secret_get()
   discover_optional_environment_variable "NAMESPACE" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_namespace"; return 1; }
@@ -4314,6 +4734,10 @@ export -f ff_agent_get_best_namespace
 #
 ###############################################################################
 function ff_agent_get_best_organization {
+
+  # Check dependencies
+  local DEPENDENCIES="discover_optional_environment_variable error ensure_variable_not_empty"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Try to get value from environment or by secret_get()
   discover_optional_environment_variable "ORGANIZATION" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_organization"; return 1; }
@@ -4358,6 +4782,10 @@ export -f ff_agent_get_best_organization
 #
 ###############################################################################
 function ff_uuid {
+
+  # Check dependencies
+  local DEPENDENCIES="apt_update apt_install command_exists error"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Check dependency: "uuidgen" we need to make sure it is installed ('uuidgen' is part of 'uuid-runtime' package)
   if ! command_exists uuidgen >/dev/null; then
@@ -4404,7 +4832,12 @@ export -f ff_uuid
 #
 ###############################################################################
 function hardware_architecture_get {
-    dpkg --print-architecture
+
+  # Check dependencies
+  local DEPENDENCIES="dpkg"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
+  dpkg --print-architecture
 }
 export -f hardware_architecture_get
 
@@ -4431,7 +4864,12 @@ export -f hardware_architecture_get
 #   
 ###############################################################################
 function lsb_codename_get {
-    lsb_release --short --codename
+
+  # Check dependencies
+  local DEPENDENCIES="lsb_release"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
+  lsb_release --short --codename
 }
 export -f lsb_codename_get
 
@@ -4461,12 +4899,17 @@ export -f lsb_codename_get
 # Category: environment
 # Utility function - Get release - e.g. 16.04, 18.04, 20.04
 function lsb_id_get {
-    for DEPENDENCY in basename lsb_release
-    do
-      command_exists "${DEPENDENCY}" >/dev/null || { error "${FUNCNAME[0]} error dependency ${DEPENDENCY} not found."; return 1; }
-    done
-  
-    command_exists >/dev/null lsb_release && lsb_release --short --release
+
+  # Check dependencies
+  local DEPENDENCIES="lsb_release"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
+  for DEPENDENCY in basename lsb_release
+  do
+    command_exists "${DEPENDENCY}" >/dev/null || { error "${FUNCNAME[0]} error dependency ${DEPENDENCY} not found."; return 1; }
+  done
+
+  command_exists >/dev/null lsb_release && lsb_release --short --release
 }
 export -f lsb_id_get
 
@@ -4494,11 +4937,10 @@ export -f lsb_id_get
 #
 ###############################################################################
 function lsb_id_get_downcase {
-  # Dependency check: 'tr' is installed
-  if ! command_exists tr >/dev/null; then
-    error "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
-    return 1
-  fi
+
+  # Check dependencies
+  local DEPENDENCIES="lsb_release tr"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   lsb_release --short --id | tr '[:upper:]' '[:lower:]'
 }
@@ -4527,7 +4969,12 @@ export -f lsb_id_get_downcase
 #
 ###############################################################################
 function lsb_release_get {
-    lsb_release --short --release
+
+  # Check dependencies
+  local DEPENDENCIES="lsb_release"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
+  lsb_release --short --release
 }
 export -f lsb_release_get
 
@@ -4554,6 +5001,11 @@ export -f lsb_release_get
 #
 ###############################################################################
 function os_name_get {
+
+  # Check dependencies
+  local DEPENDENCIES="uname tr"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   local OS_NAME="$( basename $( uname --operating-system ) | tr '[:upper:]' '[:lower:]' )"
   if [ -z "${OS_NAME}" ]; then
     # Error, got empty string
@@ -4597,11 +5049,9 @@ export -f os_name_get
 ###############################################################################
 function check_environment_variables_are_set {
 
-  # Dependency check: 'tr' is installed
-  if ! command_exists tr >/dev/null; then
-    error "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
-    return 1
-  fi
+  # Check dependencies
+  local DEPENDENCIES="ensure_variable_not_empty tr error"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Define list of required environment variables (must be not empty)
   local ALL_EXPECTED_ENVRIONMENT_VARIABLES=(
@@ -4649,6 +5099,11 @@ export -f check_environment_variables_are_set
 #
 ###############################################################################
 function check_nodejs_installation {
+
+  # Check dependencies
+  local DEPENDENCIES="state_set error nodejs_desired_version_get node command_exists"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   state_set "${FUNCNAME[0]}" 'started'
 
   local ERRORS_COUNT=0
@@ -4746,6 +5201,10 @@ export -f check_nodejs_installation
 ###############################################################################
 function check_secret_set_get {
   
+  # Check dependencies
+  local DEPENDENCIES="ff_uuid error secret_set secret_get"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   # Define test name / value pair
   SECRET_NAME="check_secret_set_get"
   SECRET_VALUE=$( ff_uuid ) || { error "${FUNCNAME[0]}" 'failed_generate_uuid'; return 1; }
@@ -4797,6 +5256,10 @@ export -f check_secret_set_get
 ###############################################################################
 function current_user_get {
 
+  # Check dependencies
+  local DEPENDENCIES="command_exists whoami error"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   # Check if environment variable USER is set, then use it.
   if [ -z "${USER}" ]; then
     # The USER environment variable is blank.
@@ -4808,7 +5271,7 @@ function current_user_get {
 
     # Try to get current username by 'whoami'
     USER="$( whoami )" || { error "${FUNCNAME[0]}" "ERROR whoami command failed"; return 1; }
-    [ ! -z "${USER}" ] || { error "${FUNCNAME[0]}" "failed_to_current_user_get"; return 1; }
+    [ -n "${USER}" ] || { error "${FUNCNAME[0]}" "failed_to_current_user_get"; return 1; }
   fi
 
   # Print username to standard output
@@ -4842,6 +5305,10 @@ export -f current_user_get
 #
 ###############################################################################
 function ff_agent_check_bin_is_in_the_path {
+
+  # Check dependencies
+  local DEPENDENCIES="printenv grep"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   local FF_AGENT_BIN="${FF_AGENT_HOME}/bin"
   printenv PATH | grep --quiet "${FF_AGENT_BIN}"
@@ -4880,6 +5347,10 @@ export -f ff_agent_check_bin_is_in_the_path
 #
 ###############################################################################
 function ff_agent_home_get_best {
+
+    # Check dependencies
+    local DEPENDENCIES="current_user_get home_directory_for_user_get error"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
     # These exports are our "return values"
     # Note: we should not get value from subprocess and call 'export' on the same 1-line like this: "export SOMEVAR=$( some_function_call ) || { error "error details"; return 1; } "
@@ -4921,12 +5392,30 @@ export -f ff_agent_home_get_best
 #
 ###############################################################################
 function ff_api_get {
+
+    # Check dependencies
+    local DEPENDENCIES="curl shopt ensure_variable_not_empty error"
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
+    # Get argument
     CALL="${1}"
 
-    [ ! -z "${CALL}" ] || { return 1; }
-    [ ! -z "${FF_API_USERNAME}" ] || { return 1; }
-    [ ! -z "${FF_API_PASSWORD}" ] || { return 1; }
-    [ ! -z "${FF_HOST}" ] || { return 1; }
+    # Check required arguments are not empty
+    # Define required variables
+    local REQUIRED_VARIABLES=(
+      CALL
+      FF_API_USERNAME
+      FF_API_PASSWORD
+      FF_HOST
+    )
+
+    # Check required environment variables are set
+    for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+      ensure_variable_not_empty "${VARIABLE_NAME}" || {
+        error "${FUNCNAME[0]}" "Required variable is empty: '${VARIABLE_NAME,,}'"
+        return 1
+      }
+    done
 
     # Run command, capture server response as ${RESULT} and curl exit code as ${STATUS}
     RESULT=$( curl -s --retry 5 -u "${FF_API_USERNAME}:${FF_API_PASSWORD}" https://${FF_HOST}${CALL} )
@@ -4936,9 +5425,25 @@ function ff_api_get {
         return ${STATUS}
     fi
 
-    if [[ ${RESULT} =~ (^Cannot GET) ]]; then
+    # =========================================== case-insensitive matching begin ==============
+    # Save the current state of nocasematch
+    CURRENT_NOCASEMATCH=$(shopt -p nocasematch)
+    
+    # Enable case-insensitive matching
+    shopt -s nocasematch
+    
+    if [[ ${RESULT} =~ (^cannot get) ]]; then
+        # The string contains 'Cannot GET'
+        # Restore the original nocasematch state before returning
+        ${CURRENT_NOCASEMATCH}
         return 1
+    else
+        echo "The string does not contain 'Cannot GET'"
     fi
+    
+    # Restore the original nocasematch state
+    ${CURRENT_NOCASEMATCH}   
+    # =========================================== case-insensitive matching end ==============
 
     if [[ ${RESULT} =~ (^.*"mime_type".+"rest/error") ]]; then
         return 1
@@ -4947,8 +5452,6 @@ function ff_api_get {
     echo ${RESULT}
 }
 export -f ff_api_get
-
-
 
 ###############################################################################
 # CATEGORY
@@ -4980,14 +5483,15 @@ export -f ff_api_get
 #
 ###############################################################################
 function is_framework_api_defined {
+
   # Print 'false' and return 1if FF_HOST not set
   [ -z "${FF_HOST}" ] && { echo 'false'; return 1; }
 
   # Print 'true' if both FF_API_USERNAME and FF_API_PASSWORDS are set
-  [ ! -z "${FF_API_USERNAME}" ] && [ ! -z "${FF_API_PASSWORDS}" ] && { echo 'true'; return 0; }
+  [ -n "${FF_API_USERNAME}" ] && [ -n "${FF_API_PASSWORDS}" ] && { echo 'true'; return 0; }
 
   # Print 'true' if FF_API_TOKEN is set
-  [ ! -z "${FF_API_TOKEN}" ] && { echo 'true'; return 0; }
+  [ -n "${FF_API_TOKEN}" ] && { echo 'true'; return 0; }
 
   # Print 'false' in all other cases
   echo 'false'
@@ -5016,6 +5520,11 @@ export -f is_framework_api_defined
 #
 ###############################################################################
 function nodejs_desired_version_get {
+
+  # Check dependencies
+  local DEPENDENCIES="lsb_release_get"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   local RELEASE=$( lsb_release_get ) # Will give us the version of ubuntu.
   case "${RELEASE}" in
     18.*) echo 'v17'
@@ -5059,6 +5568,10 @@ export -f nodejs_desired_version_get
 #
 ###############################################################################
 function publish_message {
+
+  # Check dependencies
+  local DEPENDENCIES="bash_echo_setting_set bash_echo_setting_get cat curl error secret_get log"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Preserve current bash echo settings and enable bash echo setting
   # Note: can't use state_set here otherwize will fall into recursive loop
@@ -5111,7 +5624,7 @@ function publish_message {
   fi
 
   if ! command_exists curl >/dev/null; then
-    log "WARNING: curl is not yet isntalled. Skppping publishing JSON: ${INPUT_JSON}"
+    log "${FUNCNAME[0]}" "WARNING: curl is not yet isntalled. Skppping publishing JSON: ${INPUT_JSON}"
     return 0
   fi
 
@@ -5208,6 +5721,10 @@ export -f publish_message
 ###############################################################################
 function set_environment_is_working {
 
+  # Check dependencies
+  local DEPENDENCIES="bash_echo_setting_set bash_echo_setting_get cat curl error secret_get log"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   local HAS_ERRORS=false
   local VERBOSE=false
 
@@ -5223,9 +5740,8 @@ function set_environment_is_working {
   )
 
   local ASSERTION='command_exists'
-  for COMMAND in ${COMMANDS[@]}
-  do
-    if command_exists ${COMMAND} >/dev/null ; then
+  for COMMAND in "${COMMANDS[@]}"; do
+    if command_exists "${COMMAND}" >/dev/null ; then
       [ "${VERBOSE}" == 'true' ] && log "SUCCESS assertion='${ASSERTION}' command='${COMMAND}'"
     else
       HAS_ERRORS=true
@@ -5312,6 +5828,10 @@ export -f set_environment_is_working
 ###############################################################################
 function state_check_set_and_get {
 
+  # Check dependencies
+  local DEPENDENCIES="tr ff_uuid state_get error"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
   # Check tr is installed
   if ! command_exists tr >/dev/null; then
     error "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
@@ -5322,7 +5842,7 @@ function state_check_set_and_get {
   STATE_VALUE=$( ff_uuid | tr -d '-' )
 
   # Check generated STATE_VALUE is not empty
-  [ ! -z "${STATE_VALUE}" ] || { error "${FUNCNAME[0]}" 'failed_generate_random_state_value'; return 1; }
+  [ -n "${STATE_VALUE}" ] || { error "${FUNCNAME[0]}" 'failed_generate_random_state_value'; return 1; }
 
   # Set state and try to retrieve value
   error "${STATE_NAME}" "${STATE_VALUE}" || { return 1; }
