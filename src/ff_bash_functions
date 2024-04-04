@@ -1349,12 +1349,6 @@ function find_file_owner_in_all_packages {
         return 1
     fi
 
-    # Check if "apt-file" is installed
-    if ! command_exists apt-file >/dev/null; then
-      error "apt-file is not installed. Please install it first (e.g. sudo install apt-file) and try again."
-      return 1
-    fi
-
     # Update packages universe database
     # Note: Running apt-file update updates its database of files available in packages,
     # enabling users to search for a specific file to find out which package it belongs to.
@@ -3222,14 +3216,8 @@ export -f generate_strong_password
 function secret_get {
 
   # Check dependencies
-  local DEPENDENCIES="error command_exists bash_echo_setting_get bash_echo_off_set"
+  local DEPENDENCIES="tr cut error command_exists bash_echo_setting_get bash_echo_off_set"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
-
-  # Dependency check: 'tr' is installed
-  if ! command_exists tr >/dev/null; then
-    error "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
-    return 1
-  fi
 
   # Preserve current bash echo settings and enable bash echo setting
   BASH_ECHO_SETTINGS=$( bash_echo_setting_get ) || { error "${FUNCNAME[0]}" 'failed_to_bash_echo_setting_gets'; return 1; }
@@ -4307,12 +4295,6 @@ function discover_optional_environment_variable {
       export "${NAME}"="${!NAME}"
       return 0
   fi
-
-  # Dependency check: 'tr' is installed
-  if ! command_exists tr >/dev/null; then
-    error "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
-    return 1
-  fi
   
   # Try to get value by "secret_get()"
   local NAME_LOWERCASE="$( echo "${NAME}" | tr '[:upper:]' '[:lower:]' )"
@@ -5263,12 +5245,6 @@ function current_user_get {
   # Check if environment variable USER is set, then use it.
   if [ -z "${USER}" ]; then
     # The USER environment variable is blank.
-    # Use command_exists to check if 'whoami' is available
-    if ! command_exists whoami >/dev/null; then
-      error "${FUNCNAME[0]}" 'whoami is not installed'
-      return 1
-    fi
-
     # Try to get current username by 'whoami'
     USER="$( whoami )" || { error "${FUNCNAME[0]}" "ERROR whoami command failed"; return 1; }
     [ -n "${USER}" ] || { error "${FUNCNAME[0]}" "failed_to_current_user_get"; return 1; }
@@ -5623,11 +5599,6 @@ function publish_message {
     return 1
   fi
 
-  if ! command_exists curl >/dev/null; then
-    log "${FUNCNAME[0]}" "WARNING: curl is not yet isntalled. Skppping publishing JSON: ${INPUT_JSON}"
-    return 0
-  fi
-
   # Wrap input JSON into the MESSAGE
   local MESSAGE=$(
     # Part 1/3: headers and start of payload
@@ -5722,33 +5693,23 @@ export -f publish_message
 function set_environment_is_working {
 
   # Check dependencies
-  local DEPENDENCIES="bash_echo_setting_set bash_echo_setting_get cat curl error secret_get log"
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
-
-  local HAS_ERRORS=false
-  local VERBOSE=false
-
-  [ "${1}" == "--verbose" ] && VERBOSE=true
-
-  # Verify expected commands exist
-  COMMANDS=(
+  local DEPENDENCIES=(
+    cat 
+    log
+    error
+    error
     command_exists
     environment_check_required_variables_are_set
     state_check_set_and_get
     secret_check_set_and_get
     ff_agent_check_bin_is_in_the_path
   )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[*]}" || { error "${FUNCNAME[0]}" 'error_check_dependencies'; return 1; }  # Note: check_dependencies will report exact missing dependencies
 
-  local ASSERTION='command_exists'
-  for COMMAND in "${COMMANDS[@]}"; do
-    if command_exists "${COMMAND}" >/dev/null ; then
-      [ "${VERBOSE}" == 'true' ] && log "SUCCESS assertion='${ASSERTION}' command='${COMMAND}'"
-    else
-      HAS_ERRORS=true
-      [ "${VERBOSE}" == 'true' ] && error "assertion='${ASSERTION}'  command='${COMMAND}'"
-      error "${FUNCNAME[0]}" "error_assertion_failed_${ASSERTION}_command_${COMMAND}"
-    fi
-  done
+  local HAS_ERRORS=false
+  local VERBOSE=false
+
+  [ "${1}" == "--verbose" ] && VERBOSE=true
 
   # Loop through array of f-nested f-ns, on error set flag HAS_ERRORS (don't exit)
   # MaKE SURE THESE COMMANDS BELOW ARE TESTED ABOVE
@@ -5831,12 +5792,6 @@ function state_check_set_and_get {
   # Check dependencies
   local DEPENDENCIES="tr ff_uuid state_get error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
-
-  # Check tr is installed
-  if ! command_exists tr >/dev/null; then
-    error "${FUNCNAME[0]}" 'error_dependency_not_met_tr'
-    return 1
-  fi
 
   STATE_NAME="state_check_set_and_get"
   STATE_VALUE=$( ff_uuid | tr -d '-' )
