@@ -89,7 +89,7 @@ function build_tarball {
     #      set_environment - last argument is the folder to archive. It does not include full path (like: ${TEMPORARY_DIR}/set_environment)
     #                        because we already specified -C argument.
     #
-    tar -C "${TEMPORARY_DIR}" -czf "${TARBALL_FILENAME}" "set_environment" || { echo "Error: failed to create tarball">&2; exit 1; }iled_to_create_tarball'; abort; }
+    tar -C "${TEMPORARY_DIR}" -czf "${TARBALL_FILENAME}" "set_environment" || { echo "Error: failed to create tarball">&2; exit 1; }
 
     # Upload tarball to S3 so it is available via URL: https:#cdn.redwolfsecurity.com/ff/ff_agent/set_environment.tgz
     node cdn_upload.js \
