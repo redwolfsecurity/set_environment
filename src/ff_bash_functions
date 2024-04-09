@@ -3689,7 +3689,7 @@ function state_set {
 
   for VARIABLE_NAME in "${ALL_EXPECTED_ENVRIONMENT_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_CODE=$( echo "error_environment_check_required_variables_are_set_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )
+      local ERROR_CODE=$( echo "Required environment variable '${VARIABLE_NAME}' is not set." | tr '[:upper:]' '[:lower:]' )
       error "${FUNCNAME[0]}: ${ERROR_CODE}"
       return 1
     }
@@ -5773,7 +5773,7 @@ function set_environment_is_working {
     error
     error
     command_exists
-    environment_check_required_variables_are_set
+    check_environment_variables_are_set
     state_check_set_and_get
     secret_check_set_and_get
     ff_agent_check_bin_is_in_the_path
@@ -5789,7 +5789,7 @@ function set_environment_is_working {
   # MaKE SURE THESE COMMANDS BELOW ARE TESTED ABOVE
   CHECKS=(
     # Check expected environments are in place
-    environment_check_required_variables_are_set
+    check_environment_variables_are_set
 
     # Check nodejs installation
     nodejs_check_installation
