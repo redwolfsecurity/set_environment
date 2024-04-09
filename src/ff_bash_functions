@@ -5775,7 +5775,7 @@ function set_environment_is_working {
     command_exists
     check_environment_variables_are_set
     state_check_set_and_get
-    secret_check_set_and_get
+    check_secret_set_get
     ff_agent_check_bin_is_in_the_path
   )
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[*]}" || { error "${FUNCNAME[0]}" 'error_check_dependencies'; return 1; }  # Note: check_dependencies will report exact missing dependencies
@@ -5798,7 +5798,7 @@ function set_environment_is_working {
     state_check_set_and_get
 
     # Check secret_set() / secret_get() by setting random value to some test secret and then retrieving it back
-    secret_check_set_and_get
+    check_secret_set_get
 
     # Check ff_agent/bin is in the path
     ff_agent_check_bin_is_in_the_path
