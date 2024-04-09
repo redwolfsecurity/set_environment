@@ -859,8 +859,8 @@ EOT
   # ------------------ Inject "ff_agent/.n/bin" into PATH and inject that export into FF_AGENT_PROFILE_FILE (end) ----------------
 
   #
-  VERSION=$( get_desired_nodejs_version )
-  [ -z "${VERSION}" ] && { state_set "${FUNCNAME[0]}" 'failed_to_get_desired_nodejs_version'; abort; }
+  VERSION=$( nodejs_desired_version_get )
+  [ -z "${VERSION}" ] && { state_set "${FUNCNAME[0]}" 'failed_to_nodejs_desired_version_get'; abort; }
 
   # Install 'n_lts' using dowloaded into TMPDIR 'n' ('n_lts' will be installed into ff_agent/.n)
   retry_command 5 15 bash n "${VERSION}" || {
@@ -893,8 +893,8 @@ function install_nodejs {
   state_set "${FUNCNAME[0]}" 'started'
 
   # Get desired nodejs version
-  local VERSION="$( get_desired_nodejs_version )"
-  [ -z "${VERSION}" ] && { state_set "${FUNCNAME[0]}" 'failed_to_get_desired_nodejs_version'; abort; }
+  local VERSION="$( nodejs_desired_version_get )"
+  [ -z "${VERSION}" ] && { state_set "${FUNCNAME[0]}" 'failed_to_nodejs_desired_version_get'; abort; }
 
 
   # # We need to stop pm2 before replacing location of nodejs, otherwise any pm2 command would faild
