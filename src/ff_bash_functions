@@ -369,7 +369,7 @@ export -f file_toc
 #
 # EXIT STATUS
 #   0 - Successfully listed functions.
-#   Any other exit status is not defined by this function.
+#   Any other non-zero code - on error.
 #
 ###############################################################################
 function help {
@@ -5021,6 +5021,68 @@ export -f os_name_get
 #   SET ENVIRONMENT
 #
 # NAME
+#   assert_ff_agent_home_exists - Ensures the FF_AGENT_HOME directory exists.
+#
+# SYNOPSIS
+#   assert_ff_agent_home_exists
+#
+# DESCRIPTION
+#   Confirms the existence of the directory specified by the FF_AGENT_HOME
+#   environment variable. It checks for the required environment variable 
+#   FF_AGENT_HOME and verifies that the corresponding directory exists in the 
+#   filesystem. If the directory does not exist, the function will report an 
+#   error and return a nonzero code. This function is essential for scripts that 
+#   depend on accessing files or directories within the FF_AGENT_HOME path.
+#
+# DEPENDENCIES
+#   Requires the following functions to be defined and accessible within the 
+#   environment: 'set_state', 'ensure_variable_not_empty', and 'error'.
+#   The function 'check_dependencies' is used to verify the presence of these 
+#   dependencies before proceeding with the main operations.
+#
+# EXAMPLES
+#   assert_ff_agent_home_exists || { abort "FF_AGENT_HOME directory does not exist."; }
+#
+# EXIT STATUS
+#   0 - on success, indicating the FF_AGENT_HOME directory exists.
+#   1 - on failure, indicating either the FF_AGENT_HOME variable is unset or the 
+#       specified directory does not exist.
+#
+###############################################################################
+
+function assert_ff_agent_home_exists {
+  
+  # Check dependencies
+  local DEPENDENCIES="set_state ensure_variable_not_empty error"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
+  set_state "${FUNCNAME[0]}" 'started'
+
+  # Define required variables
+  local REQUIRED_VARIABLES=(
+    FF_AGENT_HOME
+  )
+
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || {
+      error "Failed to ensure variable not empty: ${VARIABLE_NAME}"
+      set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty"
+      return 1
+    }
+  done
+
+  # Make sure ${FF_AGENT_HOME} folder exist
+  [ -d "${FF_AGENT_HOME}" ] || { set_state "${FUNCNAME[0]}" "error_ff_agent_home_does_not_exist"; return 1; }
+  set_state "${FUNCNAME[0]}" 'success'
+}
+export -f assert_ff_agent_home_exists
+
+###############################################################################
+# CATEGORY
+#   SET ENVIRONMENT
+#
+# NAME
 #   check_environment_variables_are_set - Checks if all expected environment variables are set.
 #
 # SYNOPSIS
@@ -5038,8 +5100,8 @@ export -f os_name_get
 #   check_environment_variables_are_set || abort "One or more environment variables are not set.";
 #
 # EXIT STATUS
-#   0 on success, indicating all required environment variables are set.
-#   1 on failure, indicating one or more required environment variables are unset.
+#   0 - on success, indicating all required environment variables are set.
+#   1 - on failure, indicating one or more required environment variables are unset.
 #
 ###############################################################################
 function check_environment_variables_are_set {
@@ -5089,8 +5151,8 @@ export -f check_environment_variables_are_set
 #   check_nodejs_installation || abort "Node.js installation checks failed.";
 #
 # EXIT STATUS
-#   0 on success, indicating Node.js is correctly installed.
-#   1 on failure, indicating a problem with the Node.js installation.
+#   0 - on success, indicating Node.js is correctly installed.
+#   1 - on failure, indicating a problem with the Node.js installation.
 #
 ###############################################################################
 function check_nodejs_installation {
@@ -5190,8 +5252,8 @@ export -f check_nodejs_installation
 #   fi
 #
 # EXIT STATUS
-#   0 on success, indicating the secret was set and retrieved successfully.
-#   1 on failure, indicating an issue with setting or retrieving the secret.
+#   0 - on success, indicating the secret was set and retrieved successfully.
+#   1 - on failure, indicating an issue with setting or retrieving the secret.
 #
 ###############################################################################
 function check_secret_set_get {
@@ -5245,8 +5307,8 @@ export -f check_secret_set_get
 #   URRENT_USER="$(current_user_get)" || { error "Can not get current user"; return 1; }
 #
 # EXIT STATUS
-#   0 on success.
-#   1 on failure.
+#   0 - on success.
+#   1 - on failure.
 #
 ###############################################################################
 function current_user_get {
@@ -5289,8 +5351,8 @@ export -f current_user_get
 #   fi
 #
 # EXIT STATUS
-#   0 if FF_AGENT_BIN is in PATH.
-#   1 if FF_AGENT_BIN is not in PATH or if an error occurs.
+#   0 - if FF_AGENT_BIN is in PATH.
+#   1 - if FF_AGENT_BIN is not in PATH or if an error occurs.
 #
 ###############################################################################
 function ff_agent_check_bin_is_in_the_path {
@@ -5331,8 +5393,8 @@ export -f ff_agent_check_bin_is_in_the_path
 #   }
 #
 # EXIT STATUS
-#   0 on success. Exports FF_AGENT_USERNAME and FF_AGENT_HOME.
-#   1 on failure.
+#   0 - on success. Exports FF_AGENT_USERNAME and FF_AGENT_HOME.
+#   1 - on failure.
 #
 ###############################################################################
 function ff_agent_home_get_best {
@@ -5376,8 +5438,8 @@ export -f ff_agent_home_get_best
 #   RESPONSE=$(ff_api_get "/admin/organizations") || { error "API request failed."; return 1; }
 #
 # EXIT STATUS
-#   0 on success. Echoes the API response to standard output.
-#   Non-zero code on failure.
+#   0 - on success. Echoes the API response to standard output.
+#   Non-zero code - on failure.
 #
 ###############################################################################
 function ff_api_get {
@@ -5467,8 +5529,8 @@ export -f ff_api_get
 #   fi
 #
 # EXIT STATUS
-#   0 if the API is properly defined (i.e., all necessary variables are set).
-#   1 if the API is not properly defined (i.e., one or more necessary variables are missing).
+#   0 - Success. The API is properly defined (i.e., all necessary variables are set).
+#   1 - Faulure. The API is not properly defined (i.e., one or more necessary variables are missing).
 #
 ###############################################################################
 function is_framework_api_defined {
@@ -5552,8 +5614,8 @@ export -f nodejs_desired_version_get
 #   cat  "/path/to/file.json"  | publish_message
 #
 # EXIT STATUS
-#   0 upon successfully sending the message.
-#   1 if there is a failure in sending the message.
+#   0 - Success. The message was sent.
+#   1 - Failure. The message was not sent. Check the error log.
 #
 ###############################################################################
 function publish_message {
@@ -5699,8 +5761,8 @@ export -f publish_message
 #   fi
 #
 # EXIT STATUS
-#   0 if the environment is correctly set up.
-#   1 if there are issues with the environment setup.
+#   0 - if the environment is correctly set up.
+#   1 - if there are issues with the environment setup.
 #
 ###############################################################################
 function set_environment_is_working {
@@ -5796,8 +5858,8 @@ export -f set_environment_is_working
 #   fi
 #
 # EXIT STATUS
-#   0 on success, indicating the state was set and retrieved successfully.
-#   1 on failure, indicating an issue with setting or retrieving the state.
+#   0 - on success, indicating the state was set and retrieved successfully.
+#   1 - on failure, indicating an issue with setting or retrieving the state.
 #
 ###############################################################################
 function state_check_set_and_get {
