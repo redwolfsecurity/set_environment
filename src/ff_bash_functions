@@ -784,11 +784,9 @@ export -f apt_upgrade
 #   Returns success if the needle is found, and failure otherwise.
 #
 # EXAMPLE
-#   if in_array "search_value" "${array[@]}"; then
-#       echo "Value found."
-#   else
-#       echo "Value not found."
-#   fi
+#   ARRAY=("foo" "bar" "baz")
+#   SEARCH_ITEM="baz"
+#   [ in_array "${SEARCH_ITEM}" "${ARRAY[@]}" ] || { error "Value ${SEARCH_ITEM} not found."; return 1; }
 #
 # EXIT STATUS
 #   0 - Success, value exists in the array.
@@ -1044,7 +1042,7 @@ export -f semantic_version_parse
 #   Useful for cleaning URLs or file paths.
 #
 # EXAMPLES
-#   trim_slash "http://acme.com/a/b/c/" "http://acme.com///" "http://acme.com/" "/" "///" "a/" "b/b/" "c/c////"
+#   trim_slash "http://acme.com/a/b/c/" "http:///acme.com///" "http://acme.com/" "/" "///" "a/" "b/b/" "c/c////"
 #
 #   # Outputs:
 #   #   http://acme.com/a/b/c
@@ -1067,7 +1065,15 @@ function trim_slash {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
   
   for s; do
-    sed -E 's:(^/)?/*$:\1:' <<< "${s}"
+    # Replace consecutive slashes with a single slash 
+    # Remove trailing slashes.
+    # Leave "://" intact (i.e. http://, https:// or sftp://, etc.)
+    #
+    # The ":a; s:([^:])\:/:\1COLONSLASH9cf757d443f2:; ta;" - is a loop that replaces ":/"
+    # with a unique placeholder (COLONSLASH9cf757d443f2). It looks for a colon followed by slash
+    # The :a and ta commands create a loop to apply this substitution throughout the line, necessary
+    # if your input contains multiple URLs.
+    sed -E ':a; s:([^:])\:/:\1COLONSLASH9cf757d443f2:; ta; s://+:/:g; s:^/$:SINGLESLASH533b06b2b0a7:; s:/*$::; s:SINGLESLASH533b06b2b0a7:/:g; s:COLONSLASH9cf757d443f2:\:/:g' <<< "${s}"
   done
 }
 export -f trim_slash
@@ -2457,7 +2463,7 @@ function warning {
       return
     fi
 
-    log warning "${@}"
+    log warning: "${@}"
 }
 export -f warning
 
@@ -2674,7 +2680,6 @@ function ensure_variable_not_empty {
 }
 export -f ensure_variable_not_empty
 
-
 ###############################################################################
 # CATEGORY
 #   UTILITY FUNCTIONS: TERMINAL / SHELL
@@ -2699,6 +2704,10 @@ export -f ensure_variable_not_empty
 #
 #     set +e
 #     if is_shell_attribute_set e; then echo "yes"; else echo "no"; fi # no
+#
+# EXIT STATUS
+#   0 - The specified bash shell attribute is set.
+#   1 - The specified bash shell attribute is not set.
 #
 ###############################################################################
 function is_shell_attribute_set {
@@ -2736,6 +2745,11 @@ export -f is_shell_attribute_set
 #
 #     set +o pipefail
 #     if is_shell_option_set pipefail; then echo "yes"; else echo "no"; fi # no
+#
+# EXIT STATUS
+#   0 - The specified bash shell option is set.
+#   1 - The specified bash shell option is not set or the function encountered
+#       an error, such as a missing dependency or an invalid option name.
 #
 ###############################################################################
 function is_shell_option_set {
@@ -5545,7 +5559,7 @@ export -f nodejs_desired_version_get
 function publish_message {
 
   # Check dependencies
-  local DEPENDENCIES="bash_echo_setting_set bash_echo_setting_get cat curl error secret_get log"
+  local DEPENDENCIES="bash_echo_setting_get bash_echo_setting_set cat curl error ff_uuid log secret_get"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Preserve current bash echo settings and enable bash echo setting
@@ -5606,7 +5620,7 @@ function publish_message {
       "uri": "/organization/${ORGANIZATION}/delivery/message/${UUID}",
       "mime_type": "delivery/message",
       "header": {
-        "mime_type": "delivery/request_header",
+        "mime_type": "delivery/publish_header",
         "transaction_id": "${TRANSACTION_ID}",
 
         ${HAS_ERRORS_ELEMENT}
