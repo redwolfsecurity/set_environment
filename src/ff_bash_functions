@@ -80,7 +80,7 @@
 #    - terminal_reset 
 ## END UTILITY FUNCTIONS: TERMINAL / SHELL
 ## BEGIN UTILITY FUNCTIONS: PROCESS
-#    - check_dependencies
+#    - check_dependencies 
 #    - process_is_running_as_me 
 #    - retry_command 
 ## END UTILITY FUNCTIONS: PROCESS
@@ -122,6 +122,7 @@
 #    - os_name_get 
 ## END DISCOVER FUNCTIONS
 ## BEGIN SET ENVIRONMENT FUNCTIONS
+#    - assert_ff_agent_home_exists 
 #    - check_environment_variables_are_set 
 #    - check_nodejs_installation 
 #    - check_secret_set_get 
