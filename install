@@ -17,31 +17,31 @@ set -x
 
 # Set optional SERVICE variable. If it is set, then it will be used:
 #  - as a tag for logger in log()
-#  - to set_state() in abort() and successful_exit()
+#  - to state_set() in abort() and successful_exit()
 export SERVICE="set_environment"
 
 ###############################################################################
 #
 function install_set_environment {
-    # Can't set_state() here yet
-    # set_state "${FUNCNAME[0]}" 'started'
+    # Can't state_set() here yet
+    # state_set "${FUNCNAME[0]}" 'started'
 
     # Change directory into the script's directory. This ensure all relative paths working correctly.
-    cd "$( dirname $( readlink -f "${BASH_SOURCE[0]}" ) )" || { echo "Error: failed to change directory to $( dirname ${BASH_SOURCE[0]} )" >&2; exit 1; } # note: can not yet use error() / abort() / set_state()
+    cd "$( dirname $( readlink -f "${BASH_SOURCE[0]}" ) )" || { echo "Error: failed to change directory to $( dirname ${BASH_SOURCE[0]} )" >&2; exit 1; } # note: can not yet use error() / abort() / state_set()
 
     # Source common functions
-    source src/ff_bash_functions || { echo "Error: failed to source common functions." >&2; exit 1; } # note: can not yet use error() / abort() / set_state()
+    source src/ff_bash_functions || { echo "Error: failed to source common functions." >&2; exit 1; } # note: can not yet use error() / abort() / state_set()
 
     # Initialize terminal
-    terminal_initialize || { set_state "${FUNCNAME[0]}" "terminal_error_initialize_terminal"; abort; }
+    terminal_initialize || { state_set "${FUNCNAME[0]}" "terminal_error_initialize_terminal"; abort; }
 
     # Continue by calling OS-specific installer
-    source "src/architecture/$( discover_os )/continue_install.sh" "${@}" || { set_state "${FUNCNAME[0]}" "terminal_error_continue_install"; abort; }
+    source "src/architecture/$( discover_os )/continue_install.sh" "${@}" || { state_set "${FUNCNAME[0]}" "terminal_error_continue_install"; abort; }
 
     # Last step: run a selfcheck
-    set_environment_is_working || { set_state "${FUNCNAME[0]}" "terminal_error_selfcheck_failed"; abort; }
+    set_environment_is_working || { state_set "${FUNCNAME[0]}" "terminal_error_selfcheck_failed"; abort; }
 
-    set_state "${FUNCNAME[0]}" 'success'
+    state_set "${FUNCNAME[0]}" 'success'
 }
 
 install_set_environment  # no need to check errors here, the f-n itself reports errors (all of which are "terminal" errors) and aborts/exits.
