@@ -5031,12 +5031,11 @@ export -f os_name_get
 #   environment variable. It checks for the required environment variable 
 #   FF_AGENT_HOME and verifies that the corresponding directory exists in the 
 #   filesystem. If the directory does not exist, the function will report an 
-#   error and return a nonzero code. This function is essential for scripts that 
-#   depend on accessing files or directories within the FF_AGENT_HOME path.
+#   error and return a nonzero code.
 #
 # DEPENDENCIES
 #   Requires the following functions to be defined and accessible within the 
-#   environment: 'set_state', 'ensure_variable_not_empty', and 'error'.
+#   environment: 'state_set', 'ensure_variable_not_empty', and 'error'.
 #   The function 'check_dependencies' is used to verify the presence of these 
 #   dependencies before proceeding with the main operations.
 #
@@ -5053,10 +5052,10 @@ export -f os_name_get
 function assert_ff_agent_home_exists {
   
   # Check dependencies
-  local DEPENDENCIES="set_state ensure_variable_not_empty error"
+  local DEPENDENCIES="state_set ensure_variable_not_empty error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  set_state "${FUNCNAME[0]}" 'started'
+  state_set "${FUNCNAME[0]}" 'started'
 
   # Define required variables
   local REQUIRED_VARIABLES=(
@@ -5067,14 +5066,14 @@ function assert_ff_agent_home_exists {
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
       error "Failed to ensure variable not empty: ${VARIABLE_NAME}"
-      set_state "${FUNCNAME[0]}" "error_ensure_variable_not_empty"
+      state_set "${FUNCNAME[0]}" "error_ensure_variable_not_empty"
       return 1
     }
   done
 
   # Make sure ${FF_AGENT_HOME} folder exist
-  [ -d "${FF_AGENT_HOME}" ] || { set_state "${FUNCNAME[0]}" "error_ff_agent_home_does_not_exist"; return 1; }
-  set_state "${FUNCNAME[0]}" 'success'
+  [ -d "${FF_AGENT_HOME}" ] || { state_set "${FUNCNAME[0]}" "error_ff_agent_home_does_not_exist"; return 1; }
+  state_set "${FUNCNAME[0]}" 'success'
 }
 export -f assert_ff_agent_home_exists
 
