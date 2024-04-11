@@ -5360,10 +5360,13 @@ function ff_agent_check_bin_is_in_the_path {
   local DEPENDENCIES="printenv grep"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
+  # Define FF_AGENT_BIN path
   local FF_AGENT_BIN="${FF_AGENT_HOME}/bin"
-  printenv PATH | grep --quiet "${FF_AGENT_BIN}"
-  [ ${?} -ne 0 ] && {
-    # Error
+
+  # Check if FF_AGENT_BIN is in the PATH
+  printenv PATH | grep --quiet "${FF_AGENT_BIN}" || {
+    # Error - FF_AGENT_BIN is not in the PATH
+    error "${FUNCNAME[0]}" "FF_AGENT_BIN is not in the PATH"
     return 1
   }
 }
@@ -5792,7 +5795,7 @@ function set_environment_is_working {
     check_environment_variables_are_set
 
     # Check nodejs installation
-    nodejs_check_installation
+    check_nodejs_installation
 
     # Check state_set() / state_get() by setting random value to some test state and then retrieving it back
     state_check_set_and_get
@@ -5803,19 +5806,23 @@ function set_environment_is_working {
     # Check ff_agent/bin is in the path
     ff_agent_check_bin_is_in_the_path
   )
-
-  local COMMAND  # Declare variable local, so it does not polute our scope outside this f-n
+  
+  # Iterate over the list of commands to check
+  local COMMAND
   for COMMAND in "${CHECKS[@]}"; do
-    # Run the command. It must return 0 on success
-    if ${COMMAND}; then
-      # Command returns 0, which we take as successfull assertion
-      if [ "${COMMAND}" ]; then
-            [ "${VERBOSE}" == 'true' ] && log "SUCCESS assertion='${COMMAND}'"
-      else 
-      HAS_ERRORS=true
-        [ "${VERBOSE}" == 'true' ] && error "failed assertion='${COMMAND}'"
-        error "error_assertion_failed_${COMMAND}"
+    # Execute the command, capturing its output if needed and checking its return status
+    if OUTPUT=$(${COMMAND} 2>&1); then
+      # Command succeeded
+      if [ "${VERBOSE}" == 'true' ]; then
+        log "SUCCESS assertion='${COMMAND}'"
       fi
+    else
+      # Command failed
+      HAS_ERRORS=true
+      if [ "${VERBOSE}" == 'true' ]; then
+        error "FAILED assertion='${COMMAND}' with output: ${OUTPUT}"
+      fi
+      error "error_assertion_failed_${COMMAND}"
     fi
   done
 
