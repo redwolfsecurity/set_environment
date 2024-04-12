@@ -461,7 +461,7 @@ function docker_install {
     "lsb_id_get"
     "lsb_release_get"
     "service_is_running"
-    "set_state"
+    "state_set"
     "sudo"
     "systemctl"
     "usermod"
