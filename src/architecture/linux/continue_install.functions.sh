@@ -198,22 +198,6 @@ export -f assert_core_credentials
 
 ###############################################################################
 #
-# Function checks if service by given name is running (return code 0 = yes, 
-# other code = no).
-# Usage example:
-#   if service_is_running docker; then echo yes; else echo no; fi
-#   yes
-#
-function service_is_running {
-  local SERVICE_NAME="$1"
-  # Check inputs (must be non-empty string)
-  [ ! -z "${SERVICE_NAME}" ] || { state_set "${FUNCNAME[0]}" 'error_empty_argument'; return 1; }
-  systemctl is-active --quiet "${SERVICE_NAME}"
-}
-export -f service_is_running
-
-###############################################################################
-#
 # Function makes sure "${FF_AGENT_HOME}/bin" folder is created.
 #
 function set_environment_ensure_ff_agent_bin_exists {
