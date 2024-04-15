@@ -2320,9 +2320,9 @@ function error {
     local DEPENDENCIES="log"
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-    echo -n "${FONT_STYLE_RED}"
+    echo -n "${FONT_STYLE_RED}" >&2
     log error: "${@}"
-    echo -n "${FONT_STYLE_NORMAL}"
+    echo -n "${FONT_STYLE_NORMAL}" >&2
 }
 export -f error
 
