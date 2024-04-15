@@ -4906,10 +4906,11 @@ export -f hardware_architecture_get
 function lsb_codename_get {
 
   # Check dependencies
-  local DEPENDENCIES="lsb_release"
+  local DEPENDENCIES="lsb_release command_exists error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  lsb_release --short --codename
+  # --codename Display the code name of the currently installed distribution. (example: focal or jammy)
+  command_exists >/dev/null lsb_release && lsb_release --short --codename
 }
 export -f lsb_codename_get
 
@@ -4941,7 +4942,7 @@ export -f lsb_codename_get
 function lsb_id_get {
 
   # Check dependencies
-  local DEPENDENCIES="lsb_release"
+  local DEPENDENCIES="lsb_release command_exists error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   for DEPENDENCY in basename lsb_release
@@ -4949,7 +4950,7 @@ function lsb_id_get {
     command_exists "${DEPENDENCY}" >/dev/null || { error "${FUNCNAME[0]} error dependency ${DEPENDENCY} not found."; return 1; }
   done
 
-  command_exists >/dev/null lsb_release && lsb_release --short --release
+  command_exists >/dev/null lsb_release && lsb_release --short --id
 }
 export -f lsb_id_get
 
@@ -4979,10 +4980,11 @@ export -f lsb_id_get
 function lsb_id_get_downcase {
 
   # Check dependencies
-  local DEPENDENCIES="lsb_release tr"
+  local DEPENDENCIES="lsb_release tr command_exists error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  lsb_release --short --id | tr '[:upper:]' '[:lower:]'
+  # --id Display the distributor's ID. (example: Ubuntu)
+  command_exists >/dev/null lsb_id_get && lsb_id_get | tr '[:upper:]' '[:lower:]'
 }
 export -f lsb_id_get_downcase
 
@@ -5011,10 +5013,11 @@ export -f lsb_id_get_downcase
 function lsb_release_get {
 
   # Check dependencies
-  local DEPENDENCIES="lsb_release"
+  local DEPENDENCIES="lsb_release command_exists error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  lsb_release --short --release
+  # --release Display the release number of the currently installed  distribution. (example: 22.04)
+  command_exists >/dev/null lsb_release && lsb_release --short --release
 }
 export -f lsb_release_get
 

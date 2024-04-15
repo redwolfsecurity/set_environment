@@ -505,7 +505,7 @@ function docker_install {
   
   # Get ID, RELEASE and DISTRO and verify the values are actually set
   local LSB_ID
-  LSB_ID=$( lsb_id_get ) || { state_set "${FUNCNAME[0]}" "failed_to_lsb_id_get"; return 1; } # ubuntu
+  LSB_ID=$( lsb_id_get_downcase ) || { state_set "${FUNCNAME[0]}" "failed_to_lsb_id_get"; return 1; } # ubuntu
   [ "${LSB_ID}" == "" ] && { state_set "${FUNCNAME[0]}" "failed_to_lsb_id_get"; return 1; }
   
   local RELEASE=$( lsb_release_get ) || { state_set "${FUNCNAME[0]}" "failed_to_lsb_release_get"; return 1; }  # 18.04, 20.04, ...
