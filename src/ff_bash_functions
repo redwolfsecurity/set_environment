@@ -285,7 +285,8 @@ function command_exists {
   hash -d "${COMMAND}" >/dev/null 2>/dev/null
   hash -d $(command -v "${COMMAND}" ) >/dev/null 2>/dev/null
 
-  local COMMAND_RESOLVED=$(command -v "${COMMAND}" )
+  local COMMAND_RESOLVED
+  COMMAND_RESOLVED=$(command -v "${COMMAND}" )
   local STATUS=${?}
 
   # Command will return non-zero if command not found
@@ -1718,8 +1719,7 @@ function remove_all_lines_by_regexp {
   # (examaple: bad syntax in the used regex).
   local GREP_OUTPUT
   GREP_OUTPUT=$( grep --quiet "${REGEX}" "${FILEPATH}" 2>&1 )
-  local EXIT_CODE
-  EXIT_CODE=${?}
+  local EXIT_CODE=${?}
 
   # Check if the pattern is found
   if [ ${EXIT_CODE} -eq 1 ]; then
@@ -1743,8 +1743,7 @@ function remove_all_lines_by_regexp {
 
   # Check if stream editor error out.
   # Example: bad pattern would return code=1 and error message: sed: -e expression #1, char 8: unterminated address regex
-  local EDITOR_CODE
-  EDITOR_CODE=${?}
+  local EDITOR_CODE=${?}
   if [ ${EDITOR_CODE} -ne 0 ]; then
     # Error: editor return an error (most probably bad regex pattern)
     error "${FUNCNAME[0]}" 'failed_to_edit_file'
@@ -1842,8 +1841,9 @@ function replace_all_lines_by_regexp {
   [ -f "${FILEPATH}" ] || { error "${FUNCNAME[0]}" 'error_target_file_does_not_exist'; return 3; }
 
   # Try to find by given regexp
+  local GREP_OUTPUT
   GREP_OUTPUT=$( grep --quiet "${REGEX}" "${FILEPATH}" 2>&1 )
-  EXIT_CODE=${?}
+  local EXIT_CODE=${?}
 
   # Check if the pattern is found
   if [ ${EXIT_CODE} -eq 1 ]; then
@@ -1875,11 +1875,12 @@ function replace_all_lines_by_regexp {
   fi
 
   # We found line(s) in the target file. Edit file:
+  local EDITOR_OUTPUT
   EDITOR_OUTPUT=$( sed -i "s/${REGEX}/${INJECT_CONTENT}/g" "${FILEPATH}" 2>&1 )
 
   # Check if stream editor error out.
   # Example: bad pattern would return code=1 and error message: sed: -e expression #1, char 8: unterminated address regex
-  EDITOR_CODE=${?}
+  local EDITOR_CODE=${?}
   if [ ${EDITOR_CODE} -ne 0 ]; then
     # Error: inline editor returned an error (most probably bad regex pattern)
     # Pass editor output (error details) to stdout.
@@ -3575,8 +3576,9 @@ function state_get {
   # Check if state file exists
   if [ -f "${STATE_FILE}" ]; then
     # State file found, try to print it's content and preserve result code
+    local VALUE
     VALUE="$( cat "${STATE_FILE}" )"
-    EXIT_CODE=${?}
+    local EXIT_CODE=${?}
     # Print value to standard output
     echo -n "${VALUE}"
     bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
@@ -5519,8 +5521,9 @@ function ff_api_get {
     done
 
     # Run command, capture server response as ${RESULT} and curl exit code as ${STATUS}
+    local RESULT
     RESULT=$( curl -s --retry 5 -u "${FF_API_USERNAME}:${FF_API_PASSWORD}" https://${FF_HOST}${CALL} )
-    STATUS=${?}
+    local STATUS=${?}
 
     if [ "${STATUS}" != "0" ]; then
         return ${STATUS}
