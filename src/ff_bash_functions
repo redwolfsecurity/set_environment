@@ -509,8 +509,8 @@ function apt_install {
   local DEPENDENCIES="error sudo apt-get"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
   
-  PACKAGES=${@}
-  APT_COMMAND=install
+  local PACKAGES=${@}
+  local APT_COMMAND=install
 
   # Note: don't wrap ${PACKAGES} in quotes, otherwise it will not word split, and the loop will only run once.
   for PACKAGE in ${PACKAGES}; do
@@ -2977,6 +2977,7 @@ function check_dependencies {
     fi
 
     # Check each dependency
+    local DEPENDENCY
     for DEPENDENCY in "${DEPENDENCIES[@]}"; do
       # Ignore empty array elements
       if [[ -n "${DEPENDENCY}" ]]; then
