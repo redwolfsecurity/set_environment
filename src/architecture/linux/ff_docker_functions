@@ -524,13 +524,23 @@ function docker_install {
 
   # Add GPG key for download.docker.com
   # TODO: We might not have sudo, so we should request command to be run.
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-  | sudo --non-interactive DEBIAN_FRONTEND=noninteractive apt-key add -
-  [ ${?} -ne 0 ] && { state_set "${FUNCNAME[0]}" "failed_to_add_gpg_key"; return 1; }
+  #
+  # OLD way (does prompt)
+  # curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  #   | sudo --non-interactive DEBIAN_FRONTEND=noninteractive apt-key add -
+  # [ ${?} -ne 0 ] && { state_set "${FUNCNAME[0]}" "failed_to_add_gpg_key"; return 1; }
+  #
+  # NEW way (does NOT prompt)
+  # Check if file already exists
+  if [ ! -f /usr/share/keyrings/docker-archive-keyring.gpg ]; then
+    # Does not exist, add it
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+      | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+  fi
 
   # Add docker apt repository (apt = Advanced package tool)
   # TODO: We might not have sudo, so we should request command to be run.
-  sudo add-apt-repository "deb [arch=${ARCHITECTURE}] https://download.docker.com/linux/ubuntu ${DISTRO} stable"
+  sudo add-apt-repository --yes "deb [arch=${ARCHITECTURE}] https://download.docker.com/linux/ubuntu ${DISTRO} stable"
   [ ${?} -ne 0 ] && { state_set "${FUNCNAME[0]}" "failed_to_add_repository"; return 1; }
 
   # Update the apt package index file (apt = Advanced package tool)
