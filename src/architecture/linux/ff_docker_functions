@@ -72,11 +72,11 @@
 #
 ###############################################################################
 function docker_cleanup {
-  
+
   # Check dependencies
   local DEPENDENCIES="docker error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
-  
+
   # Cleanup some space
   # docker system prune: Remove all unused containers, networks, images (both dangling and unreferenced), and optionally, volumes if --volumes used.
   # Note: adding --volumes might be risky since it will erase DATA from stopped containers.
@@ -114,11 +114,11 @@ export -f docker_cleanup
 #
 ###############################################################################
 function docker_container_name_exists {
-  
+
   # Check dependencies
   local DEPENDENCIES="docker error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
-  
+
   local CONTAINER_IDENTIFIER="${1}"
   # -z - true if the length of string is zero
   # -n - true if the length of string is nonzero
@@ -126,7 +126,7 @@ function docker_container_name_exists {
     error "${FUNCNAME[0]}: error_no_container_name_specified"
     return 2
   fi
-  
+
   # Note: simple "docker inspect some-name" is ambiguous and can inspect either container or image.
   # To disambiguate we use "--type" (can be one of: container|image|node|network|secret|service|volume|task|plugin).
   # For more details see the official docs: https://docs.docker.com/engine/reference/commandline/inspect/
@@ -166,19 +166,19 @@ export -f docker_container_name_exists
 #
 ###############################################################################
 function docker_grep {
-  
+
   # Check dependencies
   local DEPENDENCIES="docker cut error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
-  
+
   # Get arguments
   CONTAINER_IDNAME="${1}"
   SEARCH_TERM="${2}"
-  
+
   # Check arguments
   [ ! -z "${CONTAINER_IDNAME}" ] || { error "${FUNCNAME[0]}: Failed to get the container name from the arguments."; exit 1; }
   [ ! -z "${MATCH}" ] || { error "${FUNCNAME[0]}: Failed to extract match term."; exit 1; }
-  
+
   # Newer call exclude non-ascii files, exclude certain paths, prints filename and line numbers (very fast)
   # Note: had to split to 2 calls: find() and collect to array, later iterate and grep, otherwise
   #
@@ -241,28 +241,28 @@ export docker_grep
 #
 ###############################################################################
 function docker_ensure {
-  
+
   # Check dependencies
   local DEPENDENCIES="state_set docker_is_installed docker_minimal_version_check docker_ensure_log_to_syslog"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
-  
+
   state_set "${FUNCNAME[0]}" 'started'
-  
+
   # Check if docker is already installed
   if ! docker_is_installed; then
     # Docker is not installed. Install it now.
     docker_install || { state_set "${FUNCNAME[0]}" 'failed_to_docker_install'; return 1; }
   fi
-  
+
   # Do the docker_minimal_version_check
   if ! docker_minimal_version_check "${MINIMUM_MAJOR_VERSION}"; then
     # Docker does not have expected version. Install proper version now.
     docker_install || { state_set "${FUNCNAME[0]}" 'failed_to_docker_install'; return 1; }
   fi
-  
+
   # Ensure docker logs sent to syslog
   docker_ensure_log_to_syslog || { state_set "${FUNCNAME[0]}" 'failed_to_docker_ensure_log_to_syslog'; return 1; }
-  
+
   state_set "${FUNCNAME[0]}" 'success'
 }
 export -f docker_ensure
@@ -296,22 +296,22 @@ export -f docker_ensure
 #
 ###############################################################################
 function docker_ensure_log_to_syslog {
-  
+
   # Check dependencies
   local DEPENDENCIES="state_set docker_is_log_to_syslog docker_set_log_to_syslog docker_restart"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
-  
+
   state_set "${FUNCNAME[0]}" 'started'
-  
+
   # Check if docker logs to syslog
   if ! docker_is_log_to_syslog; then
     # No, docker logs somewhere else. Reconfigure docker daemon.
     docker_set_log_to_syslog || { state_set "${FUNCNAME[0]}" 'failed_to_docker_set_log_to_syslog'; return 1; }
-    
+
     # And restart daemon
     docker_restart || { state_set "${FUNCNAME[0]}" 'failed_to_docker_restart'; return 1; }
   fi
-  
+
   state_set "${FUNCNAME[0]}" 'success'
 }
 export -f docker_ensure_log_to_syslog
@@ -381,24 +381,24 @@ export -f docker_get_default_minimum_major_version
 #
 ###############################################################################
 function docker_get_installed_version {
-  
+
   # Check dependencies
   local DEPENDENCIES="docker error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
-  
+
   # Check installed version
   #   Official docker documentation: how to get version: https://docs.docker.com/engine/reference/commandline/version/
   INSTALLED_VERSION="$( docker version --format '{{.Server.Version}}' )" || { error "${FUNCNAME[0]}" 'failed_to_get_installed_version_number'; return 1; }
-  
+
   # Check exit code
   [ "${?}" -eq 0 ] || { error "${FUNCNAME[0]}" "failed_to_get_docker_version"; return 1; }
-  
+
   # Check we got non-empty version output from docker
   [ ! -z "${INSTALLED_VERSION}" ] || { error "${FUNCNAME[0]}" "error_got_blank_docker_version"; return 1; }
-  
+
   # Print result to standard output
   echo "${INSTALLED_VERSION}"
-  
+
 }
 export -f docker_get_installed_version
 
@@ -443,9 +443,9 @@ export -f docker_get_installed_version
 #
 ###############################################################################
 function docker_install {
-  
+
   state_set "${FUNCNAME[0]}" 'started'
-  
+
   # Check dependencies
   local DEPENDENCIES=(
     "add-apt-repository"
@@ -466,17 +466,17 @@ function docker_install {
     "systemctl"
     "usermod"
   )
-  
+
   # Note: check_dependencies will report missing dependencies
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {
     state_set "${FUNCNAME[0]}" 'dependenciesfailed'; return 1;
   }
-  
+
   # Define required variables
   local REQUIRED_VARIABLES=(
     FF_AGENT_USERNAME
   )
-  
+
   # Check required environment variables are set
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
@@ -486,68 +486,68 @@ function docker_install {
       return 1
     }
   done
-  
+
   # Take optional MINIMUM_MAJOR_VERSION argument, if empty, then set default value
   local MINIMUM_MAJOR_VERSION="${1}"
   if [ -z "${MINIMUM_MAJOR_VERSION}" ]; then
     # Use default value
     MINIMUM_MAJOR_VERSION=$( docker_get_default_minimum_major_version ) || { state_set "${FUNCNAME[0]}" "failed_to_get_default_minimum_version"; return 1; }
   fi
-  
+
   # Do the docker_minimal_version_check
   if docker_minimal_version_check "${MINIMUM_MAJOR_VERSION}"; then
     # Installed version passed the minimal version check, no need to install
     state_set "${FUNCNAME[0]}" "no_action_already_installed"
     return 0
   fi
-  
+
   # Need to install since we don't have the minimum version, or docker is not installed
-  
+
   # Get ID, RELEASE and DISTRO and verify the values are actually set
   local LSB_ID
   LSB_ID=$( lsb_id_get_downcase ) || { state_set "${FUNCNAME[0]}" "failed_to_lsb_id_get"; return 1; } # ubuntu
   [ "${LSB_ID}" == "" ] && { state_set "${FUNCNAME[0]}" "failed_to_lsb_id_get"; return 1; }
-  
+
   local RELEASE=$( lsb_release_get ) || { state_set "${FUNCNAME[0]}" "failed_to_lsb_release_get"; return 1; }  # 18.04, 20.04, ...
   [ "${RELEASE}" == "" ] && { state_set "${FUNCNAME[0]}" "failed_to_lsb_release_get"; return 1; }
-  
+
   local DISTRO=$( lsb_codename_get ) || { state_set "${FUNCNAME[0]}" "failed_to_lsb_codename_get"; return 1; }  # bionic, focal, ...
   [ "${DISTRO}" == "" ] && { state_set "${FUNCNAME[0]}" "failed_to_lsb_codename_get"; return 1; }
-  
+
   local ARCHITECTURE=$( hardware_architecture_get ) || { state_set "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
-  
+
   # Only Ubuntu for now.
   if [ "${LSB_ID}" != "ubuntu" ]; then
     state_set "${FUNCNAME[0]}" "error_docker_install_unsupported_operating_system"
     return 1
   fi
-  
+
   # Add GPG key for download.docker.com
   # TODO: We might not have sudo, so we should request command to be run.
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
   [ ${?} -ne 0 ] && { state_set "${FUNCNAME[0]}" "failed_to_add_gpg_key"; return 1; }
-  
+
   # Add docker apt repository (apt = Advanced package tool)
   # TODO: We might not have sudo, so we should request command to be run.
   sudo add-apt-repository "deb [arch=${ARCHITECTURE}] https://download.docker.com/linux/ubuntu ${DISTRO} stable"
   [ ${?} -ne 0 ] && { state_set "${FUNCNAME[0]}" "failed_to_add_repository"; return 1; }
-  
+
   # Update the apt package index file (apt = Advanced package tool)
   apt_update
-  
+
   # Define required pagage names
   local PACKAGES=(
     docker-ce
     docker-ce-cli
     docker-compose
-    
+
     # The containerd is available as a daemon for Linux and Windows.
     # It manages the complete container lifecycle of its host system,
     # from image transfer and storage to container execution and supervision
     # to low-level storage to network attachments and beyond.
     containerd.io
   )
-  
+
   # Install required packages
   for PACKAGE in "${PACKAGES[@]}"; do
     apt_install "${PACKAGE}" || {
@@ -556,7 +556,7 @@ function docker_install {
       return 1
     }
   done
-  
+
   # Add ourselves as a user to be able to run docker
   GROUP="docker"
   # Check the 'docker' group exists.
@@ -564,7 +564,7 @@ function docker_install {
     state_set "${FUNCNAME[0]}" "error_group_docker_does_not_exist"
     return 1
   fi
-  
+
   # TODO: We might not have sudo, so we should request command to be run.
   # Check if user is in this group. If not, add them
   if ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}"; then
@@ -577,13 +577,13 @@ function docker_install {
       return 1
     fi
   fi
-  
+
   # Postcondition checks
   # Verify docker is properly set up
   # Note we are running via sudo, and if we added user to the ${GROUP} then it won't be applied in this shell.
   secret_set docker_release "$( docker --version )" || { state_set "${FUNCNAME[0]}" "failed_to_run_docker_to_get_release"; return 1; }
   secret_set docker_compose_relase "$( docker-compose --version )" || { state_set "${FUNCNAME[0]}" "failed_to_run_docker_compose_to_get_release"; return 1; }
-  
+
   # Check if installed docker version is less than minimally required
   # Do the docker_minimal_version_check
   if ! docker_minimal_version_check "${MINIMUM_MAJOR_VERSION}"; then
@@ -591,15 +591,15 @@ function docker_install {
     state_set "${FUNCNAME[0]}" "failed_postcondition_docker_minimal_version_check"
     return 1
   fi
-  
+
   # Set up docker daemon logging (log to syslog)
   docker_set_log_to_syslog || { state_set "${FUNCNAME[0]}" "failed_to_docker_set_log_to_syslog"; return 1; }
-  
+
   # Restart docker to apply logging configuration (to syslog) only if docker is running
   if service_is_running docker; then
     # Restart docker
     sudo systemctl restart docker
-    
+
     # Since docker is running we can check it is logging to syslog
     local EXPECTED_DOCKER_LOGGING="syslog"
     local ACTUAL_DOCKER_LOGGING=$( docker info --format '{{.LoggingDriver}}' )
@@ -608,7 +608,7 @@ function docker_install {
       return 1
     fi
   fi
-  
+
   state_set "${FUNCNAME[0]}" 'success'
 }
 export -f docker_install
@@ -642,14 +642,14 @@ export -f docker_install
 #
 ###############################################################################
 function docker_is_container_healthy {
-  
+
   # Check dependencies
   local DEPENDENCIES="error docker"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
-  
+
   # TAke arguments
   local CONTAINER_IDENTIFIER="${1}"
-  
+
   # -z - true if the length of string is zero
   # -n - true if the length of string is nonzero
   if [ -z "${CONTAINER_IDENTIFIER}" ]; then
@@ -704,34 +704,34 @@ export -f docker_is_container_healthy
 #
 ###############################################################################
 function docker_is_container_log_to_syslog {
-  
+
   # Check dependencies
   local DEPENDENCIES="state_set error docker"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
-  
+
   # Check number of arguments: must be exactly 1
   [ $# -eq 1 ] || { error "${FUNCNAME[0]}" 'error_wrong_number_of_arguments'; return 1; }
-  
+
   # Take argument (container ID or name)
   local CONTAINER_IDENTIFIER="${1}"
-  
+
   # Check if docker installed
   docker_is_installed || { error "${FUNCNAME[0]}" 'error_docker_is_not_installed'; return 1; }
-  
+
   # Check such container exists
   local MATCHING_CONTAINERS_NUMBER
   MATCHING_CONTAINERS_NUMBER=$( docker ps -a  )=$( docker ps -a ) || { error "${FUNCNAME[0]}" 'Failed to list docker containers by command: docker ps -a'; return 1; }
-  
+
   # Define expected logging driver
   local EXPECTED_LOGGING_DRIVER="syslog"
-  
+
   # Get actually configured logging driver
   local ACTUAL_LOGGING_DRIVER
   ACTUAL_LOGGING_DRIVER=$( docker inspect -f '{{.HostConfig.LogConfig.Type}}' "${CONTAINER_IDENTIFIER}" ) || { error "${FUNCNAME[0]}" 'failed_to_get_docker_log_config_type'; return 1; }
-  
+
   # Note: Same can be extracted using "jq":
   # local ACTUAL_LOGGING_DRIVER=$( docker inspect "${CONTAINER_IDENTIFIER}" | jq --raw-output .[].HostConfig.LogConfig.Type ) || { error "${FUNCNAME[0]}" 'failed_to_get_docker_log_config_type'; return 1; }
-  
+
   # Compare actual vs. expected
   if [ "${ACTUAL_LOGGING_DRIVER}" != "${EXPECTED_LOGGING_DRIVER}" ]; then
     # Mismatch: docker has some unexpected logging driver
@@ -776,11 +776,11 @@ function docker_is_container_running {
   # Check dependencies
   local DEPENDENCIES="docker error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 3  # Note: check_dependencies will report missing dependencies
-  
+
   # Take argument, check it is not empty
   local CONTAINER_IDENTIFIER="${1}"
   [ ! -z "${CONTAINER_IDENTIFIER}" ] || { error "${FUNCNAME[0]}: error_no_container_name_specified"; return 2; }
-  
+
   # Inspect given container, make sure it is in ranning state
   # Note: simple "docker inspect some-name" is ambiguous and can inspect either container or image.
   # To disambiguate we use "--type" (can be one of: container|image|node|network|secret|service|volume|task|plugin).
@@ -822,17 +822,17 @@ export -f docker_is_container_running
 #
 ###############################################################################
 function docker_is_every_container_log_to_syslog {
-  
+
   # Check dependencies
   local DEPENDENCIES="docker_is_container_log_to_syslog docker awk error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Check if docker installed
   docker_is_installed || { error "${FUNCNAME[0]}" 'error_docker_is_not_installed'; return 1; }
-  
+
   # Get list of running container names
   local CONTAINERS=$(docker ps | awk '{if(NR>1) print $NF}') || { error "${FUNCNAME[0]}" 'failed_to_get_continers_list'; return 1; }
-  
+
   # Iterate running containers and check docker_is_container_log_to_syslog() on each
   for CONTAINER in ${CONTAINERS}; do
     docker_is_container_log_to_syslog "${CONTAINER}" || { error "${FUNCNAME[0]}" 'error_found_container_not_logging_to_syslog'; return 1; }
@@ -913,13 +913,13 @@ function docker_is_log_to_syslog {
 
   # Check if docker installed
   docker_is_installed || { error "${FUNCNAME[0]}" 'error_docker_is_not_installed'; return 1; }
-  
+
   # Define expected logging driver
   local EXPECTED_LOGGING_DRIVER="syslog"
-  
+
   # Get actually configured logging driver
   local ACTUAL_LOGGING_DRIVER=$( docker info --format '{{.LoggingDriver}}' ) || { error "${FUNCNAME[0]}" 'failed_to_get_docker_logging_driver'; return 1; }
-  
+
   # Compare actual vs. expected
   if [ "${ACTUAL_LOGGING_DRIVER}" != "${EXPECTED_LOGGING_DRIVER}" ]; then
     # Mismatch: docker has some unexpected logging driver
@@ -1000,19 +1000,19 @@ function docker_login {
     state_set "${FUNCNAME[0]}" 'error_wrong_number_of_arguments'
     return 1
   fi
-  
+
   # Get arguments
   local FQDN="$1"
-  
+
   # Get secrets
   FQDN=$( secret_get "${FQDN}" ) || { error "${FUNCNAME[0]}" 'failed_to_secret_get_fqdn'; return 1; }
-  
+
   # Decide if we need docker_login_aws_ecr or docker_login_legacy
   # Check if FQDN ends with "amazonaws.com"
   if [[ ${FQDN} =~ amazonaws.com$ ]]; then
     # Match: use AWS ERC login functino
     docker_login_aws_ecr "${@}" || { error "${FUNCNAME[0]}" 'failed_to_docker_login_aws_ecr'; return 1; }
-    
+
   else
     # No match found: use "legacy" login function
     docker_login_legacy "${@}" || { error "${FUNCNAME[0]}" 'failed_to_docker_login_legacy'; return 1; }
@@ -1079,7 +1079,7 @@ export -f docker_login
 ###############################################################################
 function docker_login_aws_ecr {
   state_set "${FUNCNAME[0]}" 'started'
-  
+
   # Check dependencies
   local DEPENDENCIES="state_set ensure_variable_not_empty secret_get docker aws logger"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
@@ -1090,18 +1090,18 @@ function docker_login_aws_ecr {
     state_set "${FUNCNAME[0]}" 'error_wrong_number_of_arguments'
     return 1
   fi
-  
+
   # Get required arguments
   local FQDN="$1"
   local REGION="$2"
-  
+
   # Check we got non-empty arguments
   # Define required variables
   local REQUIRED_VARIABLES=(
     FQDN
     REGION
   )
-  
+
   # Check required environment variables are set
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
@@ -1111,25 +1111,25 @@ function docker_login_aws_ecr {
       return 1
     }
   done
-  
+
   # Get secrets
   FQDN=$( secret_get "${FQDN}" ) || { state_set "${FUNCNAME[0]}" 'failed_to_secret_get_fqdn'; return 1; }
   REGION=$( secret_get "${REGION}" ) || { state_set "${FUNCNAME[0]}" 'failed_to_secret_get_region'; return 1; }
-  
+
   # Get 2 optional arguments:
   #   - AWS_ACCESS_KEY_ID
   #   - AWS_SECRET_ACCESS_KEY
   # If arguments are missing, try to get secrets from environment.
   if [ $# -eq 4 ]; then
-    
+
     # AWS secrets were provided as arguments: get arguments
     local SELECTED_AWS_ACCESS_KEY_ID="$3"
     local SELECTED_AWS_SECRET_ACCESS_KEY="$4"
-    
+
     # Get secrets
     SELECTED_AWS_ACCESS_KEY_ID=$( secret_get "${SELECTED_AWS_ACCESS_KEY_ID}" ) || { state_set "${FUNCNAME[0]}" 'failed_to_secret_get_aws_access_key_id'; return 1; }
     SELECTED_AWS_SECRET_ACCESS_KEY=$( secret_get "${SELECTED_AWS_SECRET_ACCESS_KEY}" ) || { state_set "${FUNCNAME[0]}" 'failed_to_secret_get_aws_secret_access_key'; return 1; }
-    
+
   else
     # AWS secrets were not provided as arguments.
     # Try to get them from environment or error out.
@@ -1138,21 +1138,21 @@ function docker_login_aws_ecr {
     local SELECTED_AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
     local SELECTED_AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
   fi
-  
+
   # At this point both SELECTED_AWS_ACCESS_KEY_ID and SELECTED_AWS_SECRET_ACCESS_KEY must be non-empty strings
   [ ! -z "${SELECTED_AWS_ACCESS_KEY_ID}" ]     || { state_set "${FUNCNAME[0]}" 'failed_to_get_best_aws_access_key_id'; return 1; }
   [ ! -z "${SELECTED_AWS_SECRET_ACCESS_KEY}" ] || { state_set "${FUNCNAME[0]}" 'failed_to_get_best_aws_secret_access_key'; return 1; }
-  
+
   # Retrieve an authentication token using the GetAuthorizationToken API
   local TOKEN=$(
     export AWS_ACCESS_KEY_ID="${SELECTED_AWS_ACCESS_KEY_ID}"
     export AWS_SECRET_ACCESS_KEY="${SELECTED_AWS_SECRET_ACCESS_KEY}"
     aws ecr get-login-password --region "${REGION}"
   ) || { state_set "${FUNCNAME[0]}" 'failed_to_get_token'; return 1; }
-  
+
   # Check the token is not blank
   [ ! -z "${TOKEN}" ] || { state_set "${FUNCNAME[0]}" 'error_got_blank_token'; return 1; }
-  
+
   # Actual "docker login"
   # Note: we use piped command here. The exit code of piped commands will be the one of the last command (docker login).
   # Note: we also collect the output.
@@ -1163,10 +1163,10 @@ function docker_login_aws_ecr {
     --password-stdin "${FQDN}" \
     2>&1
   ) || { state_set "${FUNCNAME[0]}" 'failed_to_docker_login'; return 1; }
-  
+
   # Send the "docker login" output to the logger with f-n name tag (simplifies debugging, audit, etc.)
   echo "${DOCKER_LOGIN_OUTPUT}" | logger -t "${FUNCNAME[0]}"
-  
+
   state_set "${FUNCNAME[0]}" 'success'
 }
 export -f docker_login_aws_ecr
@@ -1215,12 +1215,12 @@ function docker_login_legacy {
 
   # Check number of arguments: must be exactly 3
   [ $# -eq 3 ] || { state_set "${FUNCNAME[0]}" 'error_wrong_number_of_arguments'; return 1; }
-  
+
   # Get arguments
   local FQDN="$1"
   local USERNAME="$2"
   local PASSWORD="$3"
-  
+
   # Check we got non-empty arguments
   # Define required variables
   local REQUIRED_VARIABLES=(
@@ -1228,7 +1228,7 @@ function docker_login_legacy {
     USERNAME
     PASSWORD
   )
-  
+
   # Check required environment variables are set
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
@@ -1238,18 +1238,18 @@ function docker_login_legacy {
       return 1
     }
   done
-  
+
   # Retrieve actual values by "secret_get()"
   FQDN=$( secret_get "${FQDN}" ) || { state_set "${FUNCNAME[0]}" 'failed_to_secret_get_fqdn'; return 1; }
   USERNAME=$( secret_get "${USERNAME}" ) || { state_set "${FUNCNAME[0]}" 'failed_to_secret_get_username'; return 1; }
   PASSWORD=$( secret_get "${PASSWORD}" ) || { state_set "${FUNCNAME[0]}" 'failed_to_secret_get_password'; return 1; }
-  
+
   # Check if we got non-empty values for container registry: FQDN, username and password
   # TODO: DRY violation: list attributes as array, iterate, check..
   [ ! -z ${FQDN} ] || { state_set "${FUNCNAME[0]}" 'error_got_empty_fqdn'; return 1; }
   [ ! -z ${USERNAME} ] || { state_set "${FUNCNAME[0]}" 'error_got_empty_username'; return 1; }
   [ ! -z ${PASSWORD} ] || { state_set "${FUNCNAME[0]}" 'error_got_empty_password'; return 1; }
-  
+
   # Actual "docker login"
   # Note: we use piped command here. The exit code of piped commands will be the one of the last command (docker login).
   # Note: we also collect the output.
@@ -1260,10 +1260,10 @@ function docker_login_legacy {
     --password-stdin "${FQDN}" \
     2>&1
   ) || { state_set "${FUNCNAME[0]}" 'failed_to_docker_login'; return 1; }
-  
+
   # Send the "docker login" output to the logger with f-n name tag (simplifies debugging, audit, etc.)
   echo "${DOCKER_LOGIN_OUTPUT}" | logger -t "${FUNCNAME[0]}"
-  
+
   state_set "${FUNCNAME[0]}" 'success'
 }
 export -f docker_login_legacy
@@ -1299,9 +1299,9 @@ export -f docker_login_legacy
 #
 ###############################################################################
 function docker_minimal_version_check {
-  
+
   state_set "${FUNCNAME[0]}" 'started'
-  
+
   # Check dependencies
   local DEPENDENCIES="state_set docker_is_installed docker_get_installed_version semantic_version_parse docker_get_default_minimum_major_version"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
@@ -1312,23 +1312,27 @@ function docker_minimal_version_check {
     # Use default value
     MINIMUM_MAJOR_VERSION=$( docker_get_default_minimum_major_version ) || { state_set "${FUNCNAME[0]}" "failed_to_get_default_minimum_version"; return 1; }
   fi
-  
+
   # Check if docker is installed
   docker_is_installed || { state_set "${FUNCNAME[0]}" 'error_docker_is_not_installed'; return 1; }
-  
+
   # Get full docker version (example: 23.0.1)
   local INSTALLED_VERSION="$( docker_get_installed_version )" || { state_set "${FUNCNAME[0]}" "failed_to_get_installed_docker_version"; return 1; }
-  
+
   # Extract major version component from docker version (example: 23)
   # Note the semantic_version_parse() checked its return value is not blank
   local INSTALLED_MAJOR_VERSION=$( semantic_version_parse --major "${INSTALLED_VERSION}" ) || { state_set "${FUNCNAME[0]}" 'falied_to_extract_major_version'; return 1; }
-  
+
+  # Check we got non-empty values
+  [ ! -z "${INSTALLED_MAJOR_VERSION}" ] || { state_set "${FUNCNAME[0]}" 'error_got_blank_major_version'; return 1; }
+  [ ! -z "${MINIMUM_MAJOR_VERSION}" ] || { state_set "${FUNCNAME[0]}" 'error_got_blank_minimum_major_version'; return 1; }
+
   # Check if docker is installed and has major version >= minimally required
   if [ "${INSTALLED_MAJOR_VERSION}" -ge "${MINIMUM_MAJOR_VERSION}" ]; then
     state_set "${FUNCNAME[0]}" "success"
     return 0
   fi
-  
+
   # Check didn't pass (installed version is less than minimally required)
   state_set "${FUNCNAME[0]}" 'error_minimal_version_check_did_not_pass'
   return 1
@@ -1372,11 +1376,11 @@ export -f docker_minimal_version_check
 #
 ###############################################################################
 function docker_remove_all_containers {
-  
+
   # Check dependencies
   local DEPENDENCIES="command_exists docker_stop_all_containers docker wc ps error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
- 
+
   # Loop through dependencies
   for DEPENDENCY in "${DEPENDENCIES[@]}"; do
     if ! command_exists "${DEPENDENCY}" > /dev/null; then
@@ -1384,11 +1388,11 @@ function docker_remove_all_containers {
       return 1
     fi
   done
-  
+
   # Stop all containers
   docker_stop_all_containers || { error "${FUNCNAME[0]}: Failed to stop all containers"; return 1; }
   docker rm $(docker ps -aq) > /dev/null || { error "${FUNCNAME[0]}: Failed to remove all containers"; return 1; }
-  
+
   # Postcondition check: all containers are removed
   local RUNNING_CONTAINERS_COUNT="$(docker ps -aq | wc -l)"
   [ "${RUNNING_CONTAINERS_COUNT}" -eq 0 ] || { error "${FUNCNAME[0]}: Postcondition check failed. Number of existing containers: ${RUNNING_CONTAINERS_COUNT} (expected: 0)"; return 1; }
@@ -1426,14 +1430,14 @@ export -f docker_remove_all_containers
 #
 ###############################################################################
 function docker_restart {
-  
+
   # Check dependencies
   local DEPENDENCIES="docker_is_installed sudo systemctl error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Check if docker installed
   docker_is_installed || { error "${FUNCNAME[0]}" 'error_docker_is_not_installed'; return 1; }
-  
+
   # Restart docker daemon
   sudo systemctl restart docker || { error "${FUNCNAME[0]}" 'failed_to_docker_restart'; return 1; }
 }
@@ -1469,7 +1473,7 @@ export -f docker_restart
 #
 ###############################################################################
 function docker_restart_containers {
-  
+
   # Check dependencies
   local DEPENDENCIES="docker_container_name_exists docker"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
@@ -1480,7 +1484,7 @@ function docker_restart_containers {
   # fi
   local CONTAINERS=(${@})
   local CONTAINERS_TO_RESTART=()
-  
+
   for CONTAINER in "${CONTAINERS[@]}"; do
     # We only restart a container if it is defined
     if docker_container_name_exists "${CONTAINER}"
@@ -1488,12 +1492,12 @@ function docker_restart_containers {
       CONTAINERS_TO_RESTART+=( ${CONTAINER} )
     fi
   done
-  
+
   if (( ${#CONTAINERS_TO_RESTART[@]} )); then
     docker restart ${CONTAINERS_TO_RESTART[@]}
     return ${?}
   fi
-  
+
   return 1
 }
 export -f docker_restart_containers
@@ -1544,14 +1548,14 @@ export -f docker_restart_containers
 ###############################################################################
 function docker_set_log_to_syslog {
   state_set "${FUNCNAME[0]}" 'started'
-  
+
   # Check dependencies
   local DEPENDENCIES="docker_is_installed sudo tee error state_set docker_restart"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || { state_set "${FUNCNAME[0]}" 'error_check_dependencies'; return 1; }
 
   # Check if docker installed
   docker_is_installed || { state_set "${FUNCNAME[0]}" 'error_docker_is_not_installed'; return 1; }
-  
+
   # Check if docker configuration directory exists
   local DOCKER_CONFIGURATION_PATH="/etc/docker"
   if [ ! -d "${DOCKER_CONFIGURATION_PATH}" ]; then
@@ -1559,7 +1563,7 @@ function docker_set_log_to_syslog {
     state_set "${FUNCNAME[0]}" 'error_docker_configuration_directory_does_not_exist'
     return 1
   fi
-  
+
   # Create docker configuration file (or overwrite existing)
   local FILEPATH="${DOCKER_CONFIGURATION_PATH}/daemon.json"
   (
@@ -1570,17 +1574,17 @@ cat <<EOT
 }
 EOT
   ) | sudo tee ${FILEPATH} > /dev/null
-  
+
   # Check exit code
   # Note: when $? used for piped commands it returns the exit code of the last commain in chain
   if [ "${?}" -ne 0 ]; then
     state_set "${FUNCNAME[0]}" "failed_to_docker_install_logging_configuration"
     return 1
   fi
-  
+
   # Restart docker daemon after configuration change
   docker_restart || { state_set "${FUNCNAME[0]}" 'failed_to_docker_restart'; return 1; }
-  
+
   state_set "${FUNCNAME[0]}" 'success'
 }
 export -f docker_set_log_to_syslog
@@ -1616,14 +1620,14 @@ export -f docker_set_log_to_syslog
 #
 ###############################################################################
 function docker_stop_all_containers {
-  
+
   # Check dependencies
   local DEPENDENCIES="docker wc error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
-  
+
   # Stop all containers
   docker stop $(docker ps -aq) > /dev/null || { error "${FUNCNAME[0]}: Failed to stop all containers"; return 1; }
-  
+
   # Postcondition check: all containers are stopped
   local RUNNING_CONTAINERS_COUNT="$(docker ps -q | wc -l)"
   [ "${RUNNING_CONTAINERS_COUNT}" -eq 0 ] || { error "${FUNCNAME[0]}: Postcondition check failed. Number of running containers: ${RUNNING_CONTAINERS_COUNT} (expected: 0)"; return 1; }
@@ -1669,14 +1673,14 @@ function docker_stop_and_remove_container_by_name {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   local CONTAINER_IDENTIFIER="${1}"
-  
+
   # Check the container name isn't blank
   [ -n "${CONTAINER_IDENTIFIER}" ] || { error "${FUNCNAME[0]}" 'error_bad_arguments'; return 1; }
-  
+
   # Count existing container(s) by given docker name
   local FOUND_CONTAINERS_COUNT
   FOUND_CONTAINERS_COUNT=$( docker ps -a | grep "${CONTAINER_IDENTIFIER}" | wc -l )
-  
+
   # Check if we found >1
   if [ ${FOUND_CONTAINERS_COUNT} -gt 1 ]; then
     # Yes, we found >1 containers to stop/remove
@@ -1686,11 +1690,11 @@ function docker_stop_and_remove_container_by_name {
         error "${FUNCNAME[0]}" 'failed_to_get_docker_id'
         return 1
       fi
-      
+
       # Try to stop and remove the container
       docker stop "${DOCKER_ID}"
       docker rm "${DOCKER_ID}"
-      
+
       # Sometimes container can be in the broken state, in this case even after stopping and removing it
       # the DOCKER_ID is still visible in the "docker ps" list. In this cas we need to kill -9 corresponding
       # process on the host level:
@@ -1707,15 +1711,15 @@ function docker_stop_and_remove_container_by_name {
           error "${FUNCNAME[0]}" 'failed_to_get_docker_pid'
           return 1
         fi
-        
+
         # Send "SIGKILL" signal to the found process
         sudo kill -9 "${PID_TO_KILL}" || { error "${FUNCNAME[0]}" 'error_killing_process'; return 1; }
-        
+
         # The "unstoppable" docker terminated, now we can safely remove the container
         docker rm "${DOCKER_ID}" || { error "${FUNCNAME[0]}" 'error_removing_docker'; return 1; }
       fi
     done
-    
+
   fi
 }
 export -f docker_stop_and_remove_container_by_name
@@ -1750,29 +1754,29 @@ export -f docker_stop_and_remove_container_by_name
 #
 ###############################################################################
 function docker_stop_container_by_name {
-  
+
   # Check dependencies
   local DEPENDENCIES="docker grep awk wc error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Get arguments
   local CONTAINER_IDENTIFIER="${1}"
-  
+
   # Check the container name isn't blank
   [ -n "${CONTAINER_IDENTIFIER}" ] || { error "${FUNCNAME[0]}" 'error_bad_arguments'; return 1; }
-  
+
   # Count existing container(s) by given docker name
   local FOUND_CONTAINERS_COUNT
   FOUND_CONTAINERS_COUNT=$( docker ps -a | grep "${CONTAINER_IDENTIFIER}" | wc -l )
-  
+
   # Check if we have at least 1 container by given name (or simply return success)
   [ ${FOUND_CONTAINERS_COUNT} -gt 0 ] || return 0; # Nothing is running, reutnurn success
-  
+
   # Yes, we found >1 containers
   for DOCKER_ID in $(docker ps -a | grep "${CONTAINER_IDENTIFIER}" | awk '{print $1}'); do
     # Make sure DOCKER_ID is not a blank string
     [ -n "${DOCKER_ID}" ] || { error "${FUNCNAME[0]}" 'failed_to_get_docker_id'; return 1; }
-    
+
     # Try to stop the container
     docker stop "${DOCKER_ID}"
   done
@@ -1790,17 +1794,17 @@ function docker_volumes_to_containers_list {
 
   # Check dependencies
   local DEPENDENCIES="docker error sed"
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies 
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Get list of all docker volumes names
   VOLUMES=$(docker volume ls  --format '{{.Name}}') || { error "${FUNCNAME[0]}" 'failed_to_list_docker_volumes'; return 1; }
-  
+
   # Iterate all volumes and check if i-th volume is used by any container (even if container is stopped)
   for VOLUME in ${VOLUMES}; do
-    
+
     # Simply print volume identifier
     echo "${VOLUME}"
-    
+
     # Note: the following command will print associated container names prefixed with 2 spaces
     docker ps -a --filter volume="${VOLUME}"  --format '{{.Names}}' | sed 's/^/  /'
   done
