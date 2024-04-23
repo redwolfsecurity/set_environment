@@ -524,7 +524,8 @@ function docker_install {
 
   # Add GPG key for download.docker.com
   # TODO: We might not have sudo, so we should request command to be run.
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  | sudo --non-interactive DEBIAN_FRONTEND=noninteractive apt-key add -
   [ ${?} -ne 0 ] && { state_set "${FUNCNAME[0]}" "failed_to_add_gpg_key"; return 1; }
 
   # Add docker apt repository (apt = Advanced package tool)
