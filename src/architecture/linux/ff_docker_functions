@@ -591,17 +591,19 @@ function docker_install {
   secret_set docker_release "$( docker --version )" || { state_set "${FUNCNAME[0]}" "failed_to_run_docker_to_get_release"; return 1; }
   secret_set docker_compose_relase "$( docker-compose --version )" || { state_set "${FUNCNAME[0]}" "failed_to_run_docker_compose_to_get_release"; return 1; }
 
-  # Check if installed docker version is less than minimally required
-  # Do the docker_minimal_version_check
-  if ! docker_minimal_version_check "${MINIMUM_MAJOR_VERSION}"; then
-    # Error: installed version did not pass the minimal version check
-    state_set "${FUNCNAME[0]}" "failed_postcondition_docker_minimal_version_check"
-    return 1
-  fi
-
   # Restart docker to apply logging configuration (to syslog) only if docker is running
-  # When we're inside docker with /var/run/docker.sock mounted there is no need to restart nor to configure logging
+  # When we're inside docker container the check "service_is_running docker" will fail.
+  # Also docker_restart will fail if called from inside docker container.
+  # TODO: improve detection "is inside docker container" or not and make this f-n more robust to cover both cases.
   if service_is_running docker; then
+
+    # Check if installed docker version is less than minimally required
+    # Do the docker_minimal_version_check
+    if ! docker_minimal_version_check "${MINIMUM_MAJOR_VERSION}"; then
+      # Error: installed version did not pass the minimal version check
+      state_set "${FUNCNAME[0]}" "failed_postcondition_docker_minimal_version_check"
+      return 1
+    fi
 
     # Set up docker daemon logging (log to syslog) if not already done
     if ! docker_is_log_to_syslog; then
