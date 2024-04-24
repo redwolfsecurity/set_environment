@@ -508,13 +508,16 @@ function docker_install {
   LSB_ID=$( lsb_id_get_downcase ) || { state_set "${FUNCNAME[0]}" "failed_to_lsb_id_get"; return 1; } # ubuntu
   [ "${LSB_ID}" == "" ] && { state_set "${FUNCNAME[0]}" "failed_to_lsb_id_get"; return 1; }
 
-  local RELEASE=$( lsb_release_get ) || { state_set "${FUNCNAME[0]}" "failed_to_lsb_release_get"; return 1; }  # 18.04, 20.04, ...
+  local RELEASE
+  RELEASE=$( lsb_release_get ) || { state_set "${FUNCNAME[0]}" "failed_to_lsb_release_get"; return 1; }  # 18.04, 20.04, ...
   [ "${RELEASE}" == "" ] && { state_set "${FUNCNAME[0]}" "failed_to_lsb_release_get"; return 1; }
 
-  local DISTRO=$( lsb_codename_get ) || { state_set "${FUNCNAME[0]}" "failed_to_lsb_codename_get"; return 1; }  # bionic, focal, ...
+  local DISTRO
+  DISTRO=$( lsb_codename_get ) || { state_set "${FUNCNAME[0]}" "failed_to_lsb_codename_get"; return 1; }  # bionic, focal, ...
   [ "${DISTRO}" == "" ] && { state_set "${FUNCNAME[0]}" "failed_to_lsb_codename_get"; return 1; }
 
-  local ARCHITECTURE=$( hardware_architecture_get ) || { state_set "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
+  local ARCHITECTURE
+  ARCHITECTURE=$( hardware_architecture_get ) || { state_set "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
 
   # Sanity check: ARCHITECTURE is not empty
   [ -n "${ARCHITECTURE}" ] || { state_set "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
@@ -738,7 +741,8 @@ function docker_is_container_log_to_syslog {
   ACTUAL_LOGGING_DRIVER=$( docker inspect -f '{{.HostConfig.LogConfig.Type}}' "${CONTAINER_IDENTIFIER}" ) || { error "${FUNCNAME[0]}" 'failed_to_get_docker_log_config_type'; return 1; }
 
   # Note: Same can be extracted using "jq":
-  # local ACTUAL_LOGGING_DRIVER=$( docker inspect "${CONTAINER_IDENTIFIER}" | jq --raw-output .[].HostConfig.LogConfig.Type ) || { error "${FUNCNAME[0]}" 'failed_to_get_docker_log_config_type'; return 1; }
+  # local ACTUAL_LOGGING_DRIVER
+  # ACTUAL_LOGGING_DRIVER=$( docker inspect "${CONTAINER_IDENTIFIER}" | jq --raw-output .[].HostConfig.LogConfig.Type ) || { error "${FUNCNAME[0]}" 'failed_to_get_docker_log_config_type'; return 1; }
 
   # Compare actual vs. expected
   if [ "${ACTUAL_LOGGING_DRIVER}" != "${EXPECTED_LOGGING_DRIVER}" ]; then
@@ -839,7 +843,8 @@ function docker_is_every_container_log_to_syslog {
   docker_is_installed || { error "${FUNCNAME[0]}" 'error_docker_is_not_installed'; return 1; }
 
   # Get list of running container names
-  local CONTAINERS=$(docker ps | awk '{if(NR>1) print $NF}') || { error "${FUNCNAME[0]}" 'failed_to_get_continers_list'; return 1; }
+  local CONTAINERS
+  CONTAINERS=$(docker ps | awk '{if(NR>1) print $NF}') || { error "${FUNCNAME[0]}" 'failed_to_get_continers_list'; return 1; }
 
   # Iterate running containers and check docker_is_container_log_to_syslog() on each
   for CONTAINER in ${CONTAINERS}; do
@@ -926,7 +931,8 @@ function docker_is_log_to_syslog {
   local EXPECTED_LOGGING_DRIVER="syslog"
 
   # Get actually configured logging driver
-  local ACTUAL_LOGGING_DRIVER=$( docker info --format '{{.LoggingDriver}}' ) || { error "${FUNCNAME[0]}" 'failed_to_get_docker_logging_driver'; return 1; }
+  local ACTUAL_LOGGING_DRIVER
+  ACTUAL_LOGGING_DRIVER=$( docker info --format '{{.LoggingDriver}}' ) || { error "${FUNCNAME[0]}" 'failed_to_get_docker_logging_driver'; return 1; }
 
   # Compare actual vs. expected
   if [ "${ACTUAL_LOGGING_DRIVER}" != "${EXPECTED_LOGGING_DRIVER}" ]; then
@@ -1325,11 +1331,13 @@ function docker_minimal_version_check {
   docker_is_installed || { state_set "${FUNCNAME[0]}" 'error_docker_is_not_installed'; return 1; }
 
   # Get full docker version (example: 23.0.1)
-  local INSTALLED_VERSION="$( docker_get_installed_version )" || { state_set "${FUNCNAME[0]}" "failed_to_get_installed_docker_version"; return 1; }
+  local INSTALLED_VERSION
+  INSTALLED_VERSION="$( docker_get_installed_version )" || { state_set "${FUNCNAME[0]}" "failed_to_get_installed_docker_version"; return 1; }
 
   # Extract major version component from docker version (example: 23)
   # Note the semantic_version_parse() checked its return value is not blank
-  local INSTALLED_MAJOR_VERSION=$( semantic_version_parse --major "${INSTALLED_VERSION}" ) || { state_set "${FUNCNAME[0]}" 'falied_to_extract_major_version'; return 1; }
+  local INSTALLED_MAJOR_VERSION
+  INSTALLED_MAJOR_VERSION=$( semantic_version_parse --major "${INSTALLED_VERSION}" ) || { state_set "${FUNCNAME[0]}" 'falied_to_extract_major_version'; return 1; }
 
   # Check we got non-empty values
   [ ! -z "${INSTALLED_MAJOR_VERSION}" ] || { state_set "${FUNCNAME[0]}" 'error_got_blank_major_version'; return 1; }
