@@ -631,10 +631,10 @@ export -f docker_install
 #   DOCKER INSTALLATION AND CONFIGURATION FUNCTIONS
 #
 # NAME
-#   docker_install_cli - Installs Docker CLI (not the daemon).
+#   docker_cli_install - Installs Docker CLI (not the daemon).
 #
 # SYNOPSIS
-#   docker_install_cli
+#   docker_cli_install
 #
 # DESCRIPTION
 #   Installs Docker CLI on supported Ubuntu versions (16.04, 18.04, 20.04) if it is not already installed.
@@ -651,7 +651,7 @@ export -f docker_install
 #   docker_install
 #
 #   # Install Docker specifying a minimum major version
-#   docker_install_cli
+#   docker_cli_install
 #
 # EXIT STATUS
 #   0 - Docker installed or updated successfully, configured to log to syslog, and user added to Docker group.
@@ -659,7 +659,7 @@ export -f docker_install
 #       or configuration failures.
 #
 ###############################################################################
-function docker_install_cli {
+function docker_cli_install {
 
   state_set "${FUNCNAME[0]}" 'started'
 
@@ -792,7 +792,7 @@ function docker_install_cli {
 
   state_set "${FUNCNAME[0]}" 'success'
 }
-export -f docker_install_cli
+export -f docker_cli_install
 
 ###############################################################################
 # CATEGORY
