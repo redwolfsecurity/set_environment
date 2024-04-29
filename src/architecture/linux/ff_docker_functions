@@ -628,6 +628,174 @@ export -f docker_install
 
 ###############################################################################
 # CATEGORY
+#   DOCKER INSTALLATION AND CONFIGURATION FUNCTIONS
+#
+# NAME
+#   docker_install_cli - Installs Docker CLI (not the daemon).
+#
+# SYNOPSIS
+#   docker_install_cli
+#
+# DESCRIPTION
+#   Installs Docker CLI on supported Ubuntu versions (16.04, 18.04, 20.04) if it is not already installed.
+#   Function sets state to indicate success or error code (because it is a complex multi-step function).
+#
+# SUPPORTED SYSTEMS
+#   Ubuntu 16.04, 18.04, 20.04
+#
+# REQUIREMENTS
+#   Environment variable: FF_AGENT_USERNAME must be set.
+#
+# USAGE EXAMPLE
+#   # Install Docker with default minimum version
+#   docker_install
+#
+#   # Install Docker specifying a minimum major version
+#   docker_install_cli
+#
+# EXIT STATUS
+#   0 - Docker installed or updated successfully, configured to log to syslog, and user added to Docker group.
+#   1 - Failure due to missing dependencies, environment variable checks, unsupported system, installation errors,
+#       or configuration failures.
+#
+###############################################################################
+function docker_install_cli {
+
+  state_set "${FUNCNAME[0]}" 'started'
+
+  # Check dependencies
+  local DEPENDENCIES=(
+    "add-apt-repository"
+    "apt_install"
+    "apt_update"
+    "apt-key"
+    "docker_get_default_minimum_major_version"
+    "docker_minimal_version_check"
+    "docker_set_log_to_syslog"
+    "ensure_variable_not_empty"
+    "hardware_architecture_get"
+    "is_user_in_group"
+    "lsb_codename_get"
+    "lsb_id_get"
+    "lsb_release_get"
+    "service_is_running"
+    "state_set"
+    "sudo"
+    "systemctl"
+    "usermod"
+  )
+
+  # Note: check_dependencies will report missing dependencies
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {
+    state_set "${FUNCNAME[0]}" 'dependenciesfailed'; return 1;
+  }
+
+  # Define required variables
+  local REQUIRED_VARIABLES=(
+    FF_AGENT_USERNAME
+  )
+
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || {
+      # Dynamically generate an error_code, which include failed variable name (lowercase)
+      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
+      state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
+      return 1
+    }
+  done
+
+  # Get ID, RELEASE and DISTRO and verify the values are actually set
+  local LSB_ID
+  LSB_ID=$( lsb_id_get_downcase ) || { state_set "${FUNCNAME[0]}" "failed_to_lsb_id_get"; return 1; } # ubuntu
+  [ "${LSB_ID}" == "" ] && { state_set "${FUNCNAME[0]}" "failed_to_lsb_id_get"; return 1; }
+
+  local RELEASE
+  RELEASE=$( lsb_release_get ) || { state_set "${FUNCNAME[0]}" "failed_to_lsb_release_get"; return 1; }  # 18.04, 20.04, ...
+  [ "${RELEASE}" == "" ] && { state_set "${FUNCNAME[0]}" "failed_to_lsb_release_get"; return 1; }
+
+  local DISTRO
+  DISTRO=$( lsb_codename_get ) || { state_set "${FUNCNAME[0]}" "failed_to_lsb_codename_get"; return 1; }  # bionic, focal, ...
+  [ "${DISTRO}" == "" ] && { state_set "${FUNCNAME[0]}" "failed_to_lsb_codename_get"; return 1; }
+
+  local ARCHITECTURE
+  ARCHITECTURE=$( hardware_architecture_get ) || { state_set "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
+
+  # Sanity check: ARCHITECTURE is not empty
+  [ -n "${ARCHITECTURE}" ] || { state_set "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
+
+  # Only Ubuntu for now.
+  if [ "${LSB_ID}" != "ubuntu" ]; then
+    state_set "${FUNCNAME[0]}" "error_docker_install_unsupported_operating_system"
+    return 1
+  fi
+
+  # Install prerequisites for adding a new repository over HTTPS
+  # This uses apt_install of set_environment project
+  # This adds -y and -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
+  # Which is required in case we are asked certain configuration pop-up screens
+  apt_install \
+    apt-transport-https \
+    ca-certificates \
+    curl \
+    gnupg-agent \
+    software-properties-common || { state_set "${FUNCNAME[0]}" "failed_to_install_prerequisites"; return 1; }
+
+  # Add GPG key for download.docker.com
+  # TODO: We might not have sudo, so we should request command to be run.
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+    | sudo --non-interactive DEBIAN_FRONTEND=noninteractive apt-key add -
+  [ ${?} -ne 0 ] && { state_set "${FUNCNAME[0]}" "failed_to_add_gpg_key"; return 1; }
+
+  # Add docker apt repository (apt = Advanced package tool)
+  # TODO: We might not have sudo, so we should request command to be run.
+  sudo add-apt-repository --yes "deb [arch=${ARCHITECTURE}] https://download.docker.com/linux/ubuntu ${DISTRO} stable"
+  [ ${?} -ne 0 ] && { state_set "${FUNCNAME[0]}" "failed_to_add_repository"; return 1; }
+
+  # Update the apt package index file (apt = Advanced package tool)
+  apt_update
+
+  # Define required pagage names
+  local PACKAGES=(
+    docker-ce-cli
+  )
+
+  # Install required packages
+  for PACKAGE in "${PACKAGES[@]}"; do
+    apt_install "${PACKAGE}" || {
+      local ERROR_CODE="$( echo "failed_to_install_package_${PACKAGE}" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]' )"
+      state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
+      return 1
+    }
+  done
+
+  # Add ourselves as a user to be able to talk to docker
+  GROUP="docker"
+  # Check the 'docker' group exists.
+  if ! check_group_exists "${GROUP}"; then
+    state_set "${FUNCNAME[0]}" "error_group_docker_does_not_exist"
+    return 1
+  fi
+
+  # TODO: We might not have sudo, so we should request command to be run.
+  # Check if user is in this group. If not, add them
+  if ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}"; then
+    # Not in group
+    sudo usermod -aG "${GROUP}" "${FF_AGENT_USERNAME}"
+    if [ ${?} -ne 0 ]; then state_set "${FUNCNAME[0]}" "failed_to_modify_docker_user_group"; return 1; fi
+    # Now check that we actually are in the group. This will work in current shell because it reads the groups file directly
+    if ! is_user_in_group "${FF_AGENT_USERNAME}" "${GROUP}"; then
+      state_set "${FUNCNAME[0]}" "failed_postcondition_user_in_group"
+      return 1
+    fi
+  fi
+
+  state_set "${FUNCNAME[0]}" 'success'
+}
+export -f docker_install_cli
+
+###############################################################################
+# CATEGORY
 #   CONTAINER HEALTH CHECK FUNCTIONS
 #
 # NAME
