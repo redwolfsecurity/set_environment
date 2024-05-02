@@ -480,8 +480,10 @@ function docker_install {
   # Check required environment variables are set
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      # Dynamically generate an error_code, which include failed variable name (lowercase)
-      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
+      local ERROR_DETAILS="Failed to ensure variable not empty: '${VARIABLE_NAME}'"
+      error "${FUNCNAME[0]}" "${ERROR_DETAILS}"
+
+      local ERROR_CODE="failed_to_ensure_variable_not_empty"
       state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
       return 1
     }
@@ -558,7 +560,10 @@ function docker_install {
   # Install required packages
   for PACKAGE in "${PACKAGES[@]}"; do
     apt_install "${PACKAGE}" || {
-      local ERROR_CODE="$( echo "failed_to_install_package_${PACKAGE}" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]' )"
+      local ERROR_DETAILS="Failed to install package: '${PACKAGE}'"
+      error "${FUNCNAME[0]}" "${ERROR_DETAILS}"
+
+      local ERROR_CODE="failed_to_install_package"
       state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
       return 1
     }
@@ -698,8 +703,10 @@ function docker_cli_install {
   # Check required environment variables are set
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      # Dynamically generate an error_code, which include failed variable name (lowercase)
-      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
+      local ERROR_DETAILS="Failed to ensure variable not empty: '${VARIABLE_NAME}'"
+      error "${FUNCNAME[0]}" "${ERROR_DETAILS}"
+
+      local ERROR_CODE="failed_to_ensure_variable_not_empty"
       state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
       return 1
     }
@@ -763,7 +770,10 @@ function docker_cli_install {
   # Install required packages
   for PACKAGE in "${PACKAGES[@]}"; do
     apt_install "${PACKAGE}" || {
-      local ERROR_CODE="$( echo "failed_to_install_package_${PACKAGE}" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]' )"
+      local ERROR_DETAILS="Failed to install package: '${PACKAGE}'"
+      error "${FUNCNAME[0]}" "${ERROR_DETAILS}"
+
+      local ERROR_CODE="failed_to_install_package"
       state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
       return 1
     }
@@ -1289,8 +1299,10 @@ function docker_login_aws_ecr {
   # Check required environment variables are set
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      # Dynamically generate an error_code, which include failed variable name (lowercase)
-      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
+      local ERROR_DETAILS="Failed to ensure variable not empty: '${VARIABLE_NAME}'"
+      error "${FUNCNAME[0]}" "${ERROR_DETAILS}"
+
+      local ERROR_CODE="failed_to_ensure_variable_not_empty"
       state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
       return 1
     }
@@ -1416,8 +1428,10 @@ function docker_login_legacy {
   # Check required environment variables are set
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      # Dynamically generate an error_code, which include failed variable name (lowercase)
-      local ERROR_CODE="$( echo "failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
+      local ERROR_DETAILS="Failed to ensure variable not empty: '${VARIABLE_NAME}'"
+      error "${FUNCNAME[0]}" "${ERROR_DETAILS}"
+
+      local ERROR_CODE="failed_to_ensure_variable_not_empty"
       state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
       return 1
     }

@@ -10,7 +10,7 @@ set -x
 #   - create tarbal (by compressing copied sources into one "tgz" file)
 #   - upload to S3 (by cdn_upload)
 #
-# Dependencies: 
+# Dependencies:
 #   Environment variables must be defined:
 #      - PRODUCTION_CONTENT_S3_BUCKET_NAME
 #      - PRODUCTION_CONTENT_S3_FF_AGENT_PATH
@@ -39,9 +39,9 @@ function build_tarball {
     # Check required environment variables are set
     for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
         ensure_variable_not_empty "${VARIABLE_NAME}" || {
-            local ERROR_CODE="$( echo "Error: failed_to_ensure_variable_not_empty_${VARIABLE_NAME}" | tr '[:upper:]' '[:lower:]' )"
-            # abort "${ERROR_CODE}"
-            echo "${ERROR_CODE}" >&2
+            local ERROR_DETAILS="Error: failed to ensure variable not empty ${VARIABLE_NAME}"
+            # abort "${ERROR_DETAILS}"
+            echo "${ERROR_DETAILS}" >&2
             exit 1
         }
     done
@@ -57,16 +57,16 @@ function build_tarball {
 
     # Define location of temporary folder and tarball filename
     local TARBALL_FILENAME="set_environment.tgz"
-    
+
     #TEMPORARY_DIR="$( mktemp -d )"
     local TEMPORARY_DIR="/tmp"
 
     # We need to "npm install" because of aws-sdk dependency (used by cdn_upload.js)
-    npm install || { echo "Error: failed to 'npm install'" >&2; exit 1; } 
+    npm install || { echo "Error: failed to 'npm install'" >&2; exit 1; }
 
     # Capture date and build git commit numbers into separate files
-    echo "BUILD_DATE=$(date +%Y%m%d)  # YYYYMMDD" > build_date || { echo "Error: failed to write build date" >&2; exit 1; } 
-    echo "BUILD_COMMIT_ID=$(git rev-parse HEAD)"  > build_commit_id || { echo "Error: failed to write build commit id">&2; exit 1; } 
+    echo "BUILD_DATE=$(date +%Y%m%d)  # YYYYMMDD" > build_date || { echo "Error: failed to write build date" >&2; exit 1; }
+    echo "BUILD_COMMIT_ID=$(git rev-parse HEAD)"  > build_commit_id || { echo "Error: failed to write build commit id">&2; exit 1; }
 
     # Delete target tmp "set_environment" folder, otherwise copy will result in wrong folder structure (1 level nested deeper)
     if [ -d "${TEMPORARY_DIR}/set_environment" ]; then
