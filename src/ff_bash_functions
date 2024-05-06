@@ -2799,8 +2799,8 @@ function terminal_initialize {
 
   export FONT_STYLE_BOLD=""
   export FONT_STYLE_GREEN=""
-  export FONT_STYLE_RED=""
   export FONT_STYLE_NORMAL=""
+  export FONT_STYLE_RED=""
 
   if terminal_is_tty ; then
 
@@ -2808,8 +2808,8 @@ function terminal_initialize {
         # If this is a TTY, These set of "FONT_STYLE_*" variables allows us to decorate the output with some style (colour, boldness)
         FONT_STYLE_BOLD="$(tput bold)"
         FONT_STYLE_GREEN="$(tput setaf 2)"
-        FONT_STYLE_RED="$(tput setaf 1)"
         FONT_STYLE_NORMAL="$(tput sgr0)"
+        FONT_STYLE_RED="$(tput setaf 1)"
     fi
   fi
 }
@@ -4210,33 +4210,49 @@ function discover_environment {
   # This sets some of environment variables: FF_AGENT_USERNAME, FF_AGENT_HOME.
   # Also creates FF_AGENT_HOME directory.
   # Baseline installer must set the following environment variables:
-  #  [x] FF_AGENT_USERNAME  (see ff_agent_home_get_best())
-  #  [x] FF_AGENT_USER_HOME (see ff_agent_home_get_best())
   #  [x] FF_AGENT_HOME      (see ff_agent_home_get_best())
   #  [x] FF_AGENT_URI (see ff_agent_get_best_ff_agent_uri())
-  #  [x] FF_HOST (see ff_agent_get_best_ff_host())
+  #  [x] FF_AGENT_USER_HOME (see ff_agent_home_get_best())
+  #  [x] FF_AGENT_USERNAME  (see ff_agent_home_get_best())
   #  [x] FF_CONTENT_URL (see ff_agent_get_best_ff_content_url())
-  #  [x] NAMESPACE (see ff_agent_get_best_namespace())
+  #  [x] FF_HOST (see ff_agent_get_best_ff_host())
+  #  [x] FF_PORT (see ff_agent_get_best_ff_port())
   #  [x] N_PREFIX (see install_n())
+  #  [x] NAMESPACE (see ff_agent_get_best_namespace())
   #  [x] ORGANIZATION (see ff_agent_get_best_organization())
   #  [x] TERM  (see terminal_initialize())
   #
   # Preserving a set of other discussed environment values to add in future:
-  #  FF_PROTOCOL
   #  FF_API_TOKEN
+  #  FF_PROTOCOL
   #  FF_PROXY_HOST
+  #  FF_PROXY_PASSWORD
   #  FF_PROXY_PORT
   #  FF_PROXY_PROTOCOL
   #  FF_PROXY_USERNAME
-  #  FF_PROXY_PASSWORD
   #
   ff_agent_home_get_best || { abort "failed_to_ff_agent_home_get_best"; }
   assert_ff_agent_home_exists || { abort "failed_to_assert_ff_agent_home_exists"; }
+
+  # Similarly for FF_AGENT_URI
+  FF_AGENT_URI=$( ff_agent_get_best_ff_agent_uri )     || { abort "failed_to_ff_agent_get_best_ff_agent_uri"; }
+  secret_set ff_agent_uri "${FF_AGENT_URI}"
+  export FF_AGENT_URI
 
   # Get best values, check errors, export and secret_set().
   FF_CONTENT_URL=$( ff_agent_get_best_ff_content_url ) || { abort "failed_to_ff_agent_get_best_ff_content_url"; }
   secret_set ff_content_url "${FF_CONTENT_URL}"
   export FF_CONTENT_URL
+
+  FF_HOST=$( ff_agent_get_best_ff_host )               || { abort "failed_to_ff_agent_get_best_ff_host"; }
+  secret_set ff_host "${FF_HOST}"
+  export FF_HOST
+
+  FF_PORT=$( ff_agent_get_best_ff_port )               || { abort "failed_to_ff_agent_get_best_ff_port"; }
+  secret_set ff_port "${FF_PORT}"
+  export FF_PORT
+
+  # N_PREFIX is set in install_n() and added to ${FF_AGENT_HOME}/.profile
 
   # Similarly for best NAMESPACE
   NAMESPACE=$( ff_agent_get_best_namespace ) || { abort "failed_to_ff_agent_get_best_namespace"; }
@@ -4247,20 +4263,6 @@ function discover_environment {
   ORGANIZATION=$( ff_agent_get_best_organization ) || { abort "failed_to_ff_agent_get_best_organization"; }
   secret_set organization "${ORGANIZATION}"
   export ORGANIZATION
-
-  # Similarly for FF_AGENT_URI
-  FF_AGENT_URI=$( ff_agent_get_best_ff_agent_uri )     || { abort "failed_to_ff_agent_get_best_ff_agent_uri"; }
-  secret_set ff_agent_uri "${FF_AGENT_URI}"
-  export FF_AGENT_URI
-
-  FF_HOST=$( ff_agent_get_best_ff_host )               || { abort "failed_to_ff_agent_get_best_ff_host"; }
-  secret_set ff_host "${FF_HOST}"
-  export FF_HOST
-
-  FF_PORT=$( ff_agent_get_best_ff_port )               || { abort "failed_to_ff_agent_get_best_ff_port"; }
-  secret_set ff_port "${FF_PORT}"
-  export FF_PORT
-
 }
 export -f discover_environment
 
