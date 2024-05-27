@@ -3343,7 +3343,7 @@ function secret_get {
       fi
 
       # Special case for "ff_api_username" and "ff_api_password" - these 2 values
-      # are nexted few levels deep in "agent/configuration"
+      # are nested few levels deep in "agent/configuration"
       if [ "${KEY}" == "ff_api_username" ] || [ "${KEY}" == "FF_API_USERNAME" ]; then
         # TODO: here we rely on provisioning JSON on agent to have "control_api_user", which is incorrectly named and must be redesigned completely.
         VALUE=$( sudo cat /var/lib/cloud/instance/user-data.txt | jq -r '.[] | select(.mime_type == "agent/configuration") | .roles[] | select(.role_name == "AgentRole") | .services[] | select(.service_name == "ActionManager") | .control_api_user' )
