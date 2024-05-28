@@ -5834,8 +5834,9 @@ function set_environment_is_working {
     error
     command_exists
     check_environment_variables_are_set
-    state_check_set_and_get
-    check_secret_set_get
+# COMMENTED OUT: THESE AREN'T TRHEAD SAFE!
+#    state_check_set_and_get
+#    check_secret_set_get
     ff_agent_check_bin_is_in_the_path
   )
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[*]}" || { error "${FUNCNAME[0]}" 'error_check_dependencies'; return 1; }  # Note: check_dependencies will report exact missing dependencies
