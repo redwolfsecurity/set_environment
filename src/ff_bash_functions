@@ -5316,22 +5316,25 @@ function check_secret_set_get {
 
   # Define test name / value pair
   SECRET_NAME="check_secret_set_get"
-  SECRET_VALUE=$( ff_uuid ) || { error "${FUNCNAME[0]}" 'failed_generate_uuid'; return 1; }
+  SECRET_VALUE=$( ff_uuid ) || { error "${FUNCNAME[0]}" 'failed to generate uuid by ff_uuid'; return 1; }
 
-  # Try to set the secret
-  secret_set "${SECRET_NAME}" "${SECRET_VALUE}" || { error "${FUNCNAME[0]}" 'failed_secret_set'; return 1; }
+  # Set the secret
+  secret_set "${SECRET_NAME}" "${SECRET_VALUE}" || {
+    error "${FUNCNAME[0]}" 'failed to secret_set'
+    return 1
+  }
 
-  # Try to retrieve the secret
+  # Retrieve the secret
   local RETRIEVED_VALUE
   RETRIEVED_VALUE=$( secret_get "${SECRET_NAME}" ) || {
-    error "${FUNCNAME[0]}" 'failed_retrieve_secret'
+    error "${FUNCNAME[0]}" 'failed to secret_get'
     return 1
   }
 
   # Compare retrieved state with expected
   if [ "${RETRIEVED_VALUE}" != "${SECRET_VALUE}" ]; then
     # Mismatch (error)
-    error "${FUNCNAME[0]}" 'error_retrieved_value_mismatch'
+    error "${FUNCNAME[0]}" "retrieved value mismatch: '${RETRIEVED_VALUE}' != '${SECRET_VALUE}'"
     return 1
   fi
 }
@@ -5934,11 +5937,12 @@ function state_check_set_and_get {
   # Check generated STATE_VALUE is not empty
   [ -n "${STATE_VALUE}" ] || { error "${FUNCNAME[0]}" 'failed_generate_random_state_value'; return 1; }
 
-  # Set state and try to retrieve value
-  state_set "${STATE_NAME}" "${STATE_VALUE}" || { return 1; }
+  # Set state
+  state_set "${STATE_NAME}" "${STATE_VALUE}" || { error "${FUNCNAME[0]}" "failed to set state '${STATE_NAME}'"; return 1; }
 
+  # Try to retrieve value
   local RETRIEVED_VALUE
-  RETRIEVED_VALUE=$( state_get "${STATE_NAME}" ) || { error "${FUNCNAME[0]}" 'failed_retrieve_state'; return 1; }
+  RETRIEVED_VALUE=$( state_get "${STATE_NAME}" ) || { error "${FUNCNAME[0]}" "failed to retrieve state '${STATE_NAME}'"; return 1; }
 
   # Compare retrieved and expected values
   if [ "${RETRIEVED_VALUE}" != "${STATE_VALUE}" ]; then
