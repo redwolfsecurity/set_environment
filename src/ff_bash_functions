@@ -124,7 +124,7 @@
 ## BEGIN SET ENVIRONMENT FUNCTIONS
 #    - check_environment_variables_are_set
 #    - check_nodejs_installation
-#    - check_secret_set_get
+#    - secret_check_set_and_get
 #    - current_user_get
 #    - ff_agent_check_bin_is_in_the_path
 #    - ff_agent_home_get_best
@@ -5288,17 +5288,19 @@ export -f check_nodejs_installation
 #   SET ENVIRONMENT
 #
 # NAME
-#   check_secret_set_get - Tests the functionality of setting and getting a secret.
+#   secret_check_set_and_get - Tests the functionality of setting and getting a secret.
 #
 # SYNOPSIS
-#   check_secret_set_get
+#   secret_check_set_and_get
 #
 # DESCRIPTION
 #   Verifies the ability to set and retrieve a secret using secret_set and secret_get
-#   functions, respectively. It uses a generated UUID as the secret value for the test.
+#   functions, respectively. Function sets the secret as a time based value then retrieves
+#   the value and checks that the retrieved value is within couple seconds range from the
+#   expected value (this makes the check multithread safe).
 #
 # EXAMPLES
-#   if ! check_secret_set_get; then
+#   if ! secret_check_set_and_get; then
 #     echo "Failed to set or get a secret.";
 #     exit 1;
 #   fi
@@ -5308,37 +5310,44 @@ export -f check_nodejs_installation
 #   1 - on failure, indicating an issue with setting or retrieving the secret.
 #
 ###############################################################################
-function check_secret_set_get {
+function secret_check_set_and_get {
 
   # Check dependencies
-  local DEPENDENCIES="ff_uuid error secret_set secret_get"
+  local DEPENDENCIES="error secret_set secret_get date"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  # Define test name / value pair
-  SECRET_NAME="check_secret_set_get"
-  SECRET_VALUE=$( ff_uuid ) || { error "${FUNCNAME[0]}" 'failed to generate uuid by ff_uuid'; return 1; }
+  # Define test state name
+  SECRET_NAME="secret_check_set_and_get"
+
+  # Lets use current epoch seconds as the value, so even if another process uses the same check
+  # the stored value will be within a couple of seconds of the expected value.
+  # If we use some exact random value it will fail for multiple process doing the same check.
+  # Also if we use some const static value the check will be not fully valid (could work in the past, but now failing, which we
+  # would fail to detect because the expected static value simplly exists from the past).
+  EXPECTED_VALUE=$( date +%s ) || { error "${FUNCNAME[0]}" 'failed to generate test value'; return 1; }
+
+  # Check generated EXPECTED_VALUE is not empty
+  [ -n "${EXPECTED_VALUE}" ] || { error "${FUNCNAME[0]}" 'failed check: generated test value is blank'; return 1; }
 
   # Set the secret
-  secret_set "${SECRET_NAME}" "${SECRET_VALUE}" || {
-    error "${FUNCNAME[0]}" 'failed to secret_set'
-    return 1
-  }
+  secret_set "${SECRET_NAME}" "${EXPECTED_VALUE}" || { error "${FUNCNAME[0]}" 'failed to secret_set'; return 1;}
 
-  # Retrieve the secret
+  # Try to retrieve value
   local RETRIEVED_VALUE
-  RETRIEVED_VALUE=$( secret_get "${SECRET_NAME}" ) || {
-    error "${FUNCNAME[0]}" 'failed to secret_get'
-    return 1
-  }
+  RETRIEVED_VALUE=$( secret_get "${SECRET_NAME}" ) || { error "${FUNCNAME[0]}" "failed to retrieve secret '${SECRET_NAME}'"; return 1; }
 
-  # Compare retrieved state with expected
-  if [ "${RETRIEVED_VALUE}" != "${SECRET_VALUE}" ]; then
-    # Mismatch (error)
-    error "${FUNCNAME[0]}" "retrieved value mismatch: '${RETRIEVED_VALUE}' != '${SECRET_VALUE}'"
-    return 1
+  # Compare retrieved and expected values
+  local EPOCH_DELTA_S=$(( ${RETRIEVED_VALUE} - ${EXPECTED_VALUE} ))
+  if [[ ${EPOCH_DELTA_S} -ge 0 ]] && [[ ${EPOCH_DELTA_S} -lt 5 ]]; then
+    # Test passed: the retrieved value is within couple seconds of expected value
+    return 0
   fi
+
+  # Test failed, retrieved value is not within couple seconds of expected value
+  error "${FUNCNAME[0]}" "error: retrieved value '${RETRIEVED_VALUE}' is not within couple seconds of the expected value '${EXPECTED_VALUE}'"
+  return 1
 }
-export -f check_secret_set_get
+export -f secret_check_set_and_get
 
 ###############################################################################
 # CATEGORY
@@ -5831,12 +5840,10 @@ function set_environment_is_working {
     cat
     log
     error
-    error
     command_exists
     check_environment_variables_are_set
-# COMMENTED OUT: THESE AREN'T TRHEAD SAFE!
-#    state_check_set_and_get
-#    check_secret_set_get
+    state_check_set_and_get
+    secret_check_set_and_get
     ff_agent_check_bin_is_in_the_path
   )
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[*]}" || { error "${FUNCNAME[0]}" 'error_check_dependencies'; return 1; }  # Note: check_dependencies will report exact missing dependencies
@@ -5855,12 +5862,11 @@ function set_environment_is_working {
     # Check nodejs installation
     check_nodejs_installation
 
-# COMMENTED OUT: THESE AREN'T TRHEAD SAFE!
-#    # Check state_set() / state_get() by setting random value to some test state and then retrieving it back
-#    state_check_set_and_get
-#
-#    # Check secret_set() / secret_get() by setting random value to some test secret and then retrieving it back
-#    check_secret_set_get
+    # Check state_set() / state_get() by setting random value to some test state and then retrieving it back
+    state_check_set_and_get
+
+    # Check secret_set() / secret_get() by setting random value to some test secret and then retrieving it back
+    secret_check_set_and_get
 
     # Check ff_agent/bin is in the path
     ff_agent_check_bin_is_in_the_path
@@ -5910,8 +5916,9 @@ export -f set_environment_is_working
 #
 # DESCRIPTION
 #   Verifies the ability to set and retrieve a state using state_set and state_get
-#   functions, respectively. It utilizes a randomly generated UUID, with dashes removed,
-#   as the state value for the test.
+#   functions, respectively. Function sets test state as a time based generated value
+#   then retrieves the value and checks that the retrieved value is within couple
+#   seconds range from the expected value (this makes the check multithread safe).
 #
 # DEPENDENCIES
 #   Requires 'uuidgen' and 'tr' to be installed on the system.
@@ -5930,28 +5937,39 @@ export -f set_environment_is_working
 function state_check_set_and_get {
 
   # Check dependencies
-  local DEPENDENCIES="tr ff_uuid state_get error"
+  local DEPENDENCIES="state_get error date"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  STATE_NAME="state_check_set_and_get"
-  STATE_VALUE=$( ff_uuid | tr -d '-' )
+  # Define test secret name
+  local STATE_NAME="state_check_set_and_get"
 
-  # Check generated STATE_VALUE is not empty
-  [ -n "${STATE_VALUE}" ] || { error "${FUNCNAME[0]}" 'failed_generate_random_state_value'; return 1; }
+  # Lets use current epoch seconds as the value, so even if another process uses the same check
+  # the stored value will be within a couple of seconds of the expected value.
+  # If we use some exact random value it will fail for multiple process doing the same check.
+  # Also if we use some const static value the check will be not fully valid (could work in the past, but now failing, which we
+  # would fail to detect because the expected static value simplly exists from the past).
+  EXPECTED_VALUE=$( date +%s ) || { error "${FUNCNAME[0]}" 'failed to generate test value'; return 1; }
 
-  # Set state
-  state_set "${STATE_NAME}" "${STATE_VALUE}" || { error "${FUNCNAME[0]}" "failed to set state '${STATE_NAME}'"; return 1; }
+  # Check generated EXPECTED_VALUE is not empty
+  [ -n "${EXPECTED_VALUE}" ] || { error "${FUNCNAME[0]}" 'failed check: generated test value is blank'; return 1; }
+
+  # Set the state
+  state_set "${STATE_NAME}" "${EXPECTED_VALUE}" || { error "${FUNCNAME[0]}" "failed to set state '${STATE_NAME}'"; return 1; }
 
   # Try to retrieve value
   local RETRIEVED_VALUE
   RETRIEVED_VALUE=$( state_get "${STATE_NAME}" ) || { error "${FUNCNAME[0]}" "failed to retrieve state '${STATE_NAME}'"; return 1; }
 
   # Compare retrieved and expected values
-  if [ "${RETRIEVED_VALUE}" != "${STATE_VALUE}" ]; then
-    # Mismatch (error)
-    error "${FUNCNAME[0]}" 'error_retrieved_value_mismatch'
-    return 1
+  local EPOCH_DELTA_S=$(( ${RETRIEVED_VALUE} - ${EXPECTED_VALUE} ))
+  if [[ ${EPOCH_DELTA_S} -ge 0 ]] && [[ ${EPOCH_DELTA_S} -lt 5 ]]; then
+    # Test passed: the retrieved value is within couple seconds of expected value
+    return 0
   fi
+
+  # Test failed, retrieved value is not within couple seconds of expected value
+  error "${FUNCNAME[0]}" "error: retrieved value '${RETRIEVED_VALUE}' is not within couple seconds of the expected value '${EXPECTED_VALUE}'"
+  return 1
 }
 export -f state_check_set_and_get
 
