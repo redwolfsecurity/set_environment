@@ -5855,11 +5855,12 @@ function set_environment_is_working {
     # Check nodejs installation
     check_nodejs_installation
 
-    # Check state_set() / state_get() by setting random value to some test state and then retrieving it back
-    state_check_set_and_get
-
-    # Check secret_set() / secret_get() by setting random value to some test secret and then retrieving it back
-    check_secret_set_get
+# COMMENTED OUT: THESE AREN'T TRHEAD SAFE!
+#    # Check state_set() / state_get() by setting random value to some test state and then retrieving it back
+#    state_check_set_and_get
+#
+#    # Check secret_set() / secret_get() by setting random value to some test secret and then retrieving it back
+#    check_secret_set_get
 
     # Check ff_agent/bin is in the path
     ff_agent_check_bin_is_in_the_path
