@@ -1511,7 +1511,7 @@ function inject_into_file {
   )
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_DETAILS="Error: empty argument: ${VARIABLE_NAME}"
+      local ERROR_DETAILS="Failed to ensure required environment variable is not empty: '${VARIABLE_NAME,,}'"
       error "${FUNCNAME[0]}" "${ERROR_DETAILS}"
       return 1
     }
@@ -1693,7 +1693,7 @@ function remove_all_lines_by_regexp {
   # Check required environment variables are set
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      error "${FUNCNAME[0]}" "Got empty required argument: '${VARIABLE_NAME,,}'"
+      error "${FUNCNAME[0]}" "Failed to ensure required environment variable is not empty: '${VARIABLE_NAME,,}'"
       return 1
     }
   done
@@ -1832,7 +1832,7 @@ function replace_all_lines_by_regexp {
   # Check required environment variables are set
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      error "${FUNCNAME[0]}" "Got empty required argument: '${VARIABLE_NAME,,}'"
+      error "${FUNCNAME[0]}" "Failed to ensure required environment variable is not empty: '${VARIABLE_NAME,,}'"
       return 1
     }
   done
@@ -5118,7 +5118,7 @@ function assert_ff_agent_home_exists {
   # Check required environment variables are set
   for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      error "Failed to ensure variable not empty: ${VARIABLE_NAME}"
+      error "Failed to ensure required environment variable is not empty: '${VARIABLE_NAME,,}'"
       state_set "${FUNCNAME[0]}" "error_ensure_variable_not_empty"
       return 1
     }
@@ -5530,7 +5530,7 @@ function ff_api_get {
     # Check required environment variables are set
     for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
       ensure_variable_not_empty "${VARIABLE_NAME}" || {
-        error "${FUNCNAME[0]}" "Required variable is empty: '${VARIABLE_NAME,,}'"
+        error "${FUNCNAME[0]}" "Failed to ensure required environment variable is not empty: '${VARIABLE_NAME,,}'"
         return 1
       }
     done
@@ -5835,7 +5835,7 @@ export -f publish_message
 ###############################################################################
 function set_environment_is_working {
 
-  # Check dependencies
+  # Check dependencies: commands are in the path
   local DEPENDENCIES=(
     cat
     log
@@ -5848,11 +5848,40 @@ function set_environment_is_working {
   )
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[*]}" || { error "${FUNCNAME[0]}" 'error_check_dependencies'; return 1; }  # Note: check_dependencies will report exact missing dependencies
 
+  # Check dependencies: Check all required arguments are not empty
+  # Define required variables
+  local REQUIRED_VARIABLES=(
+    FF_AGENT_HOME
+    FF_AGENT_URI
+    FF_AGENT_USER_HOME
+    FF_AGENT_USERNAME
+    FF_CONTENT_URL
+    FF_HOST
+    FF_PORT
+    FONT_STYLE_BOLD
+    FONT_STYLE_GREEN
+    FONT_STYLE_NORMAL
+    FONT_STYLE_RED
+    N_PREFIX
+    NAMESPACE
+    ORGANIZATION
+    TERM
+  )
+
+  # Check required environment variables are set
+  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
+    ensure_variable_not_empty "${VARIABLE_NAME}" || {
+      error "${FUNCNAME[0]}" "Failed to ensure required environment variable is not empty: '${VARIABLE_NAME,,}'"
+      return 1
+    }
+  done
+
   local HAS_ERRORS=false
   local VERBOSE=false
 
   [ "${1}" == "--verbose" ] && VERBOSE=true
 
+  # Check dependencies: commands are executed without errors
   # Loop through array of f-nested f-ns, on error set flag HAS_ERRORS (don't exit)
   # MaKE SURE THESE COMMANDS BELOW ARE TESTED ABOVE
   CHECKS=(
