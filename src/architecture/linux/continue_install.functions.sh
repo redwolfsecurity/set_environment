@@ -89,8 +89,6 @@ function add_to_install_if_missing {
 		PACKAGES_TO_INSTALL+=(${PACKAGE})
 	fi
 
-  # Return success
-	return 0
 }
 export -f add_to_install_if_missing
 
@@ -146,7 +144,6 @@ function apt_install_basic_packages {
   apt_install ${MISSING_PACKAGES[@]} || { state_set "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
 
   state_set "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f apt_install_basic_packages
 
@@ -299,8 +296,27 @@ export -f set_environment_ensure_install_exists
 
 ###############################################################################
 #
+# Function installs "authbind" to allow binries to open ports <=1024
+function install_authbind() {
+  apt_install authbind  || { state_set "${FUNCNAME[0]}" 'failed_to_install_authbind'; return 1; }
+
+  # Create authbind configuration for ports 80 and 443
+  sudo touch /etc/authbind/byport/80  || { state_set "${FUNCNAME[0]}" 'failed_to_create_authbind_byport_80'; return 1; }
+  sudo touch /etc/authbind/byport/443 || { state_set "${FUNCNAME[0]}" 'failed_to_create_authbind_byport_443'; return 1; }
+  sudo chmod 500 /etc/authbind/byport/80 || { state_set "${FUNCNAME[0]}" 'failed_to_set_permission_authbind_byport_80'; return 1; }
+  sudo chmod 500 /etc/authbind/byport/443 || { state_set "${FUNCNAME[0]}" 'failed_to_set_permission_authbind_byport_443'; return 1; }
+  sudo chown root:root /etc/authbind/byport/80 || { state_set "${FUNCNAME[0]}" 'failed_to_set_ownership_authbind_byport_80'; return 1; }
+  sudo chown root:root /etc/authbind/byport/443 || { state_set "${FUNCNAME[0]}" 'failed_to_set_ownership_authbind_byport_443'; return 1; }
+
+  # To run a program or symlink with the permission to authbind --deep $PATH_TO_EXECUTABLE
+  # PATH_TO_EXECUTABLE can be a symlink
+}
+
+
+###############################################################################
+#
 # Function installs "build_tools" project.
-function install_build_tools {
+function build_tools {
   state_set "${FUNCNAME[0]}" 'started'
 
   GIT_URL="git@github.com:redwolfsecurity/build_tools.git"
@@ -345,7 +361,6 @@ function install_ff_agent {
   npm install --global "${FF_CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}.tgz" || { state_set "${FUNCNAME[0]}" 'terminal_error_failed_to_install_ff_agent'; abort; }
 
   state_set "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f install_ff_agent
 
@@ -500,7 +515,6 @@ EOT
 
   # Chage state and return success
   state_set "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f install_ff_agent_bashrc
 
@@ -882,7 +896,6 @@ EOT
 
   # Chage state and return success
   state_set "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f install_n
 
@@ -903,7 +916,6 @@ function install_nodejs {
   n install "${VERSION}" || { state_set "${FUNCNAME[0]}" 'terminal_error_switching_node_version'; abort; }
 
   state_set "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f install_nodejs
 
@@ -913,10 +925,13 @@ export -f install_nodejs
 function install_nodejs_suite {
   state_set "${FUNCNAME[0]}" 'started'
 
+  # We want nodejs to be able to open ports 443 and 80, so we will install_authbind before this.
+
+  install_authbind || { state_set "${FUNCNAME[0]}" 'install_authbind_failed'; abort; }
+
   install_nodejs || { state_set "${FUNCNAME[0]}" 'terminal_error_install_node'; abort; }
 
   state_set "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f install_nodejs_suite
 
@@ -1365,7 +1380,6 @@ function set_environment_preserve_source_code {
   popd || { state_set "${FUNCNAME[0]}" 'failed_to_popd_after_preserving_source_folder'; return 1; }
 
   state_set "${FUNCNAME[0]}" 'success'
-  return 0
 }
 export -f set_environment_preserve_source_code
 
