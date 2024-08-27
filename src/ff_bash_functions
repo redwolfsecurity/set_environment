@@ -3751,8 +3751,8 @@ function state_set {
     cat <<- EOF
 {
   "mime_type": "${MIME_TYPE}",
-  "uri_template": "/set_environment/[mime_type]/id/[id]/[uuid]",
-  "uri": "${NAMESPACE}::/set_environment/${MIME_TYPE}/id/${STATE_NAME}/${UUID}",
+  "uri_template": "[namespace]::/organization/[organization]/[mime_type]/[uuid]",
+  "uri": "${NAMESPACE}::/organization/${ORGANIZATION}/${MIME_TYPE}/${UUID}",
   "uuid": "${UUID}",
   "id": "${STATE_NAME}",
   "state": "${STATE_VALUE}",
