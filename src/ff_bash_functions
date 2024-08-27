@@ -109,8 +109,7 @@
 #    - epoch_ms_get
 #    - ff_agent_get_best_ff_agent_uri
 #    - ff_agent_get_best_ff_content_url
-#    - ff_agent_get_best_ff_host
-#    - ff_agent_get_best_ff_port
+#    - ff_agent_get_best_ff_agent_fqdn
 #    - ff_agent_get_best_namespace
 #    - ff_agent_get_best_organization
 #    - ff_uuid
@@ -3342,9 +3341,9 @@ function secret_get {
           return 0
       fi
 
-      # Special case for "ff_api_username" and "ff_api_password" - these 2 values
+      # Special case for "ff_agent_api_username" and "ff_agent_api_password" - these 2 values
       # are nested few levels deep in "agent/configuration"
-      if [ "${KEY}" == "ff_api_username" ] || [ "${KEY}" == "FF_API_USERNAME" ]; then
+      if [ "${KEY}" == "ff_agent_api_username" ] || [ "${KEY}" == "FF_AGENT_API_USERNAME" ]; then
         # TODO: here we rely on provisioning JSON on agent to have "control_api_user", which is incorrectly named and must be redesigned completely.
         VALUE=$( sudo cat /var/lib/cloud/instance/user-data.txt | jq -r '.[] | select(.mime_type == "agent/configuration") | .roles[] | select(.role_name == "AgentRole") | .services[] | select(.service_name == "ActionManager") | .control_api_user' )
         if [ -n "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
@@ -3353,7 +3352,7 @@ function secret_get {
             return 0
         fi
       fi
-      if [ "${KEY}" == "ff_api_password" ] || [ "${KEY}" == "FF_API_PASSWORD" ]; then
+      if [ "${KEY}" == "ff_agent_api_password" ] || [ "${KEY}" == "FF_AGENT_API_PASSWORD" ]; then
         # TODO: here we rely on provisioning JSON on agent to have "control_api_password", which is incorrectly named and must be redesigned completely.
         VALUE=$( sudo cat /var/lib/cloud/instance/user-data.txt | jq -r '.[] | select(.mime_type == "agent/configuration") | .roles[] | select(.role_name == "AgentRole") | .services[] | select(.service_name == "ActionManager") | .control_api_password' )
         if [ -n "${VALUE}" ] && [ "${VALUE}" != "null" ]; then
@@ -3675,7 +3674,7 @@ function state_set {
   # Write value into the file
   echo "${STATE_VALUE}" >"${STATE_FILE}" || { error "${FUNCNAME[0]}: failed_to_write_state. State would have been set to ${STATE_NAME}=${STATE_VALUE}"; return 1; }
 
-  # ------------------ Build JSON object "state/change" and send to FF_HOST
+  # ------------------ Build JSON object "state/change" and send to FF_AGENT_API_FQDN
 
   # Check if framework API is defined
   if [ "$( is_framework_api_defined )" != "true" ]; then
@@ -3715,15 +3714,16 @@ function state_set {
   fi
 
   # Compose "state/chate" JSON and pipe it to publish_message()
-  # Note: we POST "state/change" JSON to ff_host. (from portal to self, from 'traffic generator' to portal, from 'inside docker' to (agent?)).
+  # Note: we POST "state/change" JSON to ff_agent_api_fqdn. (from portal to self, from 'traffic generator' to portal, from 'inside docker' to (agent?)).
   local UUID
   UUID="$( ff_uuid )" || { error "${FUNCNAME[0]}" 'failed_generate_uuid'; return 1; }
 
   # Check: all the environment variables used in JSON are actually set.
   local ALL_EXPECTED_ENVRIONMENT_VARIABLES=(
     FF_AGENT_URI
-    FF_AGENT_USERNAME
-    FF_HOST
+    FF_AGENT_API_USERNAME
+    FF_AGENT_API_PASSWORD
+    FF_AGENT_API_FQDN
     HOSTNAME
     IS_SUCCESS_OR_IS_ERROR_JSON
     MIME_TYPE
@@ -3765,7 +3765,7 @@ function state_set {
   "event_type": "set_environment",
   "source": "set_environment",
   "hostname": "${HOSTNAME}",
-  "ff_host": "${FF_HOST}",
+  "ff_agent_fqdn": "${FF_AGENT_FQDN}",
 
   "namespace": "${NAMESPACE}",
   "organization": "${ORGANIZATION}",
@@ -3788,7 +3788,7 @@ function state_set {
 EOF
 ) | publish_message
 
-  # If we have ff_metric command handy try to sent the metric
+  # If we have ff_metric command handy try to sent the metric with name STATE_NAME and value 1
   if command_exists ff_metric >/dev/null; then
     # Report metric: start:1    tags: service:ipsec_tunnel  (+public_ip, organization)
     ff_metric --metric-name="${STATE_NAME}" --metric-value=1 --tag=state:"${STATE_VALUE}" --tag=is_error:"${IS_ERROR}"
@@ -4181,7 +4181,7 @@ export -f user_exists
 #
 # DESCRIPTION
 #   Performs discovery and initialization of critical environmental variables such
-#   as FF_AGENT_URI, FF_HOST, FF_CONTENT_URL, NAMESPACE, and ORGANIZATION. Ensures
+#   as FF_AGENT_URI, FF_AGENT_FQDN, FF_CONTENT_URL, NAMESPACE, and ORGANIZATION. Ensures
 #   the agent is correctly configured with essential information for its operation.
 #
 # DEPENDENCIES
@@ -4198,7 +4198,7 @@ export -f user_exists
 function discover_environment {
 
   # Check dependencies
-  local DEPENDENCIES="ff_agent_home_get_best ff_agent_get_best_ff_agent_uri ff_agent_get_best_ff_host ff_agent_get_best_ff_content_url abort"
+  local DEPENDENCIES="ff_agent_home_get_best ff_agent_get_best_ff_agent_uri ff_agent_get_best_ff_agent_fqdn ff_agent_get_best_ff_content_url abort"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   ######################################################################
@@ -4215,8 +4215,7 @@ function discover_environment {
   #  [x] FF_AGENT_USER_HOME (see ff_agent_home_get_best())
   #  [x] FF_AGENT_USERNAME  (see ff_agent_home_get_best())
   #  [x] FF_CONTENT_URL (see ff_agent_get_best_ff_content_url())
-  #  [x] FF_HOST (see ff_agent_get_best_ff_host())
-  #  [x] FF_PORT (see ff_agent_get_best_ff_port())
+  #  [x] FF_AGENT_FQDN (see ff_agent_get_best_ff_agent_fqdn())
   #  [x] N_PREFIX (see install_n())
   #  [x] NAMESPACE (see ff_agent_get_best_namespace())
   #  [x] ORGANIZATION (see ff_agent_get_best_organization())
@@ -4244,13 +4243,9 @@ function discover_environment {
   secret_set ff_content_url "${FF_CONTENT_URL}"
   export FF_CONTENT_URL
 
-  FF_HOST=$( ff_agent_get_best_ff_host )               || { abort "failed_to_ff_agent_get_best_ff_host"; }
-  secret_set ff_host "${FF_HOST}"
-  export FF_HOST
-
-  FF_PORT=$( ff_agent_get_best_ff_port )               || { abort "failed_to_ff_agent_get_best_ff_port"; }
-  secret_set ff_port "${FF_PORT}"
-  export FF_PORT
+  FF_AGENT_FQDN=$( ff_agent_get_best_ff_agent_fqdn )               || { abort "failed_to_ff_agent_get_best_ff_agent_fqdn"; }
+  secret_set ff_agent_fqdn "${FF_AGENT_FQDN}"
+  export FF_AGENT_FQDN
 
   # N_PREFIX is set in install_n() and added to ${FF_AGENT_HOME}/.profile
 
@@ -4265,48 +4260,6 @@ function discover_environment {
   export ORGANIZATION
 }
 export -f discover_environment
-
-# function discover_ff_environment {
-
-#     # Define 2 lists of variable names and default values: required and optional.
-#     # It creates a local variable (only seen in scope of current f-n)
-#     declare -A REQUIRED_VARIABLES
-#     # REQUIRED_VARIABLES[FF_HOST]=''
-#     # REQUIRED_VARIABLES[FF_PORT]='443'
-#     # REQUIRED_VARIABLES[FF_PROTOCOL]='https'
-
-#     declare -A OPTIONAL_VARIABLES
-#     OPTIONAL_VARIABLES[FF_HOST]=''
-#     OPTIONAL_VARIABLES[FF_PORT]='443'
-#     OPTIONAL_VARIABLES[FF_PROTOCOL]='https'
-#     OPTIONAL_VARIABLES[FF_API_USERNAME]=''
-#     OPTIONAL_VARIABLES[FF_API_PASSWORD]=''
-#     OPTIONAL_VARIABLES[FF_API_TOKEN]=''
-#     OPTIONAL_VARIABLES[FF_PROXY_HOST]=''
-#     OPTIONAL_VARIABLES[FF_PROXY_PORT]=''
-#     OPTIONAL_VARIABLES[FF_PROXY_PROTOCOL]=''
-#     OPTIONAL_VARIABLES[FF_PROXY_USERNAME]=''
-#     OPTIONAL_VARIABLES[FF_PROXY_PASSWORD]=''
-
-#     # Discover required variables
-#     for NAME in "${!REQUIRED_VARIABLES[@]}"; do
-#         # Check NAME is not empty
-#         [ -z "${NAME}" ] && { continue; }
-#         # Get default value and call discovery f-n
-#         local DEFAULT_VALUE="${REQUIRED_VARIABLES[${NAME}]}"
-#         discover_required_environment_variable "${NAME}" "${DEFAULT_VALUE}" || { return 1; }
-#     done
-
-#     # Discover optional variables
-#     for NAME in "${!OPTIONAL_VARIABLES[@]}"; do
-#         # Check NAME is not empty
-#         [ -z "${NAME}" ] && { continue; }
-#         # Get default value and call discovery f-n
-#         local DEFAULT_VALUE="${OPTIONAL_VARIABLES[${NAME}]}"
-#         discover_optional_environment_variable "${NAME}" "${DEFAULT_VALUE}" || { return 1; }
-#     done
-# }
-# export -f discover_ff_environment
 
 ###############################################################################
 # CATEGORY
@@ -4327,7 +4280,7 @@ export -f discover_environment
 #   Requires 'tr' to be installed on the system.
 #
 # EXAMPLES
-#   discover_optional_environment_variable "FF_PORT" "443" || { error "failed_to_set_FF_PORT"; return 1; }
+#   discover_optional_environment_variable "VARIABLE_NAME" "443" || { error "Failed to set VARIABLE_NAME"; return 1; }
 #
 # EXIT STATUS
 #   0 - Success, variable discovered or set to default.
@@ -4629,86 +4582,43 @@ export -f ff_agent_get_best_ff_content_url
 #   DISCOVERY
 #
 # NAME
-#   ff_agent_get_best_ff_host - Determines the best FF_HOST value.
+#   ff_agent_get_best_ff_agent_fqdn - Determines the best FF_AGENT_FQDN value.
 #
 # SYNOPSIS
-#   ff_agent_get_best_ff_host
+#   ff_agent_get_best_ff_agent_fqdn
 #
 # DESCRIPTION
-#   Chooses the best FF_HOST value by trying to retrieve it from the environment
-#   or using the hostname command. This ensures that the FF_HOST value accurately
+#   Chooses the best FF_AGENT_FQDN value by trying to retrieve it from the environment
+#   or using the hostname command. This ensures that the FF_AGENT_FQDN value accurately
 #   reflects the host's identity within the system or network.
 #
 # EXAMPLES
-#   UPLOAD_TO=$( ff_agent_get_best_ff_host ) || { state_set "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_host"; return 1; }
+#   UPLOAD_TO=$( ff_agent_get_best_ff_agent_fqdn ) || { state_set "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_agent_fqdn"; return 1; }
 #
 # EXIT STATUS
-#   0 - Success, FF_HOST chosen and printed to standard output.
-#   1 - Failure, unable to determine FF_HOST.
+#   0 - Success, FF_AGENT_FQDN chosen and printed to standard output.
+#   1 - Failure, unable to determine FF_AGENT_FQDN.
 #
 ###############################################################################
-function ff_agent_get_best_ff_host {
+function ff_agent_get_best_ff_agent_fqdn {
 
   # Check dependencies
   local DEPENDENCIES="discover_optional_environment_variable error ensure_variable_not_empty hostname"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  # Try to get FF_HOST from environment or by secret_get()
-  discover_optional_environment_variable "FF_HOST" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_host"; return 1; } # Note: FF_HOST: FF_HOST will be set to legacy portal hostname if this is a portal.
+  # Try to get FF_AGENT_FQDN from environment or by secret_get()
+  discover_optional_environment_variable "FF_AGENT_FQDN" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_agent_fqdn"; return 1; } # Note: FF_AGENT_FQDN: FF_AGENT_FQDN will be set to legacy portal hostname if this is a portal.
 
   # Check if variable already set. If not try to get it's value by command 'hostname'
-  [ -z "${FF_HOST}" ] && { FF_HOST="$( hostname )"; }
+  [ -z "${FF_AGENT_FQDN}" ] && { FF_AGENT_FQDN="$( hostname )"; }
 
   # Make sure the variable is now not empty or error out.
-  ensure_variable_not_empty 'FF_HOST' || { error "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_host"; return 1; }
+  ensure_variable_not_empty 'FF_AGENT_FQDN' || { error "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_agent_fqdn"; return 1; }
 
   # Print result to standard output, set state to 'success' and return success code.
-  echo "${FF_HOST}"
+  echo "${FF_AGENT_FQDN}"
 }
-export -f ff_agent_get_best_ff_host
-
-###############################################################################
-# CATEGORY
-#   DISCOVERY
-#
-# NAME
-#   ff_agent_get_best_ff_port - Determines the best FF_PORT value.
-#
-# SYNOPSIS
-#   ff_agent_get_best_ff_port
-#
-# DESCRIPTION
-#   Chooses the best FF_PORT value by trying to retrieve it from the environment
-#   or defaulting to a standard port if not explicitly defined. This is key for
-#   ensuring that connections and communications are made over the correct port.
-#
-# EXAMPLES
-#   FF_PORT=$(ff_agent_get_best_ff_port) || { state_set "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_port"; return 1; }
-#
-# EXIT STATUS
-#   0 - Success, FF_PORT chosen and printed to standard output.
-#   1 - Failure, unable to determine FF_PORT.
-#
-###############################################################################
-function ff_agent_get_best_ff_port {
-
-  # Check dependencies
-  local DEPENDENCIES="discover_optional_environment_variable error"
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
-
-  # Define default FF_PORT
-  FF_PORT_DEFAULT=443
-
-  # Try to get FF_PORT from environment or by secret_get()
-  discover_optional_environment_variable "FF_PORT" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_port"; return 1; }
-
-  # Check if variable already set. If not then use default
-  [ -z "${FF_PORT}" ] && { FF_PORT="${FF_PORT_DEFAULT}"; }
-
-  # Print result to standard output, set state to 'success' and return success code.
-  echo "${FF_PORT}"
-}
-export -f ff_agent_get_best_ff_port
+export -f ff_agent_get_best_ff_agent_fqdn
 
 ###############################################################################
 # CATEGORY
@@ -5142,7 +5052,7 @@ export -f assert_ff_agent_home_exists
 #
 # DESCRIPTION
 #   Verifies that all required environment variables, such as FF_AGENT_USERNAME,
-#   FF_AGENT_HOME, FF_AGENT_URI, FF_HOST, FF_CONTENT_URL, N_PREFIX, and TERM, are set.
+#   FF_AGENT_HOME, FF_AGENT_URI, FF_AGENT_FQDN, FF_CONTENT_URL, N_PREFIX, and TERM, are set.
 #   Reports an error for any unset variable.
 #
 # DEPENDENCIES
@@ -5167,7 +5077,7 @@ function check_environment_variables_are_set {
     FF_AGENT_USERNAME
     FF_AGENT_HOME
     FF_AGENT_URI
-    FF_HOST
+    FF_AGENT_FQDN
     FF_CONTENT_URL
     N_PREFIX
     TERM
@@ -5497,9 +5407,15 @@ export -f ff_agent_home_get_best
 #   ff_api_get endpoint
 #
 # DESCRIPTION
-#   Performs an HTTPS GET request to the FF_HOST using the provided endpoint. Requires
-#   FF_API_USERNAME, FF_API_PASSWORD, and FF_HOST to be set. It is used for interacting
-#   with the FF API securely.
+#   Performs an HTTPS GET request to the FF_AGENT_FQDN using the provided endpoint. Requires
+#   the following environment variables to be set:
+#    - FF_AGENT_PORT
+#    - FF_AGENT_API_USERNAME
+#    - FF_AGENT_API_PASSWORD
+#    - FF_AGENT_API_FQDN
+#    - FF_AGENT_API_PORT
+#
+# It is used for interacting with the FF API securely.
 #
 # EXAMPLES
 #   RESPONSE=$(ff_api_get "/admin/organizations") || { error "API request failed."; return 1; }
@@ -5522,9 +5438,9 @@ function ff_api_get {
     # Define required variables
     local REQUIRED_VARIABLES=(
       CALL
-      FF_API_USERNAME
-      FF_API_PASSWORD
-      FF_HOST
+      FF_AGENT_API_USERNAME
+      FF_AGENT_API_PASSWORD
+      FF_AGENT_API_FQDN
     )
 
     # Check required environment variables are set
@@ -5535,9 +5451,26 @@ function ff_api_get {
       }
     done
 
+    # If FF_AGENT_API_PROTOCOL is not set, use "https"
+    FF_AGENT_API_PROTOCOL="${FF_AGENT_API_PROTOCOL:-https}"
+    export FF_AGENT_API_PROTOCOL
+
+    # If FF_AGENT_API_PORT is not set, use "443"
+    FF_AGENT_API_PORT="${FF_AGENT_API_PORT:-443}"
+    export FF_AGENT_API_PORT
+
     # Run command, capture server response as ${RESULT} and curl exit code as ${STATUS}
     local RESULT
-    RESULT=$( curl -s --retry 5 -u "${FF_API_USERNAME}:${FF_API_PASSWORD}" https://${FF_HOST}${CALL} )
+    RESULT=$( curl \
+        --silent   \
+        --retry 3    \
+        --request POST \
+        --connect-timeout 10 \
+        --max-time 35  \
+        --retry-delay 1 \
+        --user "${FF_AGENT_API_USERNAME}:${FF_AGENT_API_PASSWORD}" \
+        "${FF_AGENT_API_PROTOCOL}://${FF_AGENT_API_FQDN}:${FF_AGENT_API_PORT}${CALL}" \
+    )
     local STATUS=${?}
 
     if [ "${STATUS}" != "0" ]; then
@@ -5584,8 +5517,8 @@ export -f ff_api_get
 #
 # DESCRIPTION
 #   Function checks if we have framework API defined by checking if all of the following is set:
-#    - FF_HOST
-#    - ( FF_API_USERNAME and FF_API_PASSWORDS ) OR ( FF_API_TOKEN )
+#    - FF_AGENT_API_FQDN
+#    - ( FF_AGENT_API_USERNAME and FF_AGENT_API_PASSWORD ) OR ( FF_AGENT_API_TOKEN )
 #   Useful for conditional logic based on API availability.
 #   Echoes to standard output 'true' if the API is defined, 'false' otherwise.
 #
@@ -5603,14 +5536,14 @@ export -f ff_api_get
 ###############################################################################
 function is_framework_api_defined {
 
-  # Print 'false' and return 1if FF_HOST not set
-  [ -z "${FF_HOST}" ] && { echo 'false'; return 1; }
+  # Print 'false' and return 1if FF_AGENT_API_FQDN not set
+  [ -z "${FF_AGENT_API_FQDN}" ] && { echo 'false'; return 1; }
 
-  # Print 'true' if both FF_API_USERNAME and FF_API_PASSWORDS are set
-  [ -n "${FF_API_USERNAME}" ] && [ -n "${FF_API_PASSWORDS}" ] && { echo 'true'; return 0; }
+  # Print 'true' if both FF_AGENT_API_USERNAME and FF_AGENT_API_PASSWORD are set
+  [ -n "${FF_AGENT_API_USERNAME}" ] && [ -n "${FF_AGENT_API_PASSWORD}" ] && { echo 'true'; return 0; }
 
-  # Print 'true' if FF_API_TOKEN is set
-  [ -n "${FF_API_TOKEN}" ] && { echo 'true'; return 0; }
+  # Print 'true' if FF_AGENT_API_TOKEN is set
+  [ -n "${FF_AGENT_API_TOKEN}" ] && { echo 'true'; return 0; }
 
   # Print 'false' in all other cases
   echo 'false'
@@ -5664,15 +5597,15 @@ export -f nodejs_desired_version_get
 #   SET ENVIRONMENT
 #
 # NAME
-#   publish_message - Sends a JSON message to the FF_HOST.
+#   publish_message - Sends a JSON message to the FF_AGENT_API_FQDN.
 #
 # SYNOPSIS
 #   echo '{"example": "data"}' | publish_message
 #
 # DESCRIPTION
 #   Accepts a JSON payload through stdin and wraps it in a delivery message format
-#   before POSTing it to the configured FF_HOST. Requires FF_API_USERNAME, FF_API_PASSWORD,
-#   and FF_HOST to be set.
+#   before POSTing it to the configured FF_AGENT_FQDN. Requires FF_AGENT_API_USERNAME, FF_AGENT_API_PASSWORD,
+#   and FF_AGENT_FQDN to be set (check done by calling is_framework_api_defined()).
 #
 # DEPENDENCIES
 #   Requires 'curl' to be installed on the system.
@@ -5701,30 +5634,27 @@ function publish_message {
   # Read piped json
   INPUT_JSON=`cat`
 
+  # Check if API is defined (this will check for:
+  #  - FF_AGENT_API_FQDN
+  #  - (FF_AGENT_API_USERNAME, FF_AGENT_API_PASSWORD) or FF_AGENT_API_TOKEN
+  if [ "$( is_framework_api_defined )" != "true" ]; then
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    error "${FUNCNAME[0]}" "Framework API is not defined"
+    return 1
+  fi
+
+  # If FF_AGENT_API_PROTOCOL is not set, use "https"
+  FF_AGENT_API_PROTOCOL="${FF_AGENT_API_PROTOCOL:-https}"
+  export FF_AGENT_API_PROTOCOL
+
+  # If FF_AGENT_API_PORT is not set, use "443"
+  FF_AGENT_API_PORT="${FF_AGENT_API_PORT:-443}"
+  export FF_AGENT_API_PORT
+
   # Check inputs
-  local FF_API_USERNAME=$( secret_get ff_api_username )
-  if [ "${FF_API_USERNAME}" == "" ]; then
-    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    error "${FUNCNAME[0]}" "FF_API_USERNAME is missing"
-    return 1
-  fi
-
-  local FF_API_PASSWORD=$( secret_get ff_api_password )
-  if [ "${FF_API_PASSWORD}" == "" ]; then
-    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    error "${FUNCNAME[0]}" "FF_API_PASSWORD is missing"
-    return 1
-  fi
-
   if [ "${INPUT_JSON}" == "" ]; then
     bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     error "${FUNCNAME[0]}" "INPUT_JSON is missing"
-    return 1
-  fi
-
-  if [ "${FF_HOST}" == "" ]; then
-    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    error "${FUNCNAME[0]}" "FF_HOST is missing"
     return 1
   fi
 
@@ -5776,29 +5706,32 @@ EOF
   RESULT=$(
     curl \
       --silent   \
-      --retry 5    \
+      --retry 3    \
       --request POST \
+      --connect-timeout 10 \
+      --max-time 35  \
+      --retry-delay 1 \
       --header "Content-Type: application/json" \
       --data "${MESSAGE}" \
-      --user "${FF_API_USERNAME}:${FF_API_PASSWORD}" \
-      https://${FF_HOST}/
+      --user "${FF_AGENT_API_USERNAME}:${FF_AGENT_API_PASSWORD}" \
+      "${FF_AGENT_API_PROTOCOL}://${FF_AGENT_API_FQDN}:${FF_AGENT_API_PORT}/"
   ) || {
     bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    error "${FUNCNAME[0]}" "Failed to post to https://${FF_HOST}/"
+    error "${FUNCNAME[0]}" "Failed to post to ${FF_AGENT_API_PROTOCOL}://${FF_AGENT_API_FQDN}:${FF_AGENT_API_PORT}/"
     return 1
   }
 
   # Even if curl succeed, check some edge cases, when server replied with some JSON error
   if [[ ${RESULT} =~ (^Cannot GET) ]]; then
     bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    error "${FUNCNAME[0]}" "Failed to post to https://${FF_HOST}/"
+    error "${FUNCNAME[0]}" "Failed to post to ${FF_AGENT_API_PROTOCOL}://${FF_AGENT_API_FQDN}:${FF_AGENT_API_PORT}/. Got: Cannot GET"
     return 1
   fi
 
   # Check if resut has error mime_type (TODO: improve it to rely on actual response http_code, see implemented in url_get())
   if [[ ${RESULT} =~ (^.*"mime_type".+"rest/error") ]]; then
     bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-    error "${FUNCNAME[0]}" "Failed to post to https://${FF_HOST}/"
+    error "${FUNCNAME[0]}" "Failed to post to ${FF_AGENT_API_PROTOCOL}://${FF_AGENT_API_FQDN}:${FF_AGENT_API_PORT}/. Got rest/error"
     return 1
   fi
 
@@ -5856,16 +5789,15 @@ function set_environment_is_working {
     FF_AGENT_USER_HOME
     FF_AGENT_USERNAME
     FF_CONTENT_URL
-    FF_HOST
-    FF_PORT
-    # FONT_STYLE_BOLD
+    FF_AGENT_FQDN
+    # FONT_STYLE_BOLD   # Commented out as not mandatory
     # FONT_STYLE_GREEN
     # FONT_STYLE_NORMAL
     # FONT_STYLE_RED
     N_PREFIX
     NAMESPACE
     ORGANIZATION
-    TERM
+    # TERM
   )
 
   # Iterate required environment variables and make sure they all are set to non-empty value

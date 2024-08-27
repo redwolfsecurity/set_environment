@@ -170,9 +170,8 @@ function assert_baseline_components {
   # Install pm2
   assert_clean_exit pm2_ensure
 
-  ## Commented out until the new ff_agent does not use libcurl
-  ## # Install npm package "@ff/ff_agent" -> ff_agent/
-  ## assert_clean_exit install_ff_agent
+  # Install npm package "@ff/ff_agent" -> ff_agent/
+  assert_clean_exit install_ff_agent
 
   state_set "${FUNCNAME[0]}" 'success'
 }
@@ -351,14 +350,39 @@ function install_ff_agent {
         libcurl4-openssl-dev
         build-essential
       )
-      apt_install ${PACKAGES_TO_INSTALL[@]} || { state_set "${FUNCNAME[0]}" 'terminal_error_unable_to_install_ff_agent_dependencies'; abort; }
+      apt_install ${PACKAGES_TO_INSTALL[@]} || {
+          state_set "${FUNCNAME[0]}" 'terminal_error_unable_to_install_ff_agent_dependencies'
+          abort "${FUNCNAME[0]}" 'terminal_error_unable_to_install_ff_agent_dependencies'
+        }
     ;;
     *)
     ;;
   esac
 
   # Install ff_agent
-  npm install --global "${FF_CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}.tgz" || { state_set "${FUNCNAME[0]}" 'terminal_error_failed_to_install_ff_agent'; abort; }
+  npm install --global "${FF_CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}.tgz" || {
+    state_set "${FUNCNAME[0]}" 'failed_to_install_ff_agent'
+    abort "${FUNCNAME[0]}" 'failed_to_install_ff_agent'
+  }
+
+  # Run ff_agent by pm2
+  # Ensure ff_agent is installed in the PATH
+  command_exists ff_agent || {
+    state_set "${FUNCNAME[0]}" 'terminal_error_unable_to_find_ff_agent'
+    abort "${FUNCNAME[0]}" 'terminal_error_unable_to_find_ff_agent'
+  }
+
+  # Register/start ff_agent in pm2
+  pm2 start ff_agent --name ff_agent || {
+    state_set "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
+    abort "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
+  }
+
+  # Save current process list
+  pm2 save || {
+    state_set "${FUNCNAME[0]}" 'failed_to_pm2_save'
+    abort "${FUNCNAME[0]}" 'failed_to_pm2_save'
+  }
 
   state_set "${FUNCNAME[0]}" 'success'
 }
