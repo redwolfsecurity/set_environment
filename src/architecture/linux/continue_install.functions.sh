@@ -361,7 +361,8 @@ function install_ff_agent {
   esac
 
   # Install ff_agent
-  npm install --global "${FF_CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}.tgz" || {
+  # Previously we tried to install from CDN: npm install --global "${FF_CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}
+  npm install --global @ff/ff_agent@${VERSION} || {
     state_set "${FUNCNAME[0]}" 'failed_to_install_ff_agent'
     abort "${FUNCNAME[0]}" 'failed_to_install_ff_agent'
   }
