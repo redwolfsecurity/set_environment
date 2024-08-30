@@ -316,7 +316,7 @@ function install_authbind() {
 ###############################################################################
 #
 # Function installs "build_tools" project.
-function build_tools {
+function install_build_tools {
   state_set "${FUNCNAME[0]}" 'started'
 
   GIT_URL="git@github.com:redwolfsecurity/build_tools.git"
