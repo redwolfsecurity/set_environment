@@ -170,8 +170,9 @@ function assert_baseline_components {
   # Install pm2
   assert_clean_exit pm2_ensure
 
+  # Commented out the "install_ff_agent" step since it require ~/.npmrc secrets to be set (this step is moved to builder container)
   # Install npm package "@ff/ff_agent" -> ff_agent/
-  assert_clean_exit install_ff_agent
+  # assert_clean_exit install_ff_agent
 
   state_set "${FUNCNAME[0]}" 'success'
 }
@@ -359,22 +360,18 @@ function install_ff_agent {
     ;;
   esac
 
-  # Commenting out both "Install" and "Run" ff_agent since installer fails on command:
-  #    npm install --global https://cdn.redwolfsecurity.com/ff/npm/ff-ff_agent-latest.tgz (last updated >2 years ago, on February 14, 2022)
-  #
-  #
-  # # Install ff_agent
-  # npm install --global "${FF_CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}.tgz" || {
-  #   state_set "${FUNCNAME[0]}" 'failed_to_install_ff_agent'
-  #   abort "${FUNCNAME[0]}" 'failed_to_install_ff_agent'
-  # }
+  # Install ff_agent
+  npm install --global "${FF_CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}.tgz" || {
+    state_set "${FUNCNAME[0]}" 'failed_to_install_ff_agent'
+    abort "${FUNCNAME[0]}" 'failed_to_install_ff_agent'
+  }
 
-  # # Run ff_agent by pm2
-  # # Ensure ff_agent is installed in the PATH
-  # command_exists ff_agent || {
-  #   state_set "${FUNCNAME[0]}" 'terminal_error_unable_to_find_ff_agent'
-  #   abort "${FUNCNAME[0]}" 'terminal_error_unable_to_find_ff_agent'
-  # }
+  # Run ff_agent by pm2
+  # Ensure ff_agent is installed in the PATH
+  command_exists ff_agent || {
+    state_set "${FUNCNAME[0]}" 'terminal_error_unable_to_find_ff_agent'
+    abort "${FUNCNAME[0]}" 'terminal_error_unable_to_find_ff_agent'
+  }
 
   # Register/start ff_agent in pm2
   pm2 start ff_agent --name ff_agent || {
