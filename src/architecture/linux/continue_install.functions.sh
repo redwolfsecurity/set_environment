@@ -374,8 +374,19 @@ function install_ff_agent {
     abort "${FUNCNAME[0]}" 'terminal_error_unable_to_find_ff_agent'
   }
 
-  # Register/start ff_agent in pm2
-  pm2 start ff_agent --name ff_agent || {
+  # This fails to start ff_agent with an error: Cannot find module '/home/ff_agent/ff_agent'
+  # # Register/start ff_agent in pm2
+  # pm2 start ff_agent --name ff_agent || {
+  #   state_set "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
+  #   abort "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
+  # }
+
+  # Replacing ff_agent pm2 starter to use more explicit path to the executable
+  # Get the full path of the ff_agent executable
+  FF_AGENT_PATH=$( command_exists ff_agent )
+
+  # Register/start ff_agent in pm2 using the node interpreter
+  pm2 start node --name ff_agent -- "$FF_AGENT_PATH" || {
     state_set "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
     abort "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
   }
