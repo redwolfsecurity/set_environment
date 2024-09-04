@@ -170,9 +170,8 @@ function assert_baseline_components {
   # Install pm2
   assert_clean_exit pm2_ensure
 
-  # Commented out the "install_ff_agent" step since it require ~/.npmrc secrets to be set (this step is moved to builder container)
-  # Install npm package "@ff/ff_agent" -> ff_agent/
-  # assert_clean_exit install_ff_agent
+  # Install npm package "@ff/ff_agent"
+  assert_clean_exit install_ff_agent
 
   state_set "${FUNCNAME[0]}" 'success'
 }
