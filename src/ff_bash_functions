@@ -3686,17 +3686,18 @@ function state_set {
   # Temporary: On early stages the FF_AGENT_URI is not yet defined. Check & log it if this is the case.
   if [ -z "${FF_AGENT_URI}" ]; then
     # FF_AGENT_URI is not yet defined. Log it (and what was the state name/value)
-    error "WARNING: set_state() called while FF_AGENT_URI is not yet defined! STATE_NAME: ${STATE_NAME}, STATE_VALUE: ${STATE_VALUE}"
+    error "WARNING: set_state() called while FF_AGENT_URI is not yet defined (this is expected for early stages callers like 'assert_ff_agent_home_exists')! STATE_NAME: ${STATE_NAME}, STATE_VALUE: ${STATE_VALUE}"
 
     # Return with success code 0
     return 0
   fi
 
   # Get current epoch time
-  local TIMESTAMP_EPOCH_MS="$( epoch_ms_get )"
+  local TIMESTAMP_EPOCH_MS
+  TIMESTAMP_EPOCH_MS="$( epoch_ms_get )" || { error "${FUNCNAME[0]}: failed to get time by calling epoch_ms_get()"; return 1; }
 
   # Check if we actually got non-empty string?
-  [ -n "${TIMESTAMP_EPOCH_MS}" ] || { error "${FUNCNAME[0]}: failed_to_epoch_ms_get"; return 1; }
+  [ -n "${TIMESTAMP_EPOCH_MS}" ] || { error "${FUNCNAME[0]}: got empty timestamp_epoch_ms value"; return 1; }
 
   # If state value contains: success|running, then: "is_success": true
   # else
@@ -3743,6 +3744,9 @@ function state_set {
     UUID
   )
 
+  # Define mime_type value
+  MIME_TYPE="state/change"
+
   for VARIABLE_NAME in "${ALL_EXPECTED_ENVRIONMENT_VARIABLES[@]}"; do
     ensure_variable_not_empty "${VARIABLE_NAME}" || {
       local ERROR_DETAILS=$( echo "Required environment variable '${VARIABLE_NAME}' is not set." | tr '[:upper:]' '[:lower:]' )
@@ -3750,9 +3754,6 @@ function state_set {
       return 1
     }
   done
-
-  # Define mime_type
-  MIME_TYPE="state/change"
 
   # Commpose JSON and publish it
   (
