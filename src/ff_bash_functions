@@ -3676,6 +3676,9 @@ function state_set {
 
   # ------------------ Build JSON object "state/change" and send to FF_AGENT_API_FQDN
 
+  # Temporarily disable sending state/change to the portal, until it is working reliably
+  return 0
+
   # Check if framework API is defined
   if [ "$( is_framework_api_defined )" != "true" ]; then
     # No, the framework API is not defined. Simply return, we're done.
