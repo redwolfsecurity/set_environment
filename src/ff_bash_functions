@@ -3683,6 +3683,15 @@ function state_set {
     return 0
   fi
 
+  # Temporary: On early stages the FF_AGENT_URI is not yet defined. Check & log it if this is the case.
+  if [ -z "${FF_AGENT_URI}" ]; then
+    # FF_AGENT_URI is not yet defined. Log it (and what was the state name/value)
+    error "WARNING: set_state() called while FF_AGENT_URI is not yet defined! STATE_NAME: ${STATE_NAME}, STATE_VALUE: ${STATE_VALUE}"
+
+    # Return with success code 0
+    return 0
+  fi
+
   # Get current epoch time
   local TIMESTAMP_EPOCH_MS="$( epoch_ms_get )"
 
@@ -3725,7 +3734,6 @@ function state_set {
     FF_AGENT_API_PASSWORD
     FF_AGENT_API_FQDN
     HOSTNAME
-    IS_SUCCESS_OR_IS_ERROR_JSON
     MIME_TYPE
     NAMESPACE
     ORGANIZATION
