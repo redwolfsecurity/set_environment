@@ -108,6 +108,7 @@
 #    - discover_required_environment_variable
 #    - epoch_ms_get
 #    - ff_agent_get_best_ff_agent_uri
+#    - ff_agent_get_best_ff_agent_uuid
 #    - ff_agent_get_best_ff_content_url
 #    - ff_agent_get_best_ff_agent_fqdn
 #    - ff_agent_get_best_namespace
@@ -470,14 +471,14 @@ function apt_dist_upgrade {
   #       replaced by --allow-unauthenticated , --allow-downgrades , --allow-remove-essential , --allow-change-held-packages in 1.1.
   local FORCE_YES="--allow-unauthenticated --allow-downgrades --allow-remove-essential --allow-change-held-packages"
 
-  apt_update  || { error "${FUNCNAME[0]}" "failed_to_apt_update"; return 1; }
-  apt_upgrade || { error "${FUNCNAME[0]}" "failed_to_apt_upgrade"; return 1; }
+  apt_update  || { error "${FUNCNAME[0]}" "Failed to apt_update"; return 1; }
+  apt_upgrade || { error "${FUNCNAME[0]}" "Failed to apt_upgrade"; return 1; }
   sudo DEBIAN_FRONTEND=noninteractive \
     apt-get \
       -yq \
       -o Dpkg::Options::="--force-confdef" \
       -o Dpkg::Options::="--force-confold" \
-      ${FORCE_YES} ${APT_COMMAND} || { error "${FUNCNAME[0]}" "failed_to_apt_dist_upgrade"; return 1; }
+      ${FORCE_YES} ${APT_COMMAND} || { error "${FUNCNAME[0]}" "Failed to apt_dist_upgrade"; return 1; }
 }
 export -f apt_dist_upgrade
 
@@ -521,7 +522,7 @@ function apt_install {
         --no-install-recommends \
         --no-install-suggests \
         -o Acquire::ForceIPv4=true \
-        "${APT_COMMAND}" "${PACKAGE}" > /dev/null || { error "${FUNCNAME[0]}" "failed_to_apt_install"; return 1; }
+        "${APT_COMMAND}" "${PACKAGE}" > /dev/null || { error "${FUNCNAME[0]}" "Failed to apt_install"; return 1; }
   done
 }
 export -f apt_install
@@ -574,7 +575,7 @@ function apt_list {
 
   # Check errors
   if [ ${?} -ne 0 ]; then
-    error "${FUNCNAME[0]}" "failed_to_find_package_uris"
+    error "${FUNCNAME[0]}" "Failed to find_package_uris"
     return 1
   fi
 
@@ -586,7 +587,7 @@ function apt_list {
 
   # Check we got files list
   if [ "${PACKAGE_FILES}" == "" ]; then
-    error "${FUNCNAME[0]}" "failed_to_list_package_files"
+    error "${FUNCNAME[0]}" "Failed to list_package_files"
     return 1
   fi
 }
@@ -3071,7 +3072,7 @@ export -f process_is_running_as_me
 #   retry_command 5 10 wget "http://example.com/somefile.txt"
 #
 #   # Retry up to 5 times to install_xyz(), sleep 10 seconds between tries
-#   retry_command 5 10 install_xyz || { abort "failed_to_install_xyz"; }
+#   retry_command 5 10 install_xyz || { abort "Failed to install_xyz"; }
 #
 # EXIT STATUS
 #   0 - Command executed successfully within the given attempts.
@@ -3425,7 +3426,7 @@ function secret_get {
   done
 
   bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
-  error "${FUNCNAME[0]}" 'failed_to_find_secret_value'
+  error "${FUNCNAME[0]}" "Failed to find secret value by key: '${KEY}'"
   return 1
 }
 export -f secret_get
@@ -4200,7 +4201,7 @@ export -f user_exists
 #   Dependent on the successful setting of the FF_CONTENT_URL environment variable.
 #
 # EXAMPLES
-#   discover_environment || abort "failed_to_discover_environment";
+#   discover_environment || abort "Failed to discover_environment";
 #
 # EXIT STATUS
 #   0 - Success, environment discovered and initialized.
@@ -4210,7 +4211,7 @@ export -f user_exists
 function discover_environment {
 
   # Check dependencies
-  local DEPENDENCIES="ff_agent_home_get_best ff_agent_get_best_ff_agent_uri ff_agent_get_best_ff_agent_fqdn ff_agent_get_best_ff_content_url abort"
+  local DEPENDENCIES="ff_agent_home_get_best ff_agent_get_best_ff_agent_uri ff_agent_get_best_ff_agent_uuid ff_agent_get_best_ff_agent_fqdn ff_agent_get_best_ff_content_url abort"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   ######################################################################
@@ -4223,6 +4224,7 @@ function discover_environment {
   # Also creates FF_AGENT_HOME directory.
   # Baseline installer must set the following environment variables:
   #  [x] FF_AGENT_HOME      (see ff_agent_home_get_best())
+  #  [x] FF_AGENT_UUID (see ff_agent_get_best_ff_agent_uuid())
   #  [x] FF_AGENT_URI (see ff_agent_get_best_ff_agent_uri())
   #  [x] FF_AGENT_USER_HOME (see ff_agent_home_get_best())
   #  [x] FF_AGENT_USERNAME  (see ff_agent_home_get_best())
@@ -4242,32 +4244,37 @@ function discover_environment {
   #  FF_PROXY_PROTOCOL
   #  FF_PROXY_USERNAME
   #
-  ff_agent_home_get_best || { abort "failed_to_ff_agent_home_get_best"; }
-  assert_ff_agent_home_exists || { abort "failed_to_assert_ff_agent_home_exists"; }
+  ff_agent_home_get_best || { abort "Failed to ff_agent_home_get_best"; }
+  assert_ff_agent_home_exists || { abort "Failed to assert_ff_agent_home_exists"; }
+
+  # Similarly for FF_AGENT_UUID
+  FF_AGENT_UUID=$( ff_agent_get_best_ff_agent_uuid )     || { abort "Failed to ff_agent_get_best_ff_agent_uuid"; }
+  secret_set ff_agent_uuid "${FF_AGENT_UUID}"
+  export FF_AGENT_UUID
 
   # Similarly for FF_AGENT_URI
-  FF_AGENT_URI=$( ff_agent_get_best_ff_agent_uri )     || { abort "failed_to_ff_agent_get_best_ff_agent_uri"; }
+  FF_AGENT_URI=$( ff_agent_get_best_ff_agent_uri )     || { abort "Failed to ff_agent_get_best_ff_agent_uri"; }
   secret_set ff_agent_uri "${FF_AGENT_URI}"
   export FF_AGENT_URI
 
   # Get best values, check errors, export and secret_set().
-  FF_CONTENT_URL=$( ff_agent_get_best_ff_content_url ) || { abort "failed_to_ff_agent_get_best_ff_content_url"; }
+  FF_CONTENT_URL=$( ff_agent_get_best_ff_content_url ) || { abort "Failed to ff_agent_get_best_ff_content_url"; }
   secret_set ff_content_url "${FF_CONTENT_URL}"
   export FF_CONTENT_URL
 
-  FF_AGENT_FQDN=$( ff_agent_get_best_ff_agent_fqdn )               || { abort "failed_to_ff_agent_get_best_ff_agent_fqdn"; }
+  FF_AGENT_FQDN=$( ff_agent_get_best_ff_agent_fqdn )               || { abort "Failed to ff_agent_get_best_ff_agent_fqdn"; }
   secret_set ff_agent_fqdn "${FF_AGENT_FQDN}"
   export FF_AGENT_FQDN
 
   # N_PREFIX is set in install_n() and added to ${FF_AGENT_HOME}/.profile
 
   # Similarly for best NAMESPACE
-  NAMESPACE=$( ff_agent_get_best_namespace ) || { abort "failed_to_ff_agent_get_best_namespace"; }
+  NAMESPACE=$( ff_agent_get_best_namespace ) || { abort "Failed to ff_agent_get_best_namespace"; }
   secret_set namespace "${NAMESPACE}"
   export NAMESPACE
 
   # Similarly for best ORGANIZATION
-  ORGANIZATION=$( ff_agent_get_best_organization ) || { abort "failed_to_ff_agent_get_best_organization"; }
+  ORGANIZATION=$( ff_agent_get_best_organization ) || { abort "Failed to ff_agent_get_best_organization"; }
   secret_set organization "${ORGANIZATION}"
   export ORGANIZATION
 }
@@ -4326,7 +4333,7 @@ function discover_optional_environment_variable {
 
   # Try to get value by "secret_get()"
   local NAME_LOWERCASE="$( echo "${NAME}" | tr '[:upper:]' '[:lower:]' )"
-  local RESTORED_VALUE=$( secret_get "${NAME_LOWERCASE}" )
+  local RESTORED_VALUE=$( secret_get "${NAME_LOWERCASE}" 2> /dev/null ) # Suppress error: secret_get failed_to_find_secret_value
   if [ -n "${RESTORED_VALUE}" ]; then
       # Got non-empty value from secrets, use it to export variable
       export "${NAME}"="${RESTORED_VALUE}"
@@ -4339,7 +4346,8 @@ function discover_optional_environment_variable {
       return 0
   fi
 
-  # Case: can't find variable value neither from "secret_get()" nor from "DEFAULT_VALUE". Not an error, but the variable remains unset
+  # Case: can't find variable value neither from "secret_get()" nor from "DEFAULT_VALUE".
+  # Not an error, but the variable remains unset
   return 0
 }
 export -f discover_optional_environment_variable
@@ -4508,10 +4516,10 @@ export -f epoch_ms_get
 #   is either taken from the environment, discovered through secrets, or generated anew.
 #
 # DEPENDENCIES
-#   Requires 'uuidgen' for generating new URIs if not previously set.
+#   discover_optional_environment_variable, error, ensure_variable_not_empty.
 #
 # EXAMPLES
-#   FF_AGENT_URI=$( ff_agent_get_best_ff_agent_uri ) || { state_set "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_agent_uri"; return 1; }
+#   FF_AGENT_URI=$( ff_agent_get_best_ff_agent_uri ) || { state_set "${FUNCNAME[0]}" "Failed to ff_agent_get_best_ff_agent_uri"; return 1; }
 #
 # EXIT STATUS
 #   0 - Success, FF_AGENT_URI chosen and printed to standard output.
@@ -4521,17 +4529,17 @@ export -f epoch_ms_get
 function ff_agent_get_best_ff_agent_uri {
 
   # Check dependencies
-  local DEPENDENCIES="discover_optional_environment_variable uuidgen error ensure_variable_not_empty"
+  local DEPENDENCIES="discover_optional_environment_variable error ensure_variable_not_empty"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Try to get FF_AGENT_URI from environment or by secret_get()
-  discover_optional_environment_variable "FF_AGENT_URI" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable"; return 1; }
+  discover_optional_environment_variable "FF_AGENT_URI" || { error "${FUNCNAME[0]}" "Failed to discover optional environment variable FF_AGENT_URI"; return 1; }
 
-  # Check if variable already set. If not set - generate new uuid
+  # Check if variable already set. If not set - generate new value
   if [ -z "${FF_AGENT_URI}" ]; then
       # Generate new uuid, check errors, export new value
       local UUID
-      UUID="$( ff_uuid )" || { error "${FUNCNAME[0]}" "failed_to_generate_new_uuid"; return 1; }
+      UUID="$( ff_agent_get_best_ff_agent_uuid )" || { error "${FUNCNAME[0]}" "Failed to ff_agent_get_best_ff_agent_uuid"; return 1; }
       FF_AGENT_URI="/agent/agent_uuid/${UUID}"
   fi
 
@@ -4549,6 +4557,56 @@ export -f ff_agent_get_best_ff_agent_uri
 #   DISCOVERY
 #
 # NAME
+#   ff_agent_get_best_ff_agent_uuid - Determines the best FF_AGENT_UUID value.
+#
+# SYNOPSIS
+#   ff_agent_get_best_ff_agent_uuid
+#
+# DESCRIPTION
+#   Attempts to discover or generate the best FF_AGENT_UUID value. If the environment
+#   variable FF_AGENT_UUID is not set, a new UUID is generated using ff_uuid. The result
+#   is either taken from the environment, discovered through secrets, or generated anew.
+#
+# DEPENDENCIES
+#   discover_optional_environment_variable, ff_uuid, error, ensure_variable_not_empty.
+#
+# EXAMPLES
+#   FF_AGENT_UUID=$( ff_agent_get_best_ff_agent_uuid ) || { state_set "${FUNCNAME[0]}" "Failed to ff_agent_get_best_ff_agent_uuid"; return 1; }
+#
+# EXIT STATUS
+#   0 - Success, FF_AGENT_UUID chosen and printed to standard output.
+#   1 - Failure, unable to determine FF_AGENT_UUID.
+#
+###############################################################################
+function ff_agent_get_best_ff_agent_uuid {
+
+  # Check dependencies
+  local DEPENDENCIES="discover_optional_environment_variable ff_uuid error ensure_variable_not_empty"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
+  # Try to get FF_AGENT_UUID from environment or by secret_get()
+  discover_optional_environment_variable "FF_AGENT_UUID" || { error "${FUNCNAME[0]}" "failed to discover optional environment variable FF_AGENT_UUID"; return 1; }
+
+  # Check if variable already set. If not set - generate new uuid
+  if [ -z "${FF_AGENT_UUID}" ]; then
+      # Generate new FF_AGENT_UUID, check errors, export new value
+      FF_AGENT_UUID="$( ff_uuid )" || { error "${FUNCNAME[0]}" "failed to generate new uuid"; return 1; }
+  fi
+
+  # At this point we must have not empty FF_AGENT_UUID value.
+  # Make sure the variable is now not empty or error out.
+  ensure_variable_not_empty 'FF_AGENT_UUID' || { error "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_agent_uuid"; return 1; }
+
+  # Print result to standard output, set state to 'success' and return success code.
+  echo "${FF_AGENT_UUID}"
+}
+export -f ff_agent_get_best_ff_agent_uuid
+
+###############################################################################
+# CATEGORY
+#   DISCOVERY
+#
+# NAME
 #   ff_agent_get_best_ff_content_url - Determines the best FF_CONTENT_URL value.
 #
 # SYNOPSIS
@@ -4560,7 +4618,7 @@ export -f ff_agent_get_best_ff_agent_uri
 #   are correctly formatted and accessible.
 #
 # EXAMPLES
-#   FF_CONTENT_URL=$( ff_agent_get_best_ff_content_url ) || { state_set "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_content_url"; return 1; }
+#   FF_CONTENT_URL=$( ff_agent_get_best_ff_content_url ) || { state_set "${FUNCNAME[0]}" "Failed to ff_agent_get_best_ff_content_url"; return 1; }
 #
 # EXIT STATUS
 #   0 - Success, FF_CONTENT_URL chosen and printed to standard output.
@@ -4574,7 +4632,7 @@ function ff_agent_get_best_ff_content_url {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Try to get FF_CONTENT_URL from environment or by secret_get()
-  discover_optional_environment_variable "FF_CONTENT_URL" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable"; return 1; }
+  discover_optional_environment_variable "FF_CONTENT_URL" || { error "${FUNCNAME[0]}" "Failed to discover_optional_environment_variable"; return 1; }
 
   # Remove trailing slash from FF_CONTENT_URL, so it works correctly when we concatenate
   # FF_CONTENT_URL with other path components (e.g.: ${}/subfolder/file.txt)
@@ -4605,7 +4663,7 @@ export -f ff_agent_get_best_ff_content_url
 #   reflects the host's identity within the system or network.
 #
 # EXAMPLES
-#   UPLOAD_TO=$( ff_agent_get_best_ff_agent_fqdn ) || { state_set "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_ff_agent_fqdn"; return 1; }
+#   UPLOAD_TO=$( ff_agent_get_best_ff_agent_fqdn ) || { state_set "${FUNCNAME[0]}" "Failed to ff_agent_get_best_ff_agent_fqdn"; return 1; }
 #
 # EXIT STATUS
 #   0 - Success, FF_AGENT_FQDN chosen and printed to standard output.
@@ -4619,7 +4677,7 @@ function ff_agent_get_best_ff_agent_fqdn {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Try to get FF_AGENT_FQDN from environment or by secret_get()
-  discover_optional_environment_variable "FF_AGENT_FQDN" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_ff_agent_fqdn"; return 1; } # Note: FF_AGENT_FQDN: FF_AGENT_FQDN will be set to legacy portal hostname if this is a portal.
+  discover_optional_environment_variable "FF_AGENT_FQDN" || { error "${FUNCNAME[0]}" "Failed to discover_optional_environment_variable_ff_agent_fqdn"; return 1; } # Note: FF_AGENT_FQDN: FF_AGENT_FQDN will be set to legacy portal hostname if this is a portal.
 
   # Check if variable already set. If not try to get it's value by command 'hostname'
   [ -z "${FF_AGENT_FQDN}" ] && { FF_AGENT_FQDN="$( hostname )"; }
@@ -4648,7 +4706,7 @@ export -f ff_agent_get_best_ff_agent_fqdn
 #   within the correct namespace context.
 #
 # EXAMPLES
-#   NAMESPACE=$(ff_agent_get_best_namespace) || { state_set "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_namespace"; return 1; }
+#   NAMESPACE=$(ff_agent_get_best_namespace) || { state_set "${FUNCNAME[0]}" "Failed to ff_agent_get_best_namespace"; return 1; }
 #
 # EXIT STATUS
 #   0 - Success, NAMESPACE chosen and printed to standard output.
@@ -4662,7 +4720,7 @@ function ff_agent_get_best_namespace {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Try to get value from environment or by secret_get()
-  discover_optional_environment_variable "NAMESPACE" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_namespace"; return 1; }
+  discover_optional_environment_variable "NAMESPACE" || { error "${FUNCNAME[0]}" "Failed to discover_optional_environment_variable_namespace"; return 1; }
 
   # Check if variable already set. If not set it to our default "system.local" namespace: '00000000-0000-0000-0000-000000000000'.
   [ -z "${NAMESPACE}" ] && { NAMESPACE='00000000-0000-0000-0000-000000000000'; }
@@ -4692,7 +4750,7 @@ export -f ff_agent_get_best_namespace
 #
 # EXAMPLES
 #   ORGANIZATION=$(ff_agent_get_best_organization) || {
-#     state_set "${FUNCNAME[0]}" "failed_to_ff_agent_get_best_organization"; return 1;
+#     state_set "${FUNCNAME[0]}" "Failed to ff_agent_get_best_organization"; return 1;
 #   }
 #
 # EXIT STATUS
@@ -4707,7 +4765,7 @@ function ff_agent_get_best_organization {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Try to get value from environment or by secret_get()
-  discover_optional_environment_variable "ORGANIZATION" || { error "${FUNCNAME[0]}" "failed_to_discover_optional_environment_variable_organization"; return 1; }
+  discover_optional_environment_variable "ORGANIZATION" || { error "${FUNCNAME[0]}" "Failed to discover_optional_environment_variable_organization"; return 1; }
 
   # Check if variable already set. If not set it to our default organization "system.local"
   [ -z "${ORGANIZATION}" ] && { ORGANIZATION='system.local'; }
@@ -4740,7 +4798,7 @@ export -f ff_agent_get_best_organization
 #
 # EXAMPLES
 #   NEW_UUID=$(ff_uuid) || {
-#     state_set "${FUNCNAME[0]}" "failed_to_ff_uuid"; return 1;
+#     state_set "${FUNCNAME[0]}" "Failed to ff_uuid"; return 1;
 #   }
 #
 # EXIT STATUS
@@ -5308,7 +5366,7 @@ function current_user_get {
     # The USER environment variable is blank.
     # Try to get current username by 'whoami'
     USER="$( whoami )" || { error "${FUNCNAME[0]}" "ERROR whoami command failed"; return 1; }
-    [ -n "${USER}" ] || { error "${FUNCNAME[0]}" "failed_to_current_user_get"; return 1; }
+    [ -n "${USER}" ] || { error "${FUNCNAME[0]}" "Failed to current_user_get"; return 1; }
   fi
 
   # Print username to standard output
@@ -5639,9 +5697,9 @@ function publish_message {
 
   # Preserve current bash echo settings and enable bash echo setting
   # Note: can't use state_set here otherwize will fall into recursive loop
-  BASH_ECHO_SETTINGS=$( bash_echo_setting_get ) || { error "${FUNCNAME[0]}" "failed_to_bash_echo_setting_get"; return 1; }
+  BASH_ECHO_SETTINGS=$( bash_echo_setting_get ) || { error "${FUNCNAME[0]}" "Failed to bash_echo_setting_get"; return 1; }
 
-  bash_echo_off_set || { error "${FUNCNAME[0]}" "failed_to_bash_echo_off_set"; return 1; }
+  bash_echo_off_set || { error "${FUNCNAME[0]}" "Failed to bash_echo_off_set"; return 1; }
 
   # Read piped json
   INPUT_JSON=`cat`
