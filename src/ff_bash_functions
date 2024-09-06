@@ -4679,8 +4679,8 @@ function ff_agent_get_best_ff_agent_fqdn {
   # Try to get FF_AGENT_FQDN from environment or by secret_get()
   discover_optional_environment_variable "FF_AGENT_FQDN" || { error "${FUNCNAME[0]}" "Failed to discover_optional_environment_variable_ff_agent_fqdn"; return 1; } # Note: FF_AGENT_FQDN: FF_AGENT_FQDN will be set to legacy portal hostname if this is a portal.
 
-  # Check if variable already set. If not try to get it's value by command 'hostname'
-  [ -z "${FF_AGENT_FQDN}" ] && { FF_AGENT_FQDN="$( hostname )"; }
+  # Check if variable already set. If not try to get it's value by command 'hostname --fqdn'
+  [ -z "${FF_AGENT_FQDN}" ] && { FF_AGENT_FQDN="$( hostname --fqdn )"; }
 
   # Make sure the variable is now not empty or error out.
   ensure_variable_not_empty 'FF_AGENT_FQDN' || { error "${FUNCNAME[0]}" "error_ensure_variable_not_empty_ff_agent_fqdn"; return 1; }
