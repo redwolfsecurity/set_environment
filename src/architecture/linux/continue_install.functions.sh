@@ -396,6 +396,36 @@ function install_ff_agent {
     abort "${FUNCNAME[0]}" 'failed_to_pm2_save'
   }
 
+  # Create "ff_agent_update" script
+  TARGET_FILE="${FF_AGENT_HOME}/bin/ff_agent_update"
+
+  # Create ff_agent_update file
+  (
+      cat <<EOT
+#!/usr/bin/env bash --login
+
+# This script will update @ff/ff_agent@latest and restart it (using pm2).
+# The script ${TARGET_FILE} was created by set_environment ${FUNCNAME[0]}() on $(date --utc).
+
+# Check set_environment is working
+set_environment_is_working || { state_set "\${FUNCNAME[0]}" "Error: set_environment_is_working() failed."; exit 1; }
+
+# Install @ff/ff_agent@latest
+npm install --global @ff/ff_agent@${VERSION} || { state_set "\${FUNCNAME[0]}" "Failed to npm install @ff/ff_agent@${VERSION}"; exit 1; }
+
+# Show installed @ff/ff_agent@latest version
+local FF_AGENT_VERSION
+FF_AGENT_VERSION=\$( cat \${FF_AGENT_HOME}/.n/lib/node_modules/@ff/ff_agent/package.json | grep '"version"' )
+echo "Checking installed @ff/ff_agent@latest version: '\${FF_AGENT_VERSION}'"
+
+# Restart pm2
+pm2 restart all --update-env || { state_set "\${FUNCNAME[0]}" "Failed to pm2 restart all"; exit 1; }
+EOT
+  ) > "${TARGET_FILE}" || { state_set "${FUNCNAME[0]}" "Failed to create '${TARGET_FILE}'"; return 1; }
+
+  # Make executable
+  chmod a+x ff_agent_update || { state_set "${FUNCNAME[0]}" "Failed to chmod '${TARGET_FILE}'"; return 1; }
+
   state_set "${FUNCNAME[0]}" 'success'
 }
 export -f install_ff_agent
