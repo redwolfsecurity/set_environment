@@ -421,10 +421,10 @@ echo "Checking installed @ff/ff_agent@latest version: '\${FF_AGENT_VERSION}'"
 # Restart pm2
 pm2 restart all --update-env || { state_set "\${FUNCNAME[0]}" "Failed to pm2 restart all"; exit 1; }
 EOT
-  ) > "${TARGET_FILE}" || { state_set "${FUNCNAME[0]}" "Failed to create '${TARGET_FILE}'"; return 1; }
+  ) > "${TARGET_FILE}" || { state_set "${FUNCNAME[0]}" "failed_to_create_file"; return 1; }
 
   # Make executable
-  chmod a+x "${TARGET_FILE}" || { state_set "${FUNCNAME[0]}" "Failed to chmod '${TARGET_FILE}'"; return 1; }
+  chmod a+x "${TARGET_FILE}" || { state_set "${FUNCNAME[0]}" "failed_to_chmod_file"; return 1; }
 
   state_set "${FUNCNAME[0]}" 'success'
 }
