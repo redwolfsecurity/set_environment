@@ -424,7 +424,7 @@ EOT
   ) > "${TARGET_FILE}" || { state_set "${FUNCNAME[0]}" "Failed to create '${TARGET_FILE}'"; return 1; }
 
   # Make executable
-  chmod a+x ff_agent_update || { state_set "${FUNCNAME[0]}" "Failed to chmod '${TARGET_FILE}'"; return 1; }
+  chmod a+x "${TARGET_FILE}" || { state_set "${FUNCNAME[0]}" "Failed to chmod '${TARGET_FILE}'"; return 1; }
 
   state_set "${FUNCNAME[0]}" 'success'
 }
