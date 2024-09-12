@@ -1017,6 +1017,9 @@ function install_set_environment_baseline {
   # Put logs in best location
   setup_logging || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_setup_logging"; abort; }
 
+  # Ensure ff_agent/bin folder exists before assert_baseline_components
+  set_environment_ensure_ff_agent_bin_exists || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_set_environment_ensure_ff_agent_bin_exists"; abort; }
+
   # Install set of basic packages, bash functions, .bashrc and .profile files
   assert_clean_exit assert_baseline_components || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_assert_baseline_components"; abort; }
 
