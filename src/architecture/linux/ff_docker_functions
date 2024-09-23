@@ -12,7 +12,7 @@
 #    - docker_ensure
 #    - docker_ensure_log_to_syslog
 #    - docker_get_default_minimum_major_version
-#    - docker_get_installed_version
+#    - docker_version_get
 #    - docker_install
 #    - docker_is_container_healthy
 #    - docker_is_container_log_to_syslog
@@ -354,10 +354,10 @@ export -f docker_get_default_minimum_major_version
 #   DOCKER VERSION MANAGEMENT FUNCTIONS
 #
 # NAME
-#   docker_get_installed_version - Retrieves the version of the installed Docker daemon.
+#   docker_version_get - Retrieves the version of the installed Docker daemon.
 #
 # SYNOPSIS
-#   docker_get_installed_version
+#   docker_version_get
 #
 # DESCRIPTION
 #   Determines the version of the Docker daemon currently installed on the system and outputs it
@@ -368,7 +368,7 @@ export -f docker_get_default_minimum_major_version
 #
 # USAGE EXAMPLE
 #   # Retrieve and display the installed Docker version
-#   installed_version=$(docker_get_installed_version)
+#   installed_version=$(docker_version_get)
 #   if [ $? -eq 0 ]; then
 #       echo "Docker version: ${installed_version}"
 #   else
@@ -380,7 +380,7 @@ export -f docker_get_default_minimum_major_version
 #   1 - Dependency check failed, Docker not found, or version retrieval failed.
 #
 ###############################################################################
-function docker_get_installed_version {
+function docker_version_get {
 
   # Check dependencies
   local DEPENDENCIES="docker error"
@@ -400,7 +400,7 @@ function docker_get_installed_version {
   echo "${INSTALLED_VERSION}"
 
 }
-export -f docker_get_installed_version
+export -f docker_version_get
 
 ###############################################################################
 # CATEGORY
@@ -1484,7 +1484,7 @@ export -f docker_login_legacy
 #   state to indicate success or error code because it is a complex multi-step function.
 #
 # DEPENDENCIES
-#   Requires 'state_set', 'docker_is_installed', 'docker_get_installed_version', 'semantic_version_parse', and
+#   Requires 'state_set', 'docker_is_installed', 'docker_version_get', 'semantic_version_parse', and
 #   'docker_get_default_minimum_major_version' utilities.
 #
 # EXAMPLES
@@ -1501,7 +1501,7 @@ function docker_minimal_version_check {
   state_set "${FUNCNAME[0]}" 'started'
 
   # Check dependencies
-  local DEPENDENCIES="state_set docker_is_installed docker_get_installed_version semantic_version_parse docker_get_default_minimum_major_version"
+  local DEPENDENCIES="state_set docker_is_installed docker_version_get semantic_version_parse docker_get_default_minimum_major_version"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Take optional MINIMUM_MAJOR_VERSION argument, if empty, then set default value
@@ -1516,7 +1516,7 @@ function docker_minimal_version_check {
 
   # Get full docker version (example: 23.0.1)
   local INSTALLED_VERSION
-  INSTALLED_VERSION="$( docker_get_installed_version )" || { state_set "${FUNCNAME[0]}" "failed_to_get_installed_docker_version"; return 1; }
+  INSTALLED_VERSION="$( docker_version_get )" || { state_set "${FUNCNAME[0]}" "failed_to_get_installed_docker_version"; return 1; }
 
   # Extract major version component from docker version (example: 23)
   # Note the semantic_version_parse() checked its return value is not blank
