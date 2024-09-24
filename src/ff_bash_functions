@@ -4796,51 +4796,6 @@ export -f ff_agent_get_best_organization
 # DEPENDENCIES
 #   Requires the uuidgen command; attempts to install if not present.
 #
-###############################################################################
-# CATEGORY
-#   UTILITY FUNCTIONS: FILE
-#
-# NAME
-#   file_contains_pattern - Checks if a file contains a given regex pattern.
-#
-# SYNOPSIS
-#   file_contains_pattern FILEPATH PATTERN
-#
-# DESCRIPTION
-#   Searches for a specified regular expression PATTERN within a file at FILEPATH.
-#   PATTERN - The pattern is the POSIX regular expression:
-#             https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap09.html#tag_09_04
-#             but with platform-specific extensions (which vary in extent and can be incompatible).
-#             On Linux platforms (GNU userland), see man grep; on macOS/BSD platforms, see man re_format.#
-#
-# USAGE EXAMPLE
-#   file_contains_pattern /path/to/file.txt "pattern"
-#
-# EXIT STATUS
-#   0 - Pattern found.
-#   1 - Pattern not found.
-#
-###############################################################################
-function file_contains_pattern {
-
-    # Check dependencies
-    local DEPENDENCIES="grep"
-    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
-
-    FILE="${1}"
-    PATTERN="${2}"
-
-    if [ ! -e "${FILE}" ]; then
-        return 1
-    fi
-    if [  -z "${PATTERN}" ]; then
-        return 1
-    fi
-    grep --quiet --text "${PATTERN}" "${FILE}"
-}
-export -f file_contains_pattern
-
-
 #   NEW_UUID=$(ff_uuid) || {
 #     state_set "${FUNCNAME[0]}" "Failed to ff_uuid"; return 1;
 #   }
