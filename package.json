@@ -18,7 +18,7 @@
   },
   "homepage": "https://github.com/redwolfsecurity/set_environment#readme",
   "dependencies": {
-    "aws-sdk": "^2.1070.0"
+    "aws-sdk": "^2.1354.0"
   },
   "engines" : { 
     "npm" : ">=8.1.0",
