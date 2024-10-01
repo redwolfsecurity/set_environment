@@ -3199,18 +3199,18 @@ export -f service_is_running
 # USAGE EXAMPLE
 #
 # EXIT STATUS
-#   0 - 
-#   1 - 
+#   0 -
+#   1 -
 #
 ###############################################################################
-function security_hardening() {
-  # TODO
-    # - root created files with wrong umask: it makes group and world readable by default
-  	# - Change it so the new file is NOT world readable
-  	# - Do the same for your own user 'dmitry'
-  	# - GOAL: to learn what we need to do so in 2024 we can create a 'security_hardening()' for all.
-  	# - Create 'security_hardening' functions file in 'set_environment'
-}
+# function security_hardening() {
+#   # TODO
+#     # - root created files with wrong umask: it makes group and world readable by default
+#   	# - Change it so the new file is NOT world readable
+#   	# - Do the same for your own user 'dmitry'
+#   	# - GOAL: to learn what we need to do so in 2024 we can create a 'security_hardening()' for all.
+#   	# - Create 'security_hardening' functions file in 'set_environment'
+# }
 ## END UTILITY FUNCTIONS: USER / SECURITY
 
 ### BEGIN UTILITY FUNCTIONS: STATE/SECRETS
