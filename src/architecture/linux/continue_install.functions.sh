@@ -402,7 +402,7 @@ function install_ff_agent {
   # Create ff_agent_update file
   (
       cat <<EOT
-#!/usr/bin/env bash --login
+#!/usr/bin/bash --login
 
 # This script will update @ff/ff_agent@latest and restart it (using pm2).
 # The script ${TARGET_FILE} was created by set_environment ${FUNCNAME[0]}() on $(date --utc).
@@ -417,6 +417,9 @@ npm install --global @ff/ff_agent@${VERSION} || { state_set "\${FUNCNAME[0]}" "F
 local FF_AGENT_VERSION
 FF_AGENT_VERSION=\$( cat \${FF_AGENT_HOME}/.n/lib/node_modules/@ff/ff_agent/package.json | grep '"version"' )
 echo "Checking installed @ff/ff_agent@latest version: '\${FF_AGENT_VERSION}'"
+
+# Flush pm2
+pm2 flush || { state_set "\${FUNCNAME[0]}" "Failed to pm2 flush"; exit 1; }
 
 # Restart pm2
 pm2 restart all --update-env || { state_set "\${FUNCNAME[0]}" "Failed to pm2 restart all"; exit 1; }
