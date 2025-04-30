@@ -1174,7 +1174,7 @@ EOT
 
   #
   VERSION=$( nodejs_desired_version_get )
-  [ -z "${VERSION}" ] && { state_set "${FUNCNAME[0]}" 'failed_to_nodejs_desired_version_get'; abort; }
+  [ -z "${VERSION}" ] && { state_set "${FUNCNAME[0]}" 'failed_to_nodejs_desired_version_get'; abort 'failed_to_nodejs_desired_version_get'; }
 
   # Install 'n_lts' using dowloaded into TMPDIR 'n' ('n_lts' will be installed into ff_agent/.n)
   retry_command 5 15 bash n "${VERSION}" || {
@@ -1216,14 +1216,14 @@ function install_nodejs {
 
   # Get desired nodejs version
   local VERSION="$( nodejs_desired_version_get )"
-  [ -z "${VERSION}" ] && { state_set "${FUNCNAME[0]}" 'failed_to_nodejs_desired_version_get'; abort; }
+  [ -z "${VERSION}" ] && { state_set "${FUNCNAME[0]}" 'failed_to_nodejs_desired_version_get'; abort 'failed_to_nodejs_desired_version_get'; }
 
 
   # # We need to stop pm2 before replacing location of nodejs, otherwise any pm2 command would faild
   # stop_pm2
-  # uninstall_n_outside_ff_agent_home  || { state_set "${FUNCNAME[0]}" 'terminal_error_uninstall_n_outside_ff_agent_home'; abort; }
-  install_n || { state_set "${FUNCNAME[0]}" 'terminal_error_install_n'; abort; }
-  n install "${VERSION}" || { state_set "${FUNCNAME[0]}" 'terminal_error_switching_node_version'; abort; }
+  # uninstall_n_outside_ff_agent_home  || { state_set "${FUNCNAME[0]}" 'terminal_error_uninstall_n_outside_ff_agent_home'; abort 'terminal_error_uninstall_n_outside_ff_agent_home'; }
+  install_n || { state_set "${FUNCNAME[0]}" 'terminal_error_install_n'; abort 'terminal_error_install_n'; }
+  n install "${VERSION}" || { state_set "${FUNCNAME[0]}" 'terminal_error_switching_node_version'; abort 'terminal_error_switching_node_version'; }
 
   state_set "${FUNCNAME[0]}" 'success'
 }
@@ -1247,9 +1247,9 @@ function install_nodejs_suite {
 
   # We want nodejs to be able to open ports 443 and 80, so we will install_authbind before this.
 
-  install_authbind || { state_set "${FUNCNAME[0]}" 'install_authbind_failed'; abort; }
+  install_authbind || { state_set "${FUNCNAME[0]}" 'install_authbind_failed'; abort 'install_authbind_failed'; }
 
-  install_nodejs || { state_set "${FUNCNAME[0]}" 'terminal_error_install_node'; abort; }
+  install_nodejs || { state_set "${FUNCNAME[0]}" 'terminal_error_install_node'; abort 'terminal_error_install_node'; }
 
   state_set "${FUNCNAME[0]}" 'success'
 }
@@ -1283,13 +1283,13 @@ function install_set_environment_baseline {
   state_set "${FUNCNAME[0]}" 'started'
 
   # Put logs in best location
-  setup_logging || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_setup_logging"; abort; }
+  setup_logging || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_setup_logging"; abort 'terminal_error_failed_to_setup_logging'; }
 
   # Ensure ff_agent/bin folder exists before assert_baseline_components
-  set_environment_ensure_ff_agent_bin_exists || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_set_environment_ensure_ff_agent_bin_exists"; abort; }
+  set_environment_ensure_ff_agent_bin_exists || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_set_environment_ensure_ff_agent_bin_exists"; abort 'terminal_error_failed_to_set_environment_ensure_ff_agent_bin_exists'; }
 
   # Install set of basic packages, bash functions, .bashrc and .profile files
-  assert_clean_exit assert_baseline_components || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_assert_baseline_components"; abort; }
+  assert_clean_exit assert_baseline_components || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_assert_baseline_components"; abort 'terminal_error_failed_to_assert_baseline_components'; }
 
   state_set "${FUNCNAME[0]}" 'success'
 }
@@ -1509,7 +1509,7 @@ function pm2_ensure {
 
     # It is not running as me, it might not be installed. If that's the case, we install it.
     # Is pm2 installed? If not, install it
-    pm2_is_installed || pm2_install || { state_set "${FUNCNAME[0]}" 'error_failed_to_install_pm2'; abort; }
+    pm2_is_installed || pm2_install || { state_set "${FUNCNAME[0]}" 'error_failed_to_install_pm2'; abort 'error_failed_to_install_pm2'; }
 
     # Now it has to at least be installed, and not running, so we try to start it.
     pm2_start || { state_set "${FUNCNAME[0]}" 'failed_to_start_pm2'; abort 'failed_to_start_pm2'; }
