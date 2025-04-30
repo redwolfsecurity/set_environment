@@ -1634,7 +1634,8 @@ function pm2_start {
     # Define dependencies
     local DEPENDENCIES=(
       "command_exists"
-      "process_is_running_as_me"
+      "pm2"
+      "pm2_is_running_as_me"
     )
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
       state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
@@ -1668,7 +1669,8 @@ function pm2_stop {
     # Define dependencies
     local DEPENDENCIES=(
       "command_exists"
-      "process_is_running_as_me"
+      "pm2"
+      "pm2_is_running_as_me"
     )
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
       state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
