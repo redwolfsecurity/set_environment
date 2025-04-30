@@ -1653,7 +1653,7 @@ function pm2_start {
     # So it is not sufficient to test for return code, but if it is running as me, then it is at least started
     pm2_is_running_as_me && { state_set "${FUNCNAME[0]}" 'success'; return 0; }
 
-    state_set "${FUNCNAME[0]}" 'error_failed_to_start_pm2'
+    state_set "${FUNCNAME[0]}" 'failed_to_pm2_start'
 }
 export -f pm2_start
 

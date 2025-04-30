@@ -3056,11 +3056,13 @@ export -f terminal_is_tty
 # USAGE EXAMPLE
 #   terminal_reset
 #
-################################################################################function terminal_reset {
+################################################################################
+function terminal_reset {
 
-  # Check dependencies
-  local DEPENDENCIES="command_exists terminal_is_tty tput error"
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1
+  ### We ca not check dependencieshere, this function used on early installation stages and the "check_dependencies()" isn't available yet.
+  # # Check dependencies
+  # local DEPENDENCIES="command_exists terminal_is_tty tput error"
+  # check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1
 
   # Proceed only if in a terminal and tput is available
   if terminal_is_tty && command_exists tput >/dev/null; then
