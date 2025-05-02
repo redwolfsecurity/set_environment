@@ -2952,6 +2952,11 @@ export -f terminal_reset
 #
 ###############################################################################
 function check_dependencies {
+    # Save current shell options
+    local SHELL_OPTIONS_OLD
+    SHELL_OPTIONS_OLD="$(set +o)"
+    # Disable tracing
+    set +x
 
     # Get 1st argument: caller function name
     local CALLER_FUNCTION_NAME="${1}"
@@ -2966,12 +2971,16 @@ function check_dependencies {
 
     # Ensure the caller function name is provided
     if [[ -z "${CALLER_FUNCTION_NAME}" ]]; then
+        # Restore old shell options
+        eval "${SHELL_OPTIONS_OLD}"
         error "${CALLER_FUNCTION_NAME}" "CALLER_FUNCTION_NAME must not be empty"
         return 1
     fi
 
     # Ensure there is at least one dependency to check
     if [[ ${#DEPENDENCIES[@]} -eq 0 ]]; then
+        # Restore old shell options
+        eval "${SHELL_OPTIONS_OLD}"
         error "${CALLER_FUNCTION_NAME}" "At least one dependency must be specified"
         return 1
     fi
@@ -2993,12 +3002,18 @@ function check_dependencies {
         # Convert the array to a string with spaces separating elements
         local MISSING_LIST=$(IFS=' ' ; echo "${MISSING_DEPENDENCIES[*]}")
         if [[ "${MISSING_DEPENDENCY_COUNT}" -eq 1 ]]; then
+            # Restore old shell options
+            eval "${SHELL_OPTIONS_OLD}"
             error "${CALLER_FUNCTION_NAME}" "Dependency not met: ${MISSING_LIST}"
         else
+            # Restore old shell options
+            eval "${SHELL_OPTIONS_OLD}"
             error "${CALLER_FUNCTION_NAME}" "Dependencies not met: ${MISSING_LIST}"
         fi
         return 1
     fi
+    # Restore old shell options
+    eval "${SHELL_OPTIONS_OLD}"
 }
 
 # Export the function if you need to use it in scripts sourced from this script
@@ -3656,6 +3671,12 @@ export -f state_get
 #
 ###############################################################################
 function state_set {
+# Save current shell options
+  local OLD_SHELL_OPTS
+  OLD_SHELL_OPTS="$(set +o)"
+
+  # Disable tracing
+  set +x
 
   # Check dependencies
   local DEPENDENCIES=(
@@ -3668,23 +3689,25 @@ function state_set {
     "ff_uuid"
     "command_exists"
   )
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || return 1  # Note: check_dependencies will report missing dependencies
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  eval "${OLD_SHELL_OPTS}"
+; return 1 }  # Note: check_dependencies will report missing dependencies
 
   # Get 2 arguments: state and value
   local STATE_NAME="${1}"
   local STATE_VALUE="${2}"
 
   # Check state name / value aren't blank
-  [ -n "${STATE_NAME}" ] || { error "state_set(): blank state name argument"; return 1; }
-  [ -n "${STATE_VALUE}" ] || { error "state_set(): blank state value argument"; return 1; }
+  [ -n "${STATE_NAME}" ] || { error "state_set(): blank state name argument"; eval "${OLD_SHELL_OPTS}"; return 1; }
+  [ -n "${STATE_VALUE}" ] || { error "state_set(): blank state value argument"; eval "${OLD_SHELL_OPTS}"; return 1; }
 
   # Check if state name / vaue contains any prohibited symbols, then error out.
-  [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { error "state_set(): illigal characters in the state name argument: '${BASH_REMATCH[1]}'"; return 1; }
-  [[ ! "${STATE_VALUE}" =~ ([^a-z0-9_]+) ]] || { error "state_set(): illigal characters in the state value argument: '${BASH_REMATCH[1]}'"; return 1; }
+  [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { error "state_set(): illegal characters in the state name argument: '${BASH_REMATCH[1]}'"; eval "${OLD_SHELL_OPTS}"; return 1; }
+  [[ ! "${STATE_VALUE}" =~ ([^a-z0-9_]+) ]] || { error "state_set(): illegal characters in the state value argument: '${BASH_REMATCH[1]}'"; eval "${OLD_SHELL_OPTS}"; return 1; }
 
   # Make sure "${FF_AGENT_HOME}" is not empty
   if [ -z "${FF_AGENT_HOME}" ]; then
       error "Can not set state. FF_AGENT_HOME variable not set. State would have been set to ${STATE_NAME}=${STATE_VALUE}"
+      eval "${OLD_SHELL_OPTS}"
       return 1
   fi
 
@@ -3695,7 +3718,8 @@ function state_set {
 
     mkdir -p "${STATE_DIR}" || {
       error "Can not set state. State directory ${STATE_DIR} can not be created. State would have been set to ${STATE_NAME}=${STATE_VALUE}"
-      return 1;
+      eval "${OLD_SHELL_OPTS}"
+      return 1
     }
   fi
 
@@ -3703,7 +3727,11 @@ function state_set {
   local STATE_FILE="${STATE_DIR}/${STATE_NAME}"
 
   # Write value into the file
-  echo "${STATE_VALUE}" >"${STATE_FILE}" || { error "${FUNCNAME[0]}: failed_to_write_state. State would have been set to ${STATE_NAME}=${STATE_VALUE}"; return 1; }
+  echo "${STATE_VALUE}" >"${STATE_FILE}" || {
+    error "${FUNCNAME[0]}: failed_to_write_state. State would have been set to ${STATE_NAME}=${STATE_VALUE}"
+    eval "${OLD_SHELL_OPTS}"
+    return 1
+  }
 
   # ------------------ Build JSON object "state/change" and send to FF_AGENT_API_FQDN
 
@@ -3714,7 +3742,9 @@ function state_set {
   if [ "$( is_framework_api_defined )" != "true" ]; then
     # No, the framework API is not defined. Simply return, we're done.
     # Return with success code 0
-    return 0
+    echo "${FUNCNAME[0]}: framework API is not defined, skipping state/change message."
+    eval "${OLD_SHELL_OPTS}"
+    return 1
   fi
 
   # Temporary: On early stages the FF_AGENT_URI is not yet defined. Check & log it if this is the case.
@@ -3728,10 +3758,18 @@ function state_set {
 
   # Get current epoch time
   local TIMESTAMP_EPOCH_MS
-  TIMESTAMP_EPOCH_MS="$( epoch_ms_get )" || { error "${FUNCNAME[0]}: failed to get time by calling epoch_ms_get()"; return 1; }
+  TIMESTAMP_EPOCH_MS="$( epoch_ms_get )" || {
+    error "${FUNCNAME[0]}: failed to get time by calling epoch_ms_get()"
+    eval "${OLD_SHELL_OPTS}"
+    return 1
+    }
 
   # Check if we actually got non-empty string?
-  [ -n "${TIMESTAMP_EPOCH_MS}" ] || { error "${FUNCNAME[0]}: got empty timestamp_epoch_ms value"; return 1; }
+  [ -n "${TIMESTAMP_EPOCH_MS}" ] || {
+    error "${FUNCNAME[0]}: got empty timestamp_epoch_ms value"
+    eval "${OLD_SHELL_OPTS}"
+    return 1
+  }
 
   # If state value contains: success|running, then: "is_success": true
   # else
@@ -3760,7 +3798,11 @@ function state_set {
   # Compose "state/chate" JSON and pipe it to publish_message()
   # Note: we POST "state/change" JSON to ff_agent_api_fqdn. (from portal to self, from 'traffic generator' to portal, from 'inside docker' to (agent?)).
   local UUID
-  UUID="$( ff_uuid )" || { error "${FUNCNAME[0]}" 'failed_generate_uuid'; return 1; }
+  UUID="$( ff_uuid )" || {
+    error "${FUNCNAME[0]}" 'failed_generate_uuid'
+    eval "${OLD_SHELL_OPTS}"
+    return 1
+  }
 
   # Check: all the environment variables used in JSON are actually set.
   local ALL_EXPECTED_ENVRIONMENT_VARIABLES=(
@@ -3823,8 +3865,8 @@ function state_set {
     "policy_language": "ff",
     "scope": {
       "can_read": "organization",
-      "can_write": "system",
-      "can_delete": "system"
+      "can_write": "organization",
+      "can_delete": "organization"
     }
   }
 }
@@ -3834,8 +3876,14 @@ EOF
   # If we have ff_metric command handy try to sent the metric with name STATE_NAME and value 1
   if command_exists ff_metric >/dev/null; then
     # Report metric: start:1    tags: service:ipsec_tunnel  (+public_ip, organization)
-    ff_metric --metric-name="${STATE_NAME}" --metric-value=1 --tag=state:"${STATE_VALUE}" --tag=is_error:"${IS_ERROR}"
+    ff_metric --metric-name="${STATE_NAME}" \
+      --metric-value=1 \
+      --tag=state:"${STATE_VALUE}" \
+      --tag=is_error:"${IS_ERROR}"
   fi
+
+  # Restore shell options
+  eval "${OLD_SHELL_OPTS}"
 }
 export -f state_set
 
