@@ -3689,8 +3689,10 @@ function state_set {
     "ff_uuid"
     "command_exists"
   )
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  eval "${OLD_SHELL_OPTS}"
-; return 1 }  # Note: check_dependencies will report missing dependencies
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {
+    eval "${OLD_SHELL_OPTS}"
+    return 1
+  }  # Note: check_dependencies will report missing dependencies
 
   # Get 2 arguments: state and value
   local STATE_NAME="${1}"
