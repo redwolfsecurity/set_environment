@@ -1066,7 +1066,7 @@ function docker_is_installed {
   local DEPENDENCIES="command_exists"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  # If it not installed, set STATUS=1
+  # Return 0 if command exists
   command_exists docker >/dev/null
 }
 export -f docker_is_installed
@@ -1765,6 +1765,9 @@ function docker_set_log_to_syslog {
   fi
 
   # Create docker configuration file (or overwrite existing)
+  # Note: we use "tee -a" instead of ">>" because:
+  #   - Pipes and commands like tee return an actual exit code, which can be caught reliably.
+  #   - Redirection (>>) is not a command. It's handled by the shell before echo runs, and errors during redirection (like a permission denied or disk full) won't affect the exit code of echo in most cases.
   local FILEPATH="${DOCKER_CONFIGURATION_PATH}/daemon.json"
   (
 cat <<EOT

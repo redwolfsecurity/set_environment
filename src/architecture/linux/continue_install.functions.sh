@@ -1574,25 +1574,12 @@ export -f pm2_install
 # Checks if pm2 is installed
 # Returns 0 if it is, 1 if it isn't
 function pm2_is_installed {
-    state_set "${FUNCNAME[0]}" 'started'
+  # Check dependencies
+  local DEPENDENCIES="command_exists"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-    # Define dependencies
-    local DEPENDENCIES=(
-      "command_exists"
-    )
-    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
-      state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
-      return 1
-    }
-
-    local STATUS=0
-    local PACKAGE="pm2"
-    local NPM=$( command_exists npm ) || { state_set "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
-
-    # If it not installed, set STATUS=1
-    ${NPM} list "${PACKAGE}" --global >/dev/null
-
-    state_set "${FUNCNAME[0]}" 'success'
+  # Return 0 if command exists
+  command_exists pm2 >/dev/null
 }
 export -f pm2_is_installed
 

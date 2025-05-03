@@ -1636,13 +1636,16 @@ function inject_into_file {
     if [ ${does_file_have_eol_at_the_end_code} -ne 0 ]; then
       # The ${FILEPATH} file does not have EOL at the end.
       # Add EOL to the end of the file (so our injected line starts from the new line)
-      echo "" | tee -a "${FILEPATH}" || {
+      # Note: we use "tee -a" instead of ">>" because:
+      #   - Pipes and commands like tee return an actual exit code, which can be caught reliably.
+      #   - Redirection (>>) is not a command. It's handled by the shell before echo runs, and errors during redirection (like a permission denied or disk full) won't affect the exit code of echo in most cases.
+      echo "" | tee -a "${FILEPATH}" > /dev/null || {
         error "${FUNCNAME[0]}" "Failed to add missing EOL to the end of the file: ${FILEPATH}"
         return 1
       }
     fi
 
-    # Append INJECT_CONTENT to the end of the target file
+    # Append INJECT_CONTENT to the end of the target file. (same note on using "tee -a" instead of ">>" as above)
     echo "${INJECT_CONTENT}" | tee -a "${FILEPATH}" >/dev/null || {
       error "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'
       return 1
@@ -2577,7 +2580,7 @@ function bash_echo_setting_get {
 
   # Preserve current xtrace state
   if is_shell_attribute_set x; then
-    echo -n " XTRACE_ENABLED "
+    echo -n "XTRACE_ENABLED"
   fi
 }
 export -f bash_echo_setting_get
@@ -2616,6 +2619,10 @@ function bash_echo_setting_set {
   # Check if any argument is exactly 'XTRACE_ENABLED'
   local FLAG
   for FLAG in "${BASH_ECHO_SETTINGS[@]}"; do
+    # Trim leading and trailing spaces
+    FLAG="${FLAG#"${FLAG%%[![:space:]]*}"}"  # Remove leading
+    FLAG="${FLAG%"${FLAG##*[![:space:]]}"}"  # Remove trailing
+
     if [[ "${FLAG}" == "XTRACE_ENABLED" ]]; then
       bash_echo_on_set
       return
@@ -3622,6 +3629,7 @@ function secret_get {
   # Preserve current bash echo settings and enable bash echo setting
   BASH_ECHO_SETTINGS=$( bash_echo_setting_get ) || { error "${FUNCNAME[0]}" 'failed_to_bash_echo_setting_gets'; return 1; }
 
+  # Disable xtrace to avoid priting secrets
   bash_echo_off_set || { error "${FUNCNAME[0]}" 'failed_to_bash_echo_off_set'; return 1; } # Disable xtrace to avoid priting secrets
 
   local KEY="${1}"
@@ -3850,6 +3858,7 @@ function secret_set {
 
   # Store secret
   echo "${SECRET}" >"${SECRET_DIRECTORY}/${URI}" || {
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     error "${FUNCNAME[0]}" 'failed_to_write_secret'
     return 1
   }

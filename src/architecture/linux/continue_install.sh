@@ -10,6 +10,8 @@
 # set environment installation.
 #
 function continue_install {
+    state_set "${FUNCNAME[0]}" 'started'
+
     # Source OS-specific install functions
     source src/architecture/linux/continue_install.functions.sh || { state_set "${FUNCNAME[0]}" "terminal_error_cant_source_os_specific_install_functions"; abort 'terminal_error_cant_source_os_specific_install_functions'; }
 
