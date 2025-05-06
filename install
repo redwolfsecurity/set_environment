@@ -33,13 +33,13 @@ function install_set_environment {
     source src/ff_bash_functions || { echo "Error: failed to source common functions." >&2; exit 1; } # note: can not yet use error() / abort() / state_set()
 
     # Initialize terminal
-    terminal_initialize || { state_set "${FUNCNAME[0]}" "terminal_error_initialize_terminal"; abort; }
+    terminal_initialize || { state_set "${FUNCNAME[0]}" "terminal_error_initialize_terminal"; abort 'terminal_error_initialize_terminal'; }
 
     # Continue by calling OS-specific installer
-    source "src/architecture/$( discover_os )/continue_install.sh" "${@}" || { state_set "${FUNCNAME[0]}" "terminal_error_continue_install"; abort; }
+    source "src/architecture/$( discover_os )/continue_install.sh" "${@}" || { state_set "${FUNCNAME[0]}" "terminal_error_continue_install"; abort 'terminal_error_continue_install'; }
 
     # Last step: run a selfcheck
-    set_environment_is_working || { state_set "${FUNCNAME[0]}" "terminal_error_selfcheck_failed"; abort; }
+    set_environment_is_working || { state_set "${FUNCNAME[0]}" "terminal_error_selfcheck_failed"; abort 'terminal_error_selfcheck_failed'; }
 
     state_set "${FUNCNAME[0]}" 'success'
 }

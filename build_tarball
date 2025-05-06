@@ -38,12 +38,7 @@ function build_tarball {
 
     # Check required environment variables are set
     for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-        ensure_variable_not_empty "${VARIABLE_NAME}" || {
-            local ERROR_DETAILS="Error: failed to ensure variable not empty ${VARIABLE_NAME}"
-            # abort "${ERROR_DETAILS}"
-            echo "${ERROR_DETAILS}" >&2
-            exit 1
-        }
+        ensure_variable_not_empty "${VARIABLE_NAME}" || { abort "failed to ensure variable not empty ${VARIABLE_NAME}"; }
     done
 
     # Check required packages
@@ -51,9 +46,9 @@ function build_tarball {
     #      - node
     #      - npm
     #      - tar
-    command_exists node >/dev/null || { echo "Error: dependency check failed: node not found" >&2; exit 1; }
-    command_exists npm >/dev/null || { echo "Error: dependency check failed: npm not found" >&2; exit 1; }
-    command_exists tar >/dev/null || { echo "Error: dependency check failed: tar not found">&2; exit 1; }
+    command_exists node >/dev/null || { abort "Error: dependency check failed: node not found"; }
+    command_exists npm >/dev/null || { abort "Error: dependency check failed: npm not found"; }
+    command_exists tar >/dev/null || { abort "Error: dependency check failed: tar not found"; }
 
     # Define location of temporary folder and tarball filename
     local TARBALL_FILENAME="set_environment.tgz"
@@ -62,21 +57,21 @@ function build_tarball {
     local TEMPORARY_DIR="/tmp"
 
     # We need to "npm install" because of aws-sdk dependency (used by cdn_upload.js)
-    npm install || { echo "Error: failed to 'npm install'" >&2; exit 1; }
+    npm install || { abort "Error: failed to 'npm install'"; }
 
     # Capture date and build git commit numbers into separate files
-    echo "BUILD_DATE=$(date +%Y%m%d)  # YYYYMMDD" > build_date || { echo "Error: failed to write build date" >&2; exit 1; }
-    echo "BUILD_COMMIT_ID=$(git rev-parse HEAD)"  > build_commit_id || { echo "Error: failed to write build commit id">&2; exit 1; }
+    echo "BUILD_DATE=$(date +%Y%m%d)  # YYYYMMDD" > build_date || { abort "Error: failed to write build date"; }
+    echo "BUILD_COMMIT_ID=$(git rev-parse HEAD)"  > build_commit_id || { abort "Error: failed to write build commit id"; }
 
     # Delete target tmp "set_environment" folder, otherwise copy will result in wrong folder structure (1 level nested deeper)
     if [ -d "${TEMPORARY_DIR}/set_environment" ]; then
-        rm -fr ${TEMPORARY_DIR}/set_environment || { echo "Error: failed to remove temporary folder">&2; exit 1; }
+        rm -fr ${TEMPORARY_DIR}/set_environment || { abort "Error: failed to remove temporary folder"; }
     fi
 
     # Before creating tarball: move all files into "set_environment" folder.
     # We do so because while Jenkins buidling the project all the files are located in ugly-looking folder:
     #     /var/jenkins_home/jobs/RedWolfSecurity/jobs/set-environment.ja761g/branches/master/workspace
-    cp -a $(pwd) ${TEMPORARY_DIR}/set_environment || { echo "Error: failed to copy files">&2; exit 1; }
+    cp -a $(pwd) ${TEMPORARY_DIR}/set_environment || { abort "Error: failed to copy files"; }
 
     # Now we can create tarball which contain just 1 folder 'set_environment'
     # Note on used arguments:
@@ -89,7 +84,7 @@ function build_tarball {
     #      set_environment - last argument is the folder to archive. It does not include full path (like: ${TEMPORARY_DIR}/set_environment)
     #                        because we already specified -C argument.
     #
-    tar -C "${TEMPORARY_DIR}" -czf "${TARBALL_FILENAME}" "set_environment" || { echo "Error: failed to create tarball">&2; exit 1; }
+    tar -C "${TEMPORARY_DIR}" -czf "${TARBALL_FILENAME}" "set_environment" || { abort "Error: failed to create tarball"; }
 
     # Upload tarball to S3 so it is available via URL: https:#cdn.redwolfsecurity.com/ff/ff_agent/set_environment.tgz
     node cdn_upload.js \
@@ -97,7 +92,7 @@ function build_tarball {
         "${PRODUCTION_CONTENT_S3_BUCKET_NAME}" \
         "${PRODUCTION_CONTENT_S3_FF_AGENT_PATH}" \
         "${PRODUCTION_CONTENT_CDN_DISTRIBUTION_ID}" \
-         || { error "${FUNCNAME[0]}" 'failed_to_cdn_upload'; abort; }
+         || { abort "${FUNCNAME[0]}" 'failed_to_cdn_upload'; }
 
 }
 
