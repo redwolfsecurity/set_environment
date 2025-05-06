@@ -2575,8 +2575,8 @@ export -f bash_echo_on_set
 function bash_echo_setting_get {
 
   # Check dependencies
-  local DEPENDENCIES="echo is_shell_attribute_set"
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+  # local DEPENDENCIES="echo is_shell_attribute_set"
+  # check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Preserve current xtrace state
   if is_shell_attribute_set x; then
@@ -2610,8 +2610,8 @@ export -f bash_echo_setting_get
 function bash_echo_setting_set {
 
   # Check dependencies
-  local DEPENDENCIES="bash_echo_off_set bash_echo_on_set"
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+  # local DEPENDENCIES="bash_echo_off_set bash_echo_on_set"
+  # check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Preserve all arguments safely as an array
   local BASH_ECHO_SETTINGS=("${@}")
