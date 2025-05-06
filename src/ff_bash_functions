@@ -805,13 +805,13 @@ export -f apt_upgrade
 function in_array {
     # Assign the first argument ($1) passed into the function to the "needle" variable.
     # "hay" is just declared, but not initialized yet here
-    local hay needle=${1}
+    local HAY NEEDLE=${1}
     shift
 
     # Note: the "for hay; do": This is shorthand for for hay in "$@"; do. It loops through all the remaining
     # arguments (the array), assigning each one to hay temporarily in each iteration.
-    for hay; do
-        [[ "${hay}" == "${needle}" ]] && return 0
+    for HAY; do
+        [[ "${HAY}" == "${NEEDLE}" ]] && return 0
     done
     return 1
 }
@@ -4714,7 +4714,7 @@ export -f discover_optional_environment_variable
 #
 # DESCRIPTION
 #   Determines the family of the operating system (e.g., linux, macos, windows)
-#   using the 'OSTYPE' variable or 'uname' command as fallback.
+#   using the 'OS_TYPE' variable or 'uname' command as fallback.
 #
 # USAGE EXAMPLE
 #   OS_FAMILY=$(discover_os)
@@ -4732,8 +4732,8 @@ function discover_os {
 
   local OS_FAMILY="unknown"
 
-  # Detect the platform based on "OSTYPE" variable. E.g. on a mac it might be 'darwin22.1.0'
-  case "${OSTYPE}" in
+  # Detect the platform based on "OS_TYPE" variable. E.g. on a mac it might be 'darwin22.1.0'
+  case "${OS_TYPE}" in
   darwin*)  OS_FAMILY="macos" ;;
   linux*)   OS_FAMILY="linux" ;;
   linux-gnu*)   OS_FAMILY="linux" ;;
