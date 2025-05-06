@@ -592,6 +592,7 @@ function ff_agent_run_pm2 {
   local DEPENDENCIES=(
     "command_run_as_user"
     "ff_agent"
+    "jq"
     "pm2"
   )
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
@@ -613,19 +614,20 @@ function ff_agent_run_pm2 {
   PM2_STATUS=$(pm2 jlist | jq -r '.[] | select(.name=="ff_agent") | .pm2_env.status')
 
   if [[ -z "${PM2_STATUS}" ]]; then
-    echo "[INFO] ff_agent is not registered in pm2. Starting it..."
+    log "${FUNCNAME[0]}" "[INFO] ff_agent is not registered in pm2. Starting it..."
     command_run_as_user "${FF_AGENT_USERNAME}" 'pm2 start node --name ff_agent -- ff_agent' || {
     state_set "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
     abort "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
   }
-  elif [[ "${PM2_STATUS}" != "online" ]]; then
-    echo "[INFO] ff_agent is registered but not running (status=${PM2_STATUS}). Restarting it..."
+
+  if [[ "${PM2_STATUS}" != "online" ]]; then
+    log "${FUNCNAME[0]}" "[INFO] ff_agent is registered but not running (status=${PM2_STATUS}). Restarting it..."
     command_run_as_user "${FF_AGENT_USERNAME}" 'pm2 restart ff_agent' || {
       state_set "${FUNCNAME[0]}" 'failed_to_restart_ff_agent'
       abort "${FUNCNAME[0]}" 'failed_to_restart_ff_agent'
     }
   else
-    echo "[INFO] ff_agent is already running under pm2."
+    log "${FUNCNAME[0]}" "[INFO] ff_agent is already running under pm2."
   fi
 
   # Save current pm2 process list
@@ -720,22 +722,39 @@ function ff_agent_update_install {
 # This script will update @ff/ff_agent@latest and restart it (using pm2).
 # The script ${TARGET_FILE} was created by set_environment ${FUNCNAME[0]}() on $(date --utc).
 
+state_set "ff_agent_update" 'started'
+
 # Check set_environment is working
-set_environment_is_working || { state_set "\${FUNCNAME[0]}" "Error: set_environment_is_working() failed."; exit 1; }
+set_environment_is_working || {
+  # Mpte" we can not use state_set / abort here.
+  echo "ff_agent_update" "set_environment_is_working() failed." 1>&2
+  exit 1
+}
 
 # Install @ff/ff_agent@latest
-npm install --global @ff/ff_agent@${VERSION} || { state_set "\${FUNCNAME[0]}" "Failed to npm install @ff/ff_agent@${VERSION}"; exit 1; }
+npm install --global @ff/ff_agent@${VERSION} || {
+  state_set "ff_agent_update" "npm_install_ff_agent_failed"
+  abort "ff_agent_update" "Failed to npm install @ff/ff_agent@${VERSION}"
+}
 
 # Show installed @ff/ff_agent@latest version
 local FF_AGENT_VERSION
 FF_AGENT_VERSION=\$( cat \${FF_AGENT_HOME}/.n/lib/node_modules/@ff/ff_agent/package.json | grep '"version"' )
-echo "Checking installed @ff/ff_agent@latest version: '\${FF_AGENT_VERSION}'"
+log "Checking installed @ff/ff_agent@latest version: '\${FF_AGENT_VERSION}'"
 
 # Flush pm2
-pm2 flush || { state_set "\${FUNCNAME[0]}" "Failed to pm2 flush"; exit 1; }
+pm2 flush ff_agent || {
+  state_set "ff_agent_update" "pm2_flush_failed"
+  abort "ff_agent_update" "Failed to pm2 flush"
+}
 
 # Restart pm2
-pm2 restart all --update-env || { state_set "\${FUNCNAME[0]}" "Failed to pm2 restart all"; exit 1; }
+pm2 restart ff_agent --update-env || {
+  state_set "ff_agent_update" "pm2_restart_all_failed"
+  abort "ff_agent_update" "Failed to pm2 restart all"
+}
+
+state_set "ff_agent_update" 'success'
 EOT
   ) > "${TARGET_FILE}" || { state_set "${FUNCNAME[0]}" "failed_to_create_file"; return 1; }
 
@@ -959,7 +978,7 @@ EOT
 
   # Also inject path to 'go' into current PATH (if missing in PATH)
   # do the export, so we don't have to relogin in order to call "go version"
-  echo ${PATH} | grep -q ${FF_AGENT_HOME}/go/bin
+  echo ${PATH} | grep --quiet ${FF_AGENT_HOME}/go/bin
   if [ ${?} -ne 0 ]; then
     # Path to 'go' is missing from PATH environment variable. Inject it:
     export PATH=${PATH}:${FF_AGENT_HOME}/go/bin
@@ -1705,7 +1724,7 @@ function pm2_uninstall {
     pm2_is_installed || { state_set "${FUNCNAME[0]}" 'success_no_action_not_installed'; return 0; }
 
     # It's installed, so we will try to remove it
-    local NPM=$( command_exists npm)
+    local NPM=$( command_exists npm )
     [ "${NPM}" = "" ] && { state_set "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
     "${NPM}" remove --global "${PACKAGE}" || { state_set "${FUNCNAME[0]}" 'error_uninstalling_package'; return 1; }
 
@@ -1728,7 +1747,6 @@ function set_environment_ensure_ff_agent_bin_exists {
   local DEPENDENCIES=(
     "ensure_variable_not_empty"
     "mkdir"
-    "tr"
   )
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
     state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
@@ -1761,7 +1779,7 @@ function set_environment_ensure_ff_agent_bin_exists {
   # Check if target directory exists
   [ -d "${TARGET_DIR}" ] || {
     # Does not exist. Create new.
-    mkdir "${TARGET_DIR}" || { state_set "${FUNCNAME[0]}" 'failed_to_create_directory'; return 1; }
+    mkdir -p "${TARGET_DIR}" || { state_set "${FUNCNAME[0]}" 'failed_to_create_directory'; return 1; }
   }
 
   state_set "${FUNCNAME[0]}" 'success'
