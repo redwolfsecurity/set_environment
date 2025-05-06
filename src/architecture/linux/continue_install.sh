@@ -39,6 +39,9 @@ function continue_install {
 # Initialize terminal
 terminal_initialize || { state_set "${FUNCNAME[0]}" "terminal_error_initialize_terminal"; abort 'terminal_error_initialize_terminal'; }
 
+# Enable bash call trace
+bash_call_trace_enable
+
 # Continue installation
 # Note: no need to check errors here, the continue_install() f-n itself reports
 # errors (all of which are "terminal" errors) and aborts/exits.
