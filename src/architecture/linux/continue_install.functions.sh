@@ -92,13 +92,13 @@ function add_to_install_if_missing {
 	# Check if given package is already installed.
   # Note: grep exit code 0=installed, 1=not installed.
 	# Note we use grep to cover case "Status: deinstall ok config-files" when package was uninstalled.
-	dpkg --status ${PACKAGE} 2>/dev/null | grep --silent "installed"
+	dpkg --status "${PACKAGE}" 2>/dev/null | grep --silent "installed"
 	INSTALLED=${?}
 
   # Check exit code
 	if [ ${INSTALLED} != 0 ]; then
     # Not installed. Add package name into the list.
-		PACKAGES_TO_INSTALL+=(${PACKAGE})
+		PACKAGES_TO_INSTALL+=("${PACKAGE}")
 	fi
 
 }
@@ -162,11 +162,11 @@ function apt_install_basic_packages {
 
   # Iterate required packages and collect only missing ones
   for REQUIRED_PACKAGE in "${REQUIRED_PACKAGES[@]}"; do
-    add_to_install_if_missing ${REQUIRED_PACKAGE} MISSING_PACKAGES
+    add_to_install_if_missing "${REQUIRED_PACKAGE}" MISSING_PACKAGES
   done
 
   # Install only missing packages
-  apt_install ${MISSING_PACKAGES[@]} || { state_set "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
+  apt_install "${MISSING_PACKAGES[@]}" || { state_set "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
 
   state_set "${FUNCNAME[0]}" 'success'
 }
@@ -248,7 +248,8 @@ function ff_agent_install {
   # Define the version of ff_agent npm package to install from CDN
   VERSION='latest'
 
-  local ARCHITECTURE=$( hardware_architecture_get ) || { state_set "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
+  local ARCHITECTURE
+  ARCHITECTURE=$( hardware_architecture_get ) || { state_set "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
 
   # If we are on arm64, we likely need to install some extra packages
   # This is done as a case, just in case we have other such architectural changes for other architectures.
@@ -618,7 +619,8 @@ function ff_agent_run_pm2 {
     command_run_as_user "${FF_AGENT_USERNAME}" 'pm2 start node --name ff_agent -- ff_agent' || {
     state_set "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
     abort "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
-  }
+    }
+  fi
 
   if [[ "${PM2_STATUS}" != "online" ]]; then
     log "${FUNCNAME[0]}" "[INFO] ff_agent is registered but not running (status=${PM2_STATUS}). Restarting it..."
