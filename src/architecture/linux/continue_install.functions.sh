@@ -11,30 +11,33 @@
 #    - apt_install_basic_packages
 #    - assert_baseline_components
 #    - assert_core_credentials
-#    - service_is_running
-#    - set_environment_ensure_ff_agent_bin_exists
-#    - set_environment_ensure_install_exists
+#    - ff_agent_install
+#    - ff_agent_install_bashrc
+#    - ff_agent_register_pm2_systemd
+#    - ff_agent_run_pm2
+#    - ff_agent_update_install
+#    - install_authbind
 #    - install_build_tools
-#    - install_ff_agent
-#    - install_ff_agent_bashrc
 #    - install_go
 #    - install_n
 #    - install_nodejs
 #    - install_nodejs_suite
 #    - install_set_environment_baseline
-#    - pm2_is_installed
-#    - pm2_is_running_as_me
 #    - pm2_configure
 #    - pm2_ensure
 #    - pm2_install
+#    - pm2_is_installed
+#    - pm2_is_running_as_me
 #    - pm2_start
 #    - pm2_stop
 #    - pm2_uninstall
+#    - set_environment_ensure_ff_agent_bin_exists
+#    - set_environment_ensure_install_exists
 #    - set_environment_preserve_source_code
 #    - set_script_logging
 #    - setup_logging
 
-###############################################################################
+################################################################################
 #
 # Return information if package is installed in system, dpkg depend
 # @param ${1} string package name
@@ -51,6 +54,15 @@
 # Usage: add_to_install_if_missing "vim" PACKAGES
 #
 function add_to_install_if_missing {
+
+  # Check dependencies
+  local DEPENDENCIES=(
+    "error"
+    "dpkg"
+    "grep"
+    "in_array"
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Take argument ${1} - package name
   local PACKAGE="${1}"
@@ -92,13 +104,26 @@ function add_to_install_if_missing {
 }
 export -f add_to_install_if_missing
 
-###############################################################################
+################################################################################
 #
 # Install basic packages
 #
 function apt_install_basic_packages {
 
   state_set "${FUNCNAME[0]}" 'started'
+
+  # Check dependencies
+  local DEPENDENCIES=(
+    "add_to_install_if_missing"
+    "apt_install"
+    "apt_update"
+    "apt_upgrade"
+    "assert_clean_exit"
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+    return 1
+  }
 
   # Update apt index and installed components, before installing additional packages.
   assert_clean_exit apt_update
@@ -147,7 +172,7 @@ function apt_install_basic_packages {
 }
 export -f apt_install_basic_packages
 
-###############################################################################
+################################################################################
 #
 # Install set of basic packages (most installed by "apt", but some installed by
 # different means (example: docker, n, npm, nodejs)), bash functions, .bashrc and .profile files.
@@ -162,7 +187,7 @@ function assert_baseline_components {
   # assert_clean_exit replace_timesyncd_with_ntpd
 
   # Ensure file "ff_agent/.profile" created and sourced from ~/.bashrc (Note: this must be done before install node)
-  assert_clean_exit install_ff_agent_bashrc
+  assert_clean_exit ff_agent_install_bashrc
 
   # Install nodejs suite and all its fixings (not using "apt") (Note: this will modify ff_agent/.profile)
   assert_clean_exit install_nodejs_suite
@@ -171,13 +196,22 @@ function assert_baseline_components {
   assert_clean_exit pm2_ensure
 
   # Install npm package "@ff/ff_agent"
-  assert_clean_exit install_ff_agent
+  assert_clean_exit ff_agent_install
+
+  # Install a script to update ff_agent and restart it by pm2
+  assert_clean_exit ff_agent_update_install
+
+  # Run ff_agent by pm2
+  assert_clean_exit ff_agent_run_pm2
+
+  # Register ff_agent in systemd
+  assert_clean_exit ff_agent_register_pm2_systemd
 
   state_set "${FUNCNAME[0]}" 'success'
 }
 export -f assert_baseline_components
 
-###############################################################################
+################################################################################
 #
 # Assert core credentials (npmrc, docker, ...)
 #
@@ -192,150 +226,24 @@ function assert_core_credentials {
 }
 export -f assert_core_credentials
 
-###############################################################################
+################################################################################
 #
-# Function makes sure "${FF_AGENT_HOME}/bin" folder is created.
+# Install npm package "@ff/ff_agent" to FF_AGENT_HOME globally.
 #
-function set_environment_ensure_ff_agent_bin_exists {
-
+function ff_agent_install {
   state_set "${FUNCNAME[0]}" 'started'
 
-  # Define dependencies
+  # Check dependencies
   local DEPENDENCIES=(
-    tr
+    "abort"
+    "apt_install"
+    "command_exists"
+    "hardware_architecture_get"
   )
-
-  # Loop through dependencies
-  for DEPENDENCY in "${DEPENDENCIES[@]}"; do
-    if ! command_exists "${DEPENDENCY}"; then
-      error "${FUNCNAME[0]}" "error_dependency_not_met_${DEPENDENCY}"
-      return 1
-    fi
-  done
-
-  # Define required variables
-  local REQUIRED_VARIABLES=(
-    FF_AGENT_HOME
-  )
-
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_DETAILS="Failed to ensure variable not empty: '${VARIABLE_NAME}'"
-      error "${FUNCNAME[0]}" "${ERROR_DETAILS}"
-
-      local ERROR_CODE="failed_to_ensure_variable_not_empty"
-      state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
-      return 1
-    }
-  done
-
-  # Define target directory
-  TARGET_DIR="${FF_AGENT_HOME}/bin"
-
-  # Check if target directory exists
-  [ -d "${TARGET_DIR}" ] || {
-    # Does not exist. Create new.
-    mkdir "${TARGET_DIR}" || { state_set "${FUNCNAME[0]}" 'failed_to_create_directory'; return 1; }
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+    return 1
   }
-
-  state_set "${FUNCNAME[0]}" 'success'
-}
-export -f set_environment_ensure_ff_agent_bin_exists
-
-###############################################################################
-#
-# Function makes sure the symlink "set_environment_install" exists in the ${FF_AGENT_HOME}/bin/ folder.
-# If symlink is missing it will be created:
-#    ${FF_AGENT_HOME}/bin/set_environment_install -> ${FF_AGENT_HOME}/git/redwolfsecurity/set_environment/install
-# The installed command "set_environment_install" can also be run to update set_environment.
-#
-function set_environment_ensure_install_exists {
-
-  state_set "${FUNCNAME[0]}" 'started'
-
-  # Define required variables
-  local REQUIRED_VARIABLES=(
-    FF_AGENT_HOME
-  )
-
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_DETAILS="Failed to ensure variable not empty: '${VARIABLE_NAME}'"
-      error "${FUNCNAME[0]}" "${ERROR_DETAILS}"
-
-      local ERROR_CODE="failed_to_ensure_variable_not_empty"
-      state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
-      return 1
-    }
-  done
-
-  # Define symlink
-  SYMLINK="${FF_AGENT_HOME}/bin/set_environment_install"
-
-  # Define target file (which new symlink must point to)
-  TARGET_FILE="${FF_AGENT_HOME}/git/redwolfsecurity/set_environment/install"
-
-  # Check symlink exists. Note: -L returns true if the "file" exists and is a symbolic link (the linked file may or may not exist).
-  [ -L "${SYMLINK}" ] || {
-      # SYMLINK is missing. Try to create new symlink.
-      ln -s "${TARGET_FILE}" "${SYMLINK}" || { state_set "${FUNCNAME[0]}" 'failed_to_create_symlink'; return 1; }
-  }
-
-  # Check the target file is present (symlink is not broken)
-  [ -f "${TARGET_FILE}" ] || { state_set "${FUNCNAME[0]}" 'error_target_file_missing'; return 1; }
-
-  # Check the target file is executable. Note: extra "-f" check added here since "-x" can say "yes, executable", but target points to directory.
-  [[ -f "${TARGET_FILE}" && -x "${TARGET_FILE}" ]] || { state_set "${FUNCNAME[0]}" 'error_target_file_not_executable'; return 1; }
-
-  state_set "${FUNCNAME[0]}" 'success'
-}
-export -f set_environment_ensure_install_exists
-
-###############################################################################
-#
-# Function installs "authbind" to allow binries to open ports <=1024
-function install_authbind() {
-  apt_install authbind  || { state_set "${FUNCNAME[0]}" 'failed_to_install_authbind'; return 1; }
-
-  # Create authbind configuration for ports 80 and 443
-  sudo touch /etc/authbind/byport/80  || { state_set "${FUNCNAME[0]}" 'failed_to_create_authbind_byport_80'; return 1; }
-  sudo touch /etc/authbind/byport/443 || { state_set "${FUNCNAME[0]}" 'failed_to_create_authbind_byport_443'; return 1; }
-  sudo chmod 500 /etc/authbind/byport/80 || { state_set "${FUNCNAME[0]}" 'failed_to_set_permission_authbind_byport_80'; return 1; }
-  sudo chmod 500 /etc/authbind/byport/443 || { state_set "${FUNCNAME[0]}" 'failed_to_set_permission_authbind_byport_443'; return 1; }
-  sudo chown root:root /etc/authbind/byport/80 || { state_set "${FUNCNAME[0]}" 'failed_to_set_ownership_authbind_byport_80'; return 1; }
-  sudo chown root:root /etc/authbind/byport/443 || { state_set "${FUNCNAME[0]}" 'failed_to_set_ownership_authbind_byport_443'; return 1; }
-
-  # To run a program or symlink with the permission to authbind --deep $PATH_TO_EXECUTABLE
-  # PATH_TO_EXECUTABLE can be a symlink
-}
-
-
-###############################################################################
-#
-# Function installs "build_tools" project.
-function install_build_tools {
-  state_set "${FUNCNAME[0]}" 'started'
-
-  GIT_URL="git@github.com:redwolfsecurity/build_tools.git"
-
-  cd /tmp                 || { state_set "${FUNCNAME[0]}" 'failed_to_change_directory_to_temporary_folder'; return 1; }
-  rm -fr /tmp/build_tools || { state_set "${FUNCNAME[0]}" 'failed_to_cleanup_old_project_temporary_folder'; return 1; }
-  git clone "${GIT_URL}"  || { state_set "${FUNCNAME[0]}" 'failed_to_git_clone_project'; return 1; }
-  cd build_tools          || { state_set "${FUNCNAME[0]}" 'failed_to_change_directory_to_project_folder'; return 1; }
-  ./install               || { state_set "${FUNCNAME[0]}" 'failed_to_install'; return 1; }
-
-  state_set "${FUNCNAME[0]}" 'success'
-}
-export -f install_build_tools
-
-###############################################################################
-#
-# Install npm package "@ff/ff_agent" -> ff_agent/
-#
-function install_ff_agent {
-  state_set "${FUNCNAME[0]}" 'started'
 
   # Define the version of ff_agent npm package to install from CDN
   VERSION='latest'
@@ -351,8 +259,8 @@ function install_ff_agent {
         build-essential
       )
       apt_install ${PACKAGES_TO_INSTALL[@]} || {
-          state_set "${FUNCNAME[0]}" 'terminal_error_unable_to_install_ff_agent_dependencies'
-          abort "${FUNCNAME[0]}" 'terminal_error_unable_to_install_ff_agent_dependencies'
+          state_set "${FUNCNAME[0]}" 'terminal_error_unable_to_ff_agent_install_dependencies'
+          abort "${FUNCNAME[0]}" 'terminal_error_unable_to_ff_agent_install_dependencies'
         }
     ;;
     *)
@@ -362,118 +270,110 @@ function install_ff_agent {
   # Install ff_agent
   # Previously we tried to install from CDN: npm install --global "${FF_CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}
   npm install --global @ff/ff_agent@${VERSION} || {
-    state_set "${FUNCNAME[0]}" 'failed_to_install_ff_agent'
-    abort "${FUNCNAME[0]}" 'failed_to_install_ff_agent'
+    state_set "${FUNCNAME[0]}" 'failed_to_ff_agent_install'
+    abort "${FUNCNAME[0]}" 'failed_to_ff_agent_install'
   }
 
-  # Run ff_agent by pm2
   # Ensure ff_agent is installed in the PATH
   command_exists ff_agent || {
     state_set "${FUNCNAME[0]}" 'terminal_error_unable_to_find_ff_agent'
     abort "${FUNCNAME[0]}" 'terminal_error_unable_to_find_ff_agent'
   }
 
-  # This fails to start ff_agent with an error: Cannot find module '/home/ff_agent/ff_agent'
-  # # Register/start ff_agent in pm2
-  # pm2 start ff_agent --name ff_agent || {
-  #   state_set "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
-  #   abort "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
-  # }
-
-  # Replacing ff_agent pm2 starter to use more explicit path to the executable
-  # Get the full path of the ff_agent executable
-  FF_AGENT_PATH=$( command_exists ff_agent )
-
-  # Register/start ff_agent in pm2 using the node interpreter
-  pm2 start node --name ff_agent -- "$FF_AGENT_PATH" || {
-    state_set "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
-    abort "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
-  }
-
-  # Save current process list
-  pm2 save || {
-    state_set "${FUNCNAME[0]}" 'failed_to_pm2_save'
-    abort "${FUNCNAME[0]}" 'failed_to_pm2_save'
-  }
-
-  # Create "ff_agent_update" script
-  TARGET_FILE="${FF_AGENT_HOME}/bin/ff_agent_update"
-
-  # Create ff_agent_update file
-  (
-      cat <<EOT
-#!/usr/bin/bash --login
-
-# This script will update @ff/ff_agent@latest and restart it (using pm2).
-# The script ${TARGET_FILE} was created by set_environment ${FUNCNAME[0]}() on $(date --utc).
-
-# Check set_environment is working
-set_environment_is_working || { state_set "\${FUNCNAME[0]}" "Error: set_environment_is_working() failed."; exit 1; }
-
-# Install @ff/ff_agent@latest
-npm install --global @ff/ff_agent@${VERSION} || { state_set "\${FUNCNAME[0]}" "Failed to npm install @ff/ff_agent@${VERSION}"; exit 1; }
-
-# Show installed @ff/ff_agent@latest version
-local FF_AGENT_VERSION
-FF_AGENT_VERSION=\$( cat \${FF_AGENT_HOME}/.n/lib/node_modules/@ff/ff_agent/package.json | grep '"version"' )
-echo "Checking installed @ff/ff_agent@latest version: '\${FF_AGENT_VERSION}'"
-
-# Flush pm2
-pm2 flush || { state_set "\${FUNCNAME[0]}" "Failed to pm2 flush"; exit 1; }
-
-# Restart pm2
-pm2 restart all --update-env || { state_set "\${FUNCNAME[0]}" "Failed to pm2 restart all"; exit 1; }
-EOT
-  ) > "${TARGET_FILE}" || { state_set "${FUNCNAME[0]}" "failed_to_create_file"; return 1; }
-
-  # Make executable
-  chmod a+x "${TARGET_FILE}" || { state_set "${FUNCNAME[0]}" "failed_to_chmod_file"; return 1; }
-
   state_set "${FUNCNAME[0]}" 'success'
 }
-export -f install_ff_agent
+export -f ff_agent_install
 
-###############################################################################
+################################################################################
+# CATEGORY
+#   AGENT INSTALLATION FUNCTIONS
 #
-# Ensure file "ff_agent/.profile" created and sourced from ~/.bashrc
+# NAME
+#   ff_agent_install_bashrc - Ensure ff_agent environment is sourced from bash init files.
 #
-# Require environment variables set:
-#   - FF_AGENT_USERNAME
-#   - FF_AGENT_HOME
+# SYNOPSIS
+#   ff_agent_install_bashrc
 #
-function install_ff_agent_bashrc {
+# DESCRIPTION
+#   Ensures proper shell environment initialization for ff_agent by injecting
+#   sourcing logic into both the user's `.bashrc` and `.profile`, as well as
+#   a dedicated ff_agent `.profile` located in ${FF_AGENT_HOME}.
+#
+#   The function performs the following steps:
+#     - Verifies required environment variables (FF_AGENT_USERNAME, FF_AGENT_HOME) are set.
+#     - Validates that ${FF_AGENT_HOME} exists.
+#     - Creates missing `.bashrc` or `.profile` files if necessary.
+#     - Injects a line to source ${FF_AGENT_HOME}/.profile into `.bashrc` and `.profile`.
+#     - Injects a line into the ff_agent `.profile` to source the shared `ff_bash_functions` library.
+#     - Injects a call to `discover_environment` into the ff_agent `.profile`.
+#     - Injects the ff_agent `bin` directory into the `PATH` in the custom profile.
+#     - Updates the current shell’s `PATH` variable if the bin path was not already present.
+#
+#   Each modification uses `inject_into_file` to ensure idempotent updates, preventing duplicate entries.
+#
+# DEPENDENCIES
+#   - ensure_variable_not_empty
+#   - state_set
+#   - error
+#   - abort
+#   - inject_into_file
+#   - discover_environment (called in profile)
+#
+# REQUIRED ENVIRONMENT VARIABLES
+#   - FF_AGENT_USERNAME : Username under which ff_agent is installed
+#   - FF_AGENT_HOME     : Root directory of the ff_agent installation
+#
+# USAGE EXAMPLE
+#   ff_agent_install_bashrc
+#
+# EXIT STATUS
+#   Aborts or returns non-zero on:
+#     - Missing or empty required environment variables
+#     - Missing ${FF_AGENT_HOME} directory
+#     - Failure to create or modify any targeted profile/init file
+#     - Failure to update the PATH variable
+#   Returns 0 on successful injection of all profile customizations.
+#
+################################################################################
+function ff_agent_install_bashrc {
   state_set "${FUNCNAME[0]}" 'started'
 
-  # Define required variables
-  local REQUIRED_VARIABLES=(
-    FF_AGENT_USERNAME
-    FF_AGENT_HOME
+  # Check dependencies
+  local DEPENDENCIES=(
+    "abort"
+    "discover_environment"
+    "ensure_variable_not_empty"
+    "error"
+    "inject_into_file"
+    "state_set"
   )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+    return 1
+  }
 
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_DETAILS="Failed to ensure variable not empty: '${VARIABLE_NAME}'"
-      error "${FUNCNAME[0]}" "${ERROR_DETAILS}"
-
-      local ERROR_CODE="failed_to_ensure_variable_not_empty"
-      state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
-      return 1
-    }
-  done
+  # Define required non-empty variables
+  local REQUIRED_NON_EMPTY_VARIABLES=(
+    "FF_AGENT_USERNAME"
+    "FF_AGENT_HOME"
+    "HOME"
+  )
+  ensure_variables_not_empty "${FUNCNAME[0]}" "${REQUIRED_NON_EMPTY_VARIABLES[@]}" || { # Note: ensure_variables_not_empty will report missing variables
+    state_set "${FUNCNAME[0]}" 'ensure_variables_not_empty_failed'
+    return 1
+  }
 
   # Make sure ${FF_AGENT_HOME} folder exists
   if [ ! -d "${FF_AGENT_HOME}" ]; then
     # ${FF_AGENT_HOME} folder is missing. Don't try to create it (it is not our responsibility)
     # Report an error and abort.
     state_set "${FUNCNAME[0]}" 'terminal_error_ff_agent_home_folder_does_not_exist'
-    error "FF_AGENT_HOME='${FF_AGENT_HOME}' directory Does not exist. Aborting."
-    abort
+    abort "${FUNCNAME[0]}" "FF_AGENT_HOME='${FF_AGENT_HOME}' directory Does not exist. Aborting."
   fi
 
   # Define location of two profile files
   local HOME_PROFILE_FILE="${HOME}/.profile"
-  FF_AGENT_PROFILE_FILE="${FF_AGENT_HOME}/.profile"    # example: /home/ubuntu/ff_agent/.profile  (Note: FF_AGENT_PROFILE_FILE is not local, but shell environment used in other install functions)
+  local FF_AGENT_PROFILE_FILE="${FF_AGENT_HOME}/.profile"    # example: /home/ubuntu/ff_agent/.profile  (Note: FF_AGENT_PROFILE_FILE is not local, but shell environment used in other install functions)
 
   # Define location of .bashrc file
   local HOME_BASHRC_FILE="${HOME}/.bashrc"
@@ -585,9 +485,347 @@ EOT
   # Chage state and return success
   state_set "${FUNCNAME[0]}" 'success'
 }
-export -f install_ff_agent_bashrc
+export -f ff_agent_install_bashrc
 
-###############################################################################
+################################################################################
+# CATEGORY
+#   AGENT CONTROL FUNCTIONS
+#
+# NAME
+#   ff_agent_register_pm2_systemd - Register pm2 to launch on boot using systemd.
+#
+# SYNOPSIS
+#   ff_agent_register_pm2_systemd
+#
+# DESCRIPTION
+#   Ensures that pm2 is configured to start automatically on system boot using
+#   systemd for the ff_agent user. The function first verifies that systemd is
+#   present and running as PID 1, skipping the setup if systemd is unavailable
+#   (e.g., inside containers or minimal environments).
+#
+#   If systemd is detected, it configures the pm2 startup service for the
+#   ff_agent user using the appropriate command and enables the corresponding
+#   systemd unit (`pm2-${USER}`).
+#
+# DEPENDENCIES
+#   - state_set
+#   - abort
+#   - command_exists
+#   - command_run_as_user
+#   - systemd (must be PID 1)
+#   - pm2
+#
+# USAGE EXAMPLE
+#   ff_agent_register_pm2_systemd
+#
+# EXIT STATUS
+#   If systemd is not detected, sets state to 'systemd_not_detected' and exits with 0.
+#   On failure to configure or enable pm2 systemd startup, sets state and aborts.
+#   Returns 0 on successful registration and enablement of pm2 startup under systemd.
+#
+################################################################################
+function ff_agent_register_pm2_systemd {
+  state_set "${FUNCNAME[0]}" 'started'
+
+  # Check if we are running inside docker (have systemd)
+  command_exists systemctl &>/dev/null || {
+    state_set "${FUNCNAME[0]}" 'systemd_not_detected'
+    return 0                     # systemctl not installed
+  }
+
+  [[ "$(ps -p 1 -o comm= 2>/dev/null)" == "systemd" ]] || {
+    state_set "${FUNCNAME[0]}" 'systemd_not_detected'
+    return 0        # PID 1 must be systemd
+  }
+
+  # Ensuring pm2 startup works on boot for ${FF_AGENT_USERNAME}
+  command_run_as_user "${FF_AGENT_USERNAME}" 'sudo env PATH=$PATH:${FF_AGENT_HOME}/.n/bin pm2 startup systemd -u ${USER} --hp ${HOME}' || {
+    state_set "${FUNCNAME[0]}" 'terminal_error_unable_to_ff_agent_register_pm2_systemd'
+    abort "${FUNCNAME[0]}" "Failed to ensure pm2 startup works on boot for ${FF_AGENT_USERNAME}"
+  }
+
+  # Enable systemd unit
+  command_run_as_user "${FF_AGENT_USERNAME}" 'sudo systemctl enable pm2-${USER}' || {
+    state_set "${FUNCNAME[0]}" 'terminal_error_unable_to_ff_agent_register_pm2_systemd'
+    abort "${FUNCNAME[0]}" "Failed to ensure pm2 startup works on boot for ${FF_AGENT_USERNAME}"
+  }
+
+  state_set "${FUNCNAME[0]}" 'success'
+}
+export -f ff_agent_register_pm2_systemd
+
+################################################################################
+# CATEGORY
+#   AGENT CONTROL FUNCTIONS
+#
+# NAME
+#   ff_agent_run_pm2 - Start the ff_agent process using pm2 if not already running.
+#
+# SYNOPSIS
+#   ff_agent_run_pm2
+#
+# DESCRIPTION
+#   Ensures that the ff_agent binary is available in the PATH, then registers and
+#   starts it via pm2 using the correct user context. The function checks whether
+#   ff_agent is already managed by pm2 and skips the start step if it is. After
+#   starting, it verifies that ff_agent is actually running under pm2.
+#
+# DEPENDENCIES
+#   - command_exists
+#   - state_set
+#   - abort
+#   - command_run_as_user
+#   - pm2
+#
+# USAGE EXAMPLE
+#   ff_agent_run_pm2
+#
+# EXIT STATUS
+#   Sets state and exits via `abort` on any critical error.
+#   Otherwise returns 0 on success.
+#
+################################################################################
+function ff_agent_run_pm2 {
+  state_set "${FUNCNAME[0]}" 'started'
+
+  # Check dependencies
+  local DEPENDENCIES=(
+    "command_run_as_user"
+    "ff_agent"
+    "jq"
+    "pm2"
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+    return 1
+  }
+
+  # Define required non-empty variables
+  local REQUIRED_NON_EMPTY_VARIABLES=(
+    "FF_AGENT_USERNAME"
+  )
+  ensure_variables_not_empty "${FUNCNAME[0]}" "${REQUIRED_NON_EMPTY_VARIABLES[@]}" || { # Note: ensure_variables_not_empty will report missing variables
+    state_set "${FUNCNAME[0]}" 'ensure_variables_not_empty_failed'
+    return 1
+  }
+
+  # Try to get status of ff_agent from pm2 using JSON
+  local PM2_STATUS
+  PM2_STATUS=$(pm2 jlist | jq -r '.[] | select(.name=="ff_agent") | .pm2_env.status')
+
+  if [[ -z "${PM2_STATUS}" ]]; then
+    log "${FUNCNAME[0]}" "[INFO] ff_agent is not registered in pm2. Starting it..."
+    command_run_as_user "${FF_AGENT_USERNAME}" 'pm2 start node --name ff_agent -- ff_agent' || {
+    state_set "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
+    abort "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
+  }
+
+  if [[ "${PM2_STATUS}" != "online" ]]; then
+    log "${FUNCNAME[0]}" "[INFO] ff_agent is registered but not running (status=${PM2_STATUS}). Restarting it..."
+    command_run_as_user "${FF_AGENT_USERNAME}" 'pm2 restart ff_agent' || {
+      state_set "${FUNCNAME[0]}" 'failed_to_restart_ff_agent'
+      abort "${FUNCNAME[0]}" 'failed_to_restart_ff_agent'
+    }
+  else
+    log "${FUNCNAME[0]}" "[INFO] ff_agent is already running under pm2."
+  fi
+
+  # Save current pm2 process list
+  pm2 save || {
+    state_set "${FUNCNAME[0]}" 'failed_to_pm2_save'
+    abort "${FUNCNAME[0]}" 'failed_to_pm2_save'
+  }
+
+  # Double-check that ff_agent status (must be "online" now)
+  PM2_STATUS=$(pm2 jlist | jq -r '.[] | select(.name=="ff_agent") | .pm2_env.status')
+  if [ "${PM2_STATUS}" != "online" ]; then
+    state_set "${FUNCNAME[0]}" 'ff_agent_not_running_after_start'
+    abort "${FUNCNAME[0]}" 'ff_agent_not_running_after_start'
+  fi
+
+  state_set "${FUNCNAME[0]}" 'success'
+}
+export -f ff_agent_run_pm2
+
+################################################################################
+# CATEGORY
+#   AGENT CONTROL FUNCTIONS
+#
+# NAME
+#   ff_agent_update_install - Generate an update script for ff_agent that reinstalls and restarts it via pm2.
+#
+# SYNOPSIS
+#   ff_agent_update_install
+#
+# DESCRIPTION
+#   Ensures that the ff_agent binary is available in the PATH, then generates a
+#   reusable update script (`ff_agent_update`) under the ${FF_AGENT_HOME}/bin directory.
+#   This script, when executed, performs the following actions:
+#
+#     - Verifies environment integrity using set_environment_is_working.
+#     - Installs a specific version of @ff/ff_agent globally using npm.
+#     - Outputs the version of the installed package.
+#     - Flushes the pm2 logs.
+#     - Restarts all processes managed by pm2 with updated environment variables.
+#
+#   The generated script includes error handling and state setting for each step.
+#   After the script is created, this function ensures it is marked as executable.
+#
+# DEPENDENCIES
+#   - command_exists
+#   - state_set
+#   - abort
+#   - set_environment_is_working (runtime in generated script)
+#   - npm
+#   - pm2
+#   - chmod
+#   - bash (must support here-docs)
+#
+# USAGE EXAMPLE
+#   ff_agent_update_install
+#
+# EXIT STATUS
+#   Sets state and aborts if ff_agent is not found in PATH.
+#   Sets state and returns non-zero on failure to create or chmod the script.
+#   Returns 0 on successful script generation and setup.
+#
+################################################################################
+function ff_agent_update_install {
+  state_set "${FUNCNAME[0]}" 'started'
+
+  # Check dependencies
+  local DEPENDENCIES=(
+    "ff_agent"
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+    return 1
+  }
+
+  # Define required non-empty variables
+  local REQUIRED_NON_EMPTY_VARIABLES=(
+    "FF_AGENT_HOME"
+  )
+  ensure_variables_not_empty "${FUNCNAME[0]}" "${REQUIRED_NON_EMPTY_VARIABLES[@]}" || { # Note: ensure_variables_not_empty will report missing variables
+    state_set "${FUNCNAME[0]}" 'ensure_variables_not_empty_failed'
+    return 1
+  }
+
+  # Create "ff_agent_update" script
+  TARGET_FILE="${FF_AGENT_HOME}/bin/ff_agent_update"
+
+  # Create ff_agent_update file
+  (
+      cat <<EOT
+#!/usr/bin/bash --login
+
+# This script will update @ff/ff_agent@latest and restart it (using pm2).
+# The script ${TARGET_FILE} was created by set_environment ${FUNCNAME[0]}() on $(date --utc).
+
+state_set "ff_agent_update" 'started'
+
+# Check set_environment is working
+set_environment_is_working || {
+  # Mpte" we can not use state_set / abort here.
+  echo "ff_agent_update" "set_environment_is_working() failed." 1>&2
+  exit 1
+}
+
+# Install @ff/ff_agent@latest
+npm install --global @ff/ff_agent@${VERSION} || {
+  state_set "ff_agent_update" "npm_install_ff_agent_failed"
+  abort "ff_agent_update" "Failed to npm install @ff/ff_agent@${VERSION}"
+}
+
+# Show installed @ff/ff_agent@latest version
+local FF_AGENT_VERSION
+FF_AGENT_VERSION=\$( cat \${FF_AGENT_HOME}/.n/lib/node_modules/@ff/ff_agent/package.json | grep '"version"' )
+log "Checking installed @ff/ff_agent@latest version: '\${FF_AGENT_VERSION}'"
+
+# Flush pm2
+pm2 flush ff_agent || {
+  state_set "ff_agent_update" "pm2_flush_failed"
+  abort "ff_agent_update" "Failed to pm2 flush"
+}
+
+# Restart pm2
+pm2 restart ff_agent --update-env || {
+  state_set "ff_agent_update" "pm2_restart_all_failed"
+  abort "ff_agent_update" "Failed to pm2 restart all"
+}
+
+state_set "ff_agent_update" 'success'
+EOT
+  ) > "${TARGET_FILE}" || { state_set "${FUNCNAME[0]}" "failed_to_create_file"; return 1; }
+
+  # Make executable
+  chmod a+x "${TARGET_FILE}" || { state_set "${FUNCNAME[0]}" "failed_to_chmod_file"; return 1; }
+
+  state_set "${FUNCNAME[0]}" 'success'
+}
+export -f ff_agent_update_install
+
+################################################################################
+#
+# Function installs "authbind" to allow binries to open ports <=1024
+function install_authbind {
+  state_set "${FUNCNAME[0]}" 'started'
+
+  # Check dependencies
+  local DEPENDENCIES=(
+    "apt_install"
+    "chmod"
+    "chown"
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+    return 1
+  }
+
+  apt_install authbind  || { state_set "${FUNCNAME[0]}" 'failed_to_install_authbind'; return 1; }
+
+  # Create authbind configuration for ports 80 and 443
+  sudo touch /etc/authbind/byport/80  || { state_set "${FUNCNAME[0]}" 'failed_to_create_authbind_byport_80'; return 1; }
+  sudo touch /etc/authbind/byport/443 || { state_set "${FUNCNAME[0]}" 'failed_to_create_authbind_byport_443'; return 1; }
+  sudo chmod 500 /etc/authbind/byport/80 || { state_set "${FUNCNAME[0]}" 'failed_to_set_permission_authbind_byport_80'; return 1; }
+  sudo chmod 500 /etc/authbind/byport/443 || { state_set "${FUNCNAME[0]}" 'failed_to_set_permission_authbind_byport_443'; return 1; }
+  sudo chown root:root /etc/authbind/byport/80 || { state_set "${FUNCNAME[0]}" 'failed_to_set_ownership_authbind_byport_80'; return 1; }
+  sudo chown root:root /etc/authbind/byport/443 || { state_set "${FUNCNAME[0]}" 'failed_to_set_ownership_authbind_byport_443'; return 1; }
+
+  # To run a program or symlink with the permission to authbind --deep $PATH_TO_EXECUTABLE
+  # PATH_TO_EXECUTABLE can be a symlink
+  state_set "${FUNCNAME[0]}" 'success'
+}
+export -f install_authbind
+
+################################################################################
+#
+# Function installs "build_tools" project.
+function install_build_tools {
+  state_set "${FUNCNAME[0]}" 'started'
+
+  # Check dependencies
+  local DEPENDENCIES=(
+    "git"
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+    return 1
+  }
+
+  GIT_URL="git@github.com:redwolfsecurity/build_tools.git"
+
+  cd /tmp                 || { state_set "${FUNCNAME[0]}" 'failed_to_change_directory_to_temporary_folder'; return 1; }
+  rm -fr /tmp/build_tools || { state_set "${FUNCNAME[0]}" 'failed_to_cleanup_old_project_temporary_folder'; return 1; }
+  git clone "${GIT_URL}"  || { state_set "${FUNCNAME[0]}" 'failed_to_git_clone_project'; return 1; }
+  cd build_tools          || { state_set "${FUNCNAME[0]}" 'failed_to_change_directory_to_project_folder'; return 1; }
+  ./install               || { state_set "${FUNCNAME[0]}" 'failed_to_install'; return 1; }
+
+  state_set "${FUNCNAME[0]}" 'success'
+}
+export -f install_build_tools
+
+################################################################################
 #
 # Function installs "go" by certain version (see below) if it is not already installed.
 #
@@ -597,22 +835,30 @@ export -f install_ff_agent_bashrc
 function install_go {
   state_set "${FUNCNAME[0]}" 'started'
 
-  # Define required variables
-  local REQUIRED_VARIABLES=(
-    FF_AGENT_HOME
+  # Check dependencies
+  local DEPENDENCIES=(
+    "command_exists"
+    "curl"
+    "hardware_architecture_get"
+    "inject_into_file"
+    "is_writable"
+    "mktemp"
+    "os_name_get"
+    "tar"
   )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+    return 1
+  }
 
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_DETAILS="Failed to ensure variable not empty: '${VARIABLE_NAME}'"
-      error "${FUNCNAME[0]}" "${ERROR_DETAILS}"
-
-      local ERROR_CODE="failed_to_ensure_variable_not_empty"
-      state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
-      return 1
-    }
-  done
+  # Define required non-empty variables
+  local REQUIRED_NON_EMPTY_VARIABLES=(
+    "FF_AGENT_HOME"
+  )
+  ensure_variables_not_empty "${FUNCNAME[0]}" "${REQUIRED_NON_EMPTY_VARIABLES[@]}" || { # Note: ensure_variables_not_empty will report missing variables
+    state_set "${FUNCNAME[0]}" 'ensure_variables_not_empty_failed'
+    return 1
+  }
 
   # Get the latest available version number. Note: the url below now returns 2 lines,
   # 1st with version (example: go1.21.0)
@@ -732,7 +978,7 @@ EOT
 
   # Also inject path to 'go' into current PATH (if missing in PATH)
   # do the export, so we don't have to relogin in order to call "go version"
-  echo ${PATH} | grep -q ${FF_AGENT_HOME}/go/bin
+  echo ${PATH} | grep --quiet ${FF_AGENT_HOME}/go/bin
   if [ ${?} -ne 0 ]; then
     # Path to 'go' is missing from PATH environment variable. Inject it:
     export PATH=${PATH}:${FF_AGENT_HOME}/go/bin
@@ -754,7 +1000,7 @@ EOT
 }
 export -f install_go
 
-###############################################################################
+################################################################################
 #
 # Installations of "n" based on the tutorial:
 #  "Getting started with n (node version management)"
@@ -771,30 +1017,35 @@ export -f install_go
 function install_n {
   state_set "${FUNCNAME[0]}" "start"
 
-  # Define required variables
-  local REQUIRED_VARIABLES=(
-    FF_AGENT_HOME
+  # Check dependencies
+  local DEPENDENCIES=(
+    "curl"
+    "inject_into_file"
+    "popd"
+    "printenv"
+    "pushd"
   )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+    return 1
+  }
 
-  # Check required environment variables are set
-  for VARIABLE_NAME in "${REQUIRED_VARIABLES[@]}"; do
-    ensure_variable_not_empty "${VARIABLE_NAME}" || {
-      local ERROR_DETAILS="Failed to ensure variable not empty: '${VARIABLE_NAME}'"
-      error "${FUNCNAME[0]}" "${ERROR_DETAILS}"
-
-      local ERROR_CODE="failed_to_ensure_variable_not_empty"
-      state_set "${FUNCNAME[0]}" "${ERROR_CODE}"
-      return 1
-    }
-  done
+  # Define required non-empty variables
+  local REQUIRED_NON_EMPTY_VARIABLES=(
+    "FF_AGENT_HOME"
+  )
+  ensure_variables_not_empty "${FUNCNAME[0]}" "${REQUIRED_NON_EMPTY_VARIABLES[@]}" || { # Note: ensure_variables_not_empty will report missing variables
+    state_set "${FUNCNAME[0]}" 'ensure_variables_not_empty_failed'
+    return 1
+  }
 
   # Define path to ff_agent .profile
-  FF_AGENT_PROFILE_FILE="${FF_AGENT_HOME}/.profile"    # example: /home/ubuntu/ff_agent/.profile  (Note: FF_AGENT_PROFILE_FILE is not local, but shell environment used in other install functions)
+  local FF_AGENT_PROFILE_FILE="${FF_AGENT_HOME}/.profile"    # example: /home/ubuntu/ff_agent/.profile  (Note: FF_AGENT_PROFILE_FILE is not local, but shell environment used in other install functions)
 
   # Check custom .profile file exists
   if [ ! -f "${FF_AGENT_PROFILE_FILE}" ]; then
     # Let's not try to re-create it if missing.
-    # It should have been created by existing install_ff_agent_bashrc()
+    # It should have been created by existing ff_agent_install_bashrc()
   	state_set "${FUNCNAME[0]}" "error_custom_ff_agent_profile_does_not_exist"
     return 1
   fi
@@ -942,7 +1193,7 @@ EOT
 
   #
   VERSION=$( nodejs_desired_version_get )
-  [ -z "${VERSION}" ] && { state_set "${FUNCNAME[0]}" 'failed_to_nodejs_desired_version_get'; abort; }
+  [ -z "${VERSION}" ] && { state_set "${FUNCNAME[0]}" 'failed_to_nodejs_desired_version_get'; abort 'failed_to_nodejs_desired_version_get'; }
 
   # Install 'n_lts' using dowloaded into TMPDIR 'n' ('n_lts' will be installed into ff_agent/.n)
   retry_command 5 15 bash n "${VERSION}" || {
@@ -968,82 +1219,100 @@ EOT
 }
 export -f install_n
 
-###############################################################################
+################################################################################
 #
 function install_nodejs {
   state_set "${FUNCNAME[0]}" 'started'
 
+ # Check dependencies
+  local DEPENDENCIES=(
+    "install_n"
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+    return 1
+  }
+
   # Get desired nodejs version
   local VERSION="$( nodejs_desired_version_get )"
-  [ -z "${VERSION}" ] && { state_set "${FUNCNAME[0]}" 'failed_to_nodejs_desired_version_get'; abort; }
+  [ -z "${VERSION}" ] && { state_set "${FUNCNAME[0]}" 'failed_to_nodejs_desired_version_get'; abort 'failed_to_nodejs_desired_version_get'; }
 
 
   # # We need to stop pm2 before replacing location of nodejs, otherwise any pm2 command would faild
   # stop_pm2
-  # uninstall_n_outside_ff_agent_home  || { state_set "${FUNCNAME[0]}" 'terminal_error_uninstall_n_outside_ff_agent_home'; abort; }
-  install_n || { state_set "${FUNCNAME[0]}" 'terminal_error_install_n'; abort; }
-  n install "${VERSION}" || { state_set "${FUNCNAME[0]}" 'terminal_error_switching_node_version'; abort; }
+  # uninstall_n_outside_ff_agent_home  || { state_set "${FUNCNAME[0]}" 'terminal_error_uninstall_n_outside_ff_agent_home'; abort 'terminal_error_uninstall_n_outside_ff_agent_home'; }
+  install_n || { state_set "${FUNCNAME[0]}" 'terminal_error_install_n'; abort 'terminal_error_install_n'; }
+  n install "${VERSION}" || { state_set "${FUNCNAME[0]}" 'terminal_error_switching_node_version'; abort 'terminal_error_switching_node_version'; }
 
   state_set "${FUNCNAME[0]}" 'success'
 }
 export -f install_nodejs
 
-###############################################################################
+################################################################################
 #
 # Install nodejs latest environment
 function install_nodejs_suite {
   state_set "${FUNCNAME[0]}" 'started'
 
+ # Check dependencies
+  local DEPENDENCIES=(
+    "install_authbind"
+    "install_nodejs"
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+    return 1
+  }
+
   # We want nodejs to be able to open ports 443 and 80, so we will install_authbind before this.
 
-  install_authbind || { state_set "${FUNCNAME[0]}" 'install_authbind_failed'; abort; }
+  install_authbind || { state_set "${FUNCNAME[0]}" 'install_authbind_failed'; abort 'install_authbind_failed'; }
 
-  install_nodejs || { state_set "${FUNCNAME[0]}" 'terminal_error_install_node'; abort; }
+  install_nodejs || { state_set "${FUNCNAME[0]}" 'terminal_error_install_node'; abort 'terminal_error_install_node'; }
 
   state_set "${FUNCNAME[0]}" 'success'
 }
 export -f install_nodejs_suite
 
-###############################################################################
+################################################################################
 #
 # Continuation of the "set_environment". Installing baseline components.
 # On error: function aborts (so no need to errorcheck on caller side)
 #
 function install_set_environment_baseline {
+  state_set "${FUNCNAME[0]}" 'started'
+
+ # Check dependencies
+  local DEPENDENCIES=(
+    "abort"
+    "assert_clean_exit"
+    "discover_environment"
+    "set_environment_ensure_ff_agent_bin_exists"
+    "setup_logging"
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+    return 1
+  }
 
   # Discover environment (choose user, make sure it's home folder exists, check FF_CONTENT_URL is set etc.)
-  discover_environment || { abort "terminal_error_failed_to_discover_environment"; }
+  discover_environment || { abort "${FUNCNAME[0]}" "terminal_error_failed_to_discover_environment"; }
 
   # Now we can state_set()
   state_set "${FUNCNAME[0]}" 'started'
 
   # Put logs in best location
-  setup_logging || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_setup_logging"; abort; }
+  setup_logging || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_setup_logging"; abort 'terminal_error_failed_to_setup_logging'; }
 
   # Ensure ff_agent/bin folder exists before assert_baseline_components
-  set_environment_ensure_ff_agent_bin_exists || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_set_environment_ensure_ff_agent_bin_exists"; abort; }
+  set_environment_ensure_ff_agent_bin_exists || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_set_environment_ensure_ff_agent_bin_exists"; abort 'terminal_error_failed_to_set_environment_ensure_ff_agent_bin_exists'; }
 
   # Install set of basic packages, bash functions, .bashrc and .profile files
-  assert_clean_exit assert_baseline_components || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_assert_baseline_components"; abort; }
+  assert_clean_exit assert_baseline_components || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_assert_baseline_components"; abort 'terminal_error_failed_to_assert_baseline_components'; }
 
   state_set "${FUNCNAME[0]}" 'success'
 }
 export -f install_set_environment_baseline
-
-###############################################################################
-# Category: process
-# pm2_is_installed
-# Checks if pm2 is installed
-# Returns 0 if it is, 1 if it isn't
-function pm2_is_installed {
-    local STATUS=0
-    local PACKAGE="pm2"
-    local NPM=$( command_exists npm ) || { state_set "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
-
-    # If it not installed, set STATUS=1
-    ${NPM} list "${PACKAGE}" --global >/dev/null
-}
-export -f pm2_is_installed
 
 # ##########################################################################################
 # #
@@ -1185,31 +1454,24 @@ export -f pm2_is_installed
 #     return 0
 # }
 
-###############################################################################
-# Category: process
-# pm2_is_running_as_me
-# Will return 0 if it is, 1 if it is not
-function pm2_is_running_as_me {
-    state_set "${FUNCNAME[0]}" 'started'
-    # Process will look like PM2 v4.5.5: God Daemon (/home/user/.pm2)
-    local PATTERN="PM2 .*: God Daemon"
-
-    # Check if process is running as local user.
-    process_is_running_as_me "${PATTERN}"
-    local STATUS=${?}
-
-    state_set "${FUNCNAME[0]}" 'success'
-
-    return ${STATUS}
-}
-export -f pm2_is_running_as_me
-
-###############################################################################
+################################################################################
 # Category: process
 # pm2_configure
 # Configures pm2 the way we want it configured
 function pm2_configure {
     state_set "${FUNCNAME[0]}" 'started'
+
+    # Define dependencies
+    local DEPENDENCIES=(
+      "timeout"
+      "seq"
+      "pm2"
+    )
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+      state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+      return 1
+    }
+
     # Now it is installed, and command is in path. So we shall configure it
     # Configure it to automatically save state
     timeout 30 pm2 set pm2:autodump true            || { state_set "${FUNCNAME[0]}" "pm2_configure_autodump_error"; return 1; }
@@ -1234,13 +1496,27 @@ function pm2_configure {
 }
 export -f pm2_configure
 
-###############################################################################
+################################################################################
 # Category: process
 # pm2_ensure
 # This ensures that pm2 is running, and working as we wish. aborts otherwise.
 # If it is not installed, we install it.
 function pm2_ensure {
     state_set "${FUNCNAME[0]}" 'started'
+
+    # Define dependencies
+    local DEPENDENCIES=(
+      "abort"
+      "pm2_configure"
+      "pm2_is_running_as_me"
+      "pm2_is_installed"
+      "pm2_install"
+      "pm2_start"
+    )
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+      state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+      return 1
+    }
 
     # If pm2 is running, then we ensure it is properly configured. It might have been running already, but not properly configured.
     pm2_is_running_as_me
@@ -1252,7 +1528,7 @@ function pm2_ensure {
 
     # It is not running as me, it might not be installed. If that's the case, we install it.
     # Is pm2 installed? If not, install it
-    pm2_is_installed || pm2_install || { state_set "${FUNCNAME[0]}" 'error_failed_to_install_pm2'; abort; }
+    pm2_is_installed || pm2_install || { state_set "${FUNCNAME[0]}" 'error_failed_to_install_pm2'; abort 'error_failed_to_install_pm2'; }
 
     # Now it has to at least be installed, and not running, so we try to start it.
     pm2_start || { state_set "${FUNCNAME[0]}" 'failed_to_start_pm2'; abort 'failed_to_start_pm2'; }
@@ -1268,13 +1544,22 @@ function pm2_ensure {
 }
 export -f pm2_ensure
 
-###############################################################################
+################################################################################
 # Category: process
 # pm2_install
 # Will install pm2 if there is no command 'pm2'
 # Will not start it
 function pm2_install {
     state_set "${FUNCNAME[0]}" 'started'
+
+    # Define dependencies
+    local DEPENDENCIES=(
+      "command_exists"
+    )
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+      state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+      return 1
+    }
 
     local NPM_PACKAGE="pm2"
     local VERSION="latest"
@@ -1302,35 +1587,101 @@ function pm2_install {
 }
 export -f pm2_install
 
-###############################################################################
+################################################################################
+# Category: process
+# pm2_is_installed
+# Checks if pm2 is installed
+# Returns 0 if it is, 1 if it isn't
+function pm2_is_installed {
+  # Check dependencies
+  local DEPENDENCIES="command_exists"
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+
+  # Return 0 if command exists
+  command_exists pm2 >/dev/null
+}
+export -f pm2_is_installed
+
+################################################################################
+# Category: process
+# pm2_is_running_as_me
+# Will return 0 if it is, 1 if it is not
+function pm2_is_running_as_me {
+    state_set "${FUNCNAME[0]}" 'started'
+
+    # Define dependencies
+    local DEPENDENCIES=(
+      "process_is_running_as_me"
+    )
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+      state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+      return 1
+    }
+
+    # Process will look like PM2 v4.5.5: God Daemon (/home/user/.pm2)
+    local PATTERN="PM2 .*: God Daemon"
+
+    # Check if process is running as local user.
+    process_is_running_as_me "${PATTERN}"
+    local STATUS=${?}
+
+    state_set "${FUNCNAME[0]}" 'success'
+
+    return ${STATUS}
+}
+export -f pm2_is_running_as_me
+
+################################################################################
 # Category: process
 # pm2_start
 function pm2_start {
     state_set "${FUNCNAME[0]}" 'started'
+
+    # Define dependencies
+    local DEPENDENCIES=(
+      "command_exists"
+      "pm2"
+      "pm2_is_running_as_me"
+    )
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+      state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+      return 1
+    }
 
     # Check if it is running. If it is, we're happy.
     pm2_is_running_as_me && { state_set "${FUNCNAME[0]}" 'success_no_action_pm2_is_running'; return 0; }
 
     local PM2=$( command_exists pm2 )
     [ -z "${PM2}" ] && { state_set "${FUNCNAME[0]}" 'error_dependency_not_met_pm2_command'; return 1; }
-    ${PM2} start
+    "${PM2}" start
 
     # Check if it is running. If it is, we're happy.
     # Note: pm2 can start and still return non-zero (i.e. it started but there was no ecosystem.config.js
     # So it is not sufficient to test for return code, but if it is running as me, then it is at least started
     pm2_is_running_as_me && { state_set "${FUNCNAME[0]}" 'success'; return 0; }
 
-    state_set "${FUNCNAME[0]}" 'error_failed_to_start_pm2'
+    state_set "${FUNCNAME[0]}" 'failed_to_pm2_start'
 }
 export -f pm2_start
 
-###############################################################################
+################################################################################
 # Category: process
 # pm2_stop stops the running pm2 daemon running as the current user.
 # does not stop any root level or other user pm2 daemons.
 #
 function pm2_stop {
     state_set "${FUNCNAME[0]}" 'started'
+
+    # Define dependencies
+    local DEPENDENCIES=(
+      "command_exists"
+      "pm2"
+      "pm2_is_running_as_me"
+    )
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+      state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+      return 1
+    }
 
     # Check if it is running. If it isn't, we finish.
     pm2_is_running_as_me || { state_set "${FUNCNAME[0]}" 'success_no_action_pm2_not_running'; return 0; }
@@ -1340,7 +1691,7 @@ function pm2_stop {
 
     # Try and kill pm2
     # Todo: do this with timeout - sometimes pm2 hangs. We ask it to kill itself, but sometimes the cat comes back :)
-    ${PM2} kill || { state_set "${FUNCNAME[0]}" 'error_pm2_kill_failed'; return 1; }
+    "${PM2}" kill || { state_set "${FUNCNAME[0]}" 'error_pm2_kill_failed'; return 1; }
 
     # Verify that it is actually stopped. If it is still running after we killed it, it is a problem.
     pm2_is_running_as_me || { state_set "${FUNCNAME[0]}" 'error_unable_to_validate_pm2_daemon_gone_postcondition_pm2_still_running'; return 1; }
@@ -1350,12 +1701,22 @@ function pm2_stop {
 }
 export -f pm2_stop
 
-###############################################################################
+################################################################################
 # Category: process
 # pm2_uninstall
 # Removes PM2
 function pm2_uninstall {
     state_set "${FUNCNAME[0]}" 'started'
+
+    # Define dependencies
+    local DEPENDENCIES=(
+      "command_exists"
+      "pm2_is_installed"
+    )
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+      state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+      return 1
+    }
 
     local PACKAGE="pm2"
 
@@ -1363,9 +1724,9 @@ function pm2_uninstall {
     pm2_is_installed || { state_set "${FUNCNAME[0]}" 'success_no_action_not_installed'; return 0; }
 
     # It's installed, so we will try to remove it
-    local NPM=$( command_exists npm)
+    local NPM=$( command_exists npm )
     [ "${NPM}" = "" ] && { state_set "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
-    ${NPM} remove --global "${PACKAGE}" || { state_set "${FUNCNAME[0]}" 'error_uninstalling_package'; return 1; }
+    "${NPM}" remove --global "${PACKAGE}" || { state_set "${FUNCNAME[0]}" 'error_uninstalling_package'; return 1; }
 
     # Verify it is removed. If this returns 1, it is not found. If it returns 0, we still have it.
     pm2_is_installed || { state_set "${FUNCNAME[0]}" 'success'; return 0; }
@@ -1374,7 +1735,109 @@ function pm2_uninstall {
 }
 export -f pm2_uninstall
 
-###############################################################################
+################################################################################
+#
+# Function makes sure "${FF_AGENT_HOME}/bin" folder is created.
+#
+function set_environment_ensure_ff_agent_bin_exists {
+
+  state_set "${FUNCNAME[0]}" 'started'
+
+  # Define dependencies
+  local DEPENDENCIES=(
+    "ensure_variable_not_empty"
+    "mkdir"
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+    return 1
+  }
+
+
+  # Loop through dependencies
+  for DEPENDENCY in "${DEPENDENCIES[@]}"; do
+    if ! command_exists "${DEPENDENCY}"; then
+      error "${FUNCNAME[0]}" "error_dependency_not_met_${DEPENDENCY}"
+      state_set "${FUNCNAME[0]}" "error_dependency_not_met_${DEPENDENCY}"
+      return 1
+    fi
+  done
+
+  # Define required non-empty variables
+  local REQUIRED_NON_EMPTY_VARIABLES=(
+    "FF_AGENT_HOME"
+  )
+  ensure_variables_not_empty "${FUNCNAME[0]}" "${REQUIRED_NON_EMPTY_VARIABLES[@]}" || { # Note: ensure_variables_not_empty will report missing variables
+    state_set "${FUNCNAME[0]}" 'ensure_variables_not_empty_failed'
+    return 1
+  }
+
+
+  # Define target directory
+  TARGET_DIR="${FF_AGENT_HOME}/bin"
+
+  # Check if target directory exists
+  [ -d "${TARGET_DIR}" ] || {
+    # Does not exist. Create new.
+    mkdir -p "${TARGET_DIR}" || { state_set "${FUNCNAME[0]}" 'failed_to_create_directory'; return 1; }
+  }
+
+  state_set "${FUNCNAME[0]}" 'success'
+}
+export -f set_environment_ensure_ff_agent_bin_exists
+
+################################################################################
+#
+# Function makes sure the symlink "set_environment_install" exists in the ${FF_AGENT_HOME}/bin/ folder.
+# If symlink is missing it will be created:
+#    ${FF_AGENT_HOME}/bin/set_environment_install -> ${FF_AGENT_HOME}/git/redwolfsecurity/set_environment/install
+# The installed command "set_environment_install" can also be run to update set_environment.
+#
+function set_environment_ensure_install_exists {
+
+  state_set "${FUNCNAME[0]}" 'started'
+
+ # Check dependencies
+  local DEPENDENCIES=(
+    "ln"
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+    return 1
+  }
+
+  # Define required non-empty variables
+  local REQUIRED_NON_EMPTY_VARIABLES=(
+    "FF_AGENT_HOME"
+  )
+  ensure_variables_not_empty "${FUNCNAME[0]}" "${REQUIRED_NON_EMPTY_VARIABLES[@]}" || { # Note: ensure_variables_not_empty will report missing variables
+    state_set "${FUNCNAME[0]}" 'ensure_variables_not_empty_failed'
+    return 1
+  }
+
+  # Define symlink
+  SYMLINK="${FF_AGENT_HOME}/bin/set_environment_install"
+
+  # Define target file (which new symlink must point to)
+  TARGET_FILE="${FF_AGENT_HOME}/git/redwolfsecurity/set_environment/install"
+
+  # Check symlink exists. Note: -L returns true if the "file" exists and is a symbolic link (the linked file may or may not exist).
+  [ -L "${SYMLINK}" ] || {
+      # SYMLINK is missing. Try to create new symlink.
+      ln -s "${TARGET_FILE}" "${SYMLINK}" || { state_set "${FUNCNAME[0]}" 'failed_to_create_symlink'; return 1; }
+  }
+
+  # Check the target file is present (symlink is not broken)
+  [ -f "${TARGET_FILE}" ] || { state_set "${FUNCNAME[0]}" 'error_target_file_missing'; return 1; }
+
+  # Check the target file is executable. Note: extra "-f" check added here since "-x" can say "yes, executable", but target points to directory.
+  [[ -f "${TARGET_FILE}" && -x "${TARGET_FILE}" ]] || { state_set "${FUNCNAME[0]}" 'error_target_file_not_executable'; return 1; }
+
+  state_set "${FUNCNAME[0]}" 'success'
+}
+export -f set_environment_ensure_install_exists
+
+################################################################################
 #
 # Function set_environment_preserve_source_code require the only argument: root folder of the project
 # from which the installer was started. It will analyze if the installer was started
@@ -1384,15 +1847,35 @@ export -f pm2_uninstall
 function set_environment_preserve_source_code {
   state_set "${FUNCNAME[0]}" 'started'
 
+ # Check dependencies
+  local DEPENDENCIES=(
+    "github_repository_url_parse"
+    "grep"
+    "mkdir"
+    "popd"
+    "pushd"
+    "ssh-keyscan"
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+    return 1
+  }
+
+  # Define required non-empty variables
+  local REQUIRED_NON_EMPTY_VARIABLES=(
+    "FF_AGENT_HOME"
+  )
+  ensure_variables_not_empty "${FUNCNAME[0]}" "${REQUIRED_NON_EMPTY_VARIABLES[@]}" || { # Note: ensure_variables_not_empty will report missing variables
+    state_set "${FUNCNAME[0]}" 'ensure_variables_not_empty_failed'
+    return 1
+  }
+
   # Get passed parameters (path to currently installed project folder)
   PROJECT_ROOT_DIR="${1}"
   [ -d "${PROJECT_ROOT_DIR}" ] || { state_set "${FUNCNAME[0]}" 'failed_to_set_environment_preserve_source_code'; return 1; }
 
   # As a preparation to preserve project source files (used during this installation), let's change directory to the project root directory.
   pushd "${PROJECT_ROOT_DIR}" || { state_set "${FUNCNAME[0]}" 'failed_to_cd_into_project'; return 1; }
-
-  # Make sure ${FF_AGENT_HOME} is set
-  [ ! -z "${FF_AGENT_HOME}" ] || { state_set "${FUNCNAME[0]}" 'error_ff_agen_home_not_set'; return 1; }
 
   # We need to trust github.com to avoid errors like this:
   # The authenticity of host 'github.com (140.82.113.4)' can't be established.
@@ -1455,7 +1938,7 @@ function set_environment_preserve_source_code {
 }
 export -f set_environment_preserve_source_code
 
-###############################################################################
+################################################################################
 # Log this script standard output and standard error to a log file AND system logger
 function set_script_logging {
 
@@ -1495,9 +1978,10 @@ function set_script_logging {
 }
 export -f set_script_logging
 
-###############################################################################
-#
+################################################################################
+# Orchestrator function
 function setup_logging {
+  # Ensure script output sent to standard output and standard error to a log file AND system logger
 	set_script_logging
 }
 export -f setup_logging
