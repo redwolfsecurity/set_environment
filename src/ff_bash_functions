@@ -59,6 +59,9 @@
 #    - abort
 #    - assert_clean_exit
 #    - banner
+#    - bash_call_trace_trap
+#    - bash_call_trace_trap_enable
+#    - bash_call_trace_trap_disable
 #    - error
 #    - log
 #    - step
@@ -2325,6 +2328,39 @@ EOT
 export -f banner
 
 ################################################################################
+# Logs each function call with a stack trace
+################################################################################
+function bash_call_trace_trap() {
+  # Skip non-function calls or self-calls
+  [[ "${FUNCNAME[1]}" == "bash_call_trace_trap" ]] && return
+  local i
+  echo "📍 FUNCTION CALL: ${FUNCNAME[1]} at ${BASH_SOURCE[1]}:${BASH_LINENO[0]}"
+  for ((i=1; i<${#FUNCNAME[@]}-1; i++)); do
+    echo "    ↳ ${FUNCNAME[i]}() at ${BASH_SOURCE[i]}:${BASH_LINENO[i-1]}"
+  done
+}
+export -f bash_call_trace_trap
+
+################################################################################
+# Enables the function call trace trap
+################################################################################
+function bash_call_trace_enable() {
+  export PS4='+ ${BASH_SOURCE}:${LINENO}:${FUNCNAME[0]}: '
+  trap 'bash_call_trace_trap' DEBUG
+  echo "✅ bash_call_trace ENABLED"
+}
+export -f bash_call_trace_enable
+
+################################################################################
+# Disables the function call trace trap
+################################################################################
+function bash_call_trace_disable() {
+  trap - DEBUG
+  echo "⛔ bash_call_trace DISABLED"
+}
+export -f bash_call_trace_disable
+
+################################################################################
 # CATEGORY
 #   UTILITY FUNCTIONS: LOGGING / PROCESS CONTROL
 #
@@ -4050,7 +4086,7 @@ function state_set {
     return 1
   }
 
-  echo "${FUNCNAME[0]}: state ${STATE_NAME} set to ${STATE_VALUE}"
+  log "${FUNCNAME[0]}: state ${STATE_NAME} -> ${STATE_VALUE}"
 
   # ------------------ Build JSON object "state/change" and send to FF_AGENT_API_FQDN
 
