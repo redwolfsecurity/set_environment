@@ -1523,6 +1523,7 @@ function pm2_ensure {
     # If pm2 is running, then we ensure it is properly configured. It might have been running already, but not properly configured.
     pm2_is_running_as_me
     if [ ${?} == 0 ]; then
+        state_set "${FUNCNAME[0]}" 'pm2_is_running_as_me_configuration_starting'
         pm2_configure || { state_set "${FUNCNAME[0]}" 'error_configuring_pm2'; abort 'error_configuring_pm2'; }
         state_set "${FUNCNAME[0]}" 'success'
         return 0
@@ -1627,9 +1628,11 @@ function pm2_is_running_as_me {
     process_is_running_as_me "${PATTERN}"
     local STATUS=${?}
 
+    if [ ${STATUS} -ne 0 ]; then
+        state_set "${FUNCNAME[0]}" 'error_pm2_not_running_as_user'
+        return ${STATUS}
+    fi
     state_set "${FUNCNAME[0]}" 'success'
-
-    return ${STATUS}
 }
 export -f pm2_is_running_as_me
 

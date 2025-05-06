@@ -3391,26 +3391,28 @@ export -f command_run_as_user
 #
 ################################################################################
 function process_is_running_as_me {
-
-  # Check dependencies
+  local FUNC="${FUNCNAME[0]}"
   local DEPENDENCIES="command_exists current_user_get error grep ps"
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+  check_dependencies "${FUNC}" "${DEPENDENCIES}" || return 1
 
   local COMMAND_PATTERN="${1}"
-  [ -n "${COMMAND_PATTERN}" ] || { error "${FUNCNAME[0]}" 'error_require_pattern_to_search_for'; return 1; }
+  [ -n "${COMMAND_PATTERN}" ] || { error "${FUNC}" 'error_require_pattern_to_search_for'; return 1; }
 
-  # We require PS and GREP commands
   local PS
-  PS=$( command_exists ps ) || { error "${FUNCNAME[0]}" 'error_dependency_not_met_ps_command'; return 1; }
+  PS=$(command_exists ps) || { error "${FUNC}" 'error_dependency_not_met_ps_command'; return 1; }
 
   local GREP
-  GREP=$( command_exists grep ) || { error "${FUNCNAME[0]}" 'error_dependency_not_met_grep_command'; return 1; }
+  GREP=$(command_exists grep) || { error "${FUNC}" 'error_dependency_not_met_grep_command'; return 1; }
 
-  # Get current user. Note: the ${USER} environment is NOT set when running as 'root' in docker, we must use f-n current_user_get() instead.
   local CURRENT_USER
-  CURRENT_USER="$(current_user_get)" || { error "${FUNCNAME[0]}" "Can not get current user"; return 1; }
+  CURRENT_USER="$(current_user_get)" || { error "${FUNC}" "cannot_get_current_user"; return 1; }
 
-  "${PS}" -u "${CURRENT_USER}" -U "${CURRENT_USER}" o command | "${GREP}" --silent -e "^${COMMAND_PATTERN}"
+  # Loop through each command and test regex match (avoiding grep self-match)
+  while IFS= read -r CMD_LINE; do
+    echo "${CMD_LINE}" | "${GREP}" -E --quiet "${COMMAND_PATTERN}" && return 0
+  done < <("${PS}" -u "${CURRENT_USER}" -o command=)
+
+  return 1
 }
 export -f process_is_running_as_me
 
