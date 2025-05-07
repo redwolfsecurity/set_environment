@@ -191,20 +191,25 @@ function assert_baseline_components {
   # Install nodejs suite and all its fixings (not using "apt") (Note: this will modify ff_agent/.profile)
   assert_clean_exit install_nodejs_suite
 
-  # Install pm2
-  assert_clean_exit pm2_ensure
-
   # Install npm package "@ff/ff_agent"
   assert_clean_exit ff_agent_install
 
-  # Install a script to update ff_agent and restart it by pm2
-  assert_clean_exit ff_agent_update_install
+  # Install pm2
+  assert_clean_exit pm2_install
 
   # Run ff_agent by pm2
   assert_clean_exit ff_agent_run_pm2
 
+
   # Register ff_agent in systemd
   assert_clean_exit ff_agent_register_pm2_systemd
+
+
+  # Ensure pm2 is running properly
+  assert_clean_exit pm2_ensure
+
+  # Install a script to update ff_agent and restart it by pm2
+  assert_clean_exit ff_agent_update_install
 
   state_set "${FUNCNAME[0]}" 'success'
 }
