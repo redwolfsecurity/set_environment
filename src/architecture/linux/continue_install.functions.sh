@@ -1635,7 +1635,12 @@ function pm2_is_running_as_me {
         echo "pwd: $( pwd )"
         echo "USER: $( whoami )"
         echo "HOME: $( echo ${HOME} )"
+        echo "ps aux"
         ps aux
+        echo "PM2 log:"
+        cat ~/.pm2/pm2.log
+        echo "pm2 ping"
+        pm2 ping || echo "pm2 ping failed"
         return ${STATUS}
     fi
     state_set "${FUNCNAME[0]}" 'success'
