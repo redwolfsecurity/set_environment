@@ -1635,8 +1635,8 @@ function pm2_is_running_as_me {
         echo "pwd: $( pwd )"
         echo "USER: $( whoami )"
         echo "HOME: $( echo ${HOME} )"
-        echo "ps aux"
-        ps aux
+        echo "sudo ps aux"
+        sudo ps aux
         echo "PM2 log:"
         cat ~/.pm2/pm2.log
         echo "pm2 ping"
@@ -1669,7 +1669,16 @@ function pm2_start {
 
     local PM2=$( command_exists pm2 )
     [ -z "${PM2}" ] && { state_set "${FUNCNAME[0]}" 'error_dependency_not_met_pm2_command'; return 1; }
-    "${PM2}" start
+
+    pushd ${HOME}
+    # Try and startpm2
+    "${PM2}" start || {
+        state_set "${FUNCNAME[0]}" 'error_pm2_start_failed'
+        log "Error - PM2 did not start. pm2 log last 1000 lines are:"
+        tail -n 1000 ${HOME}/.pm2/pm2.log
+        return 1
+    }
+    popd
 
     # Check if it is running. If it is, we're happy.
     # Note: pm2 can start and still return non-zero (i.e. it started but there was no ecosystem.config.js
