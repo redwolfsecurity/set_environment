@@ -1630,6 +1630,12 @@ function pm2_is_running_as_me {
 
     if [ ${STATUS} -ne 0 ]; then
         state_set "${FUNCNAME[0]}" 'error_pm2_not_running_as_user'
+        echo "DEBUG"
+        echo "id: $( id )"
+        echo "pwd: $( pwd )"
+        echo "USER: $( whoami )"
+        echo "HOME: $( echo ${HOME} )"
+        ps aux
         return ${STATUS}
     fi
     state_set "${FUNCNAME[0]}" 'success'
