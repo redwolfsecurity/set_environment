@@ -148,15 +148,14 @@ function apt_install_basic_packages {
       # This script requires grep
       grep
 
-      # Docker requires these
-      gnupg2
+      # gnupg2
       lsb-release
 
       # System: CA certificates
-      ca-certificates # Common CA certificates - Docker requires
+      # ca-certificates # Common CA certificates - Docker requires
 
       # For generate_strong_password (which uuencode is part of)
-      sharutils
+      # sharutils
   )
   local MISSING_PACKAGES=()
 
@@ -1630,7 +1629,7 @@ function pm2_is_running_as_me {
 
     if [ ${STATUS} -ne 0 ]; then
         state_set "${FUNCNAME[0]}" 'error_pm2_not_running_as_user'
-        echo "DEBUG"
+        echo "DEBUG PM2======================================================"
         echo "id: $( id )"
         echo "pwd: $( pwd )"
         echo "USER: $( whoami )"
@@ -1672,7 +1671,7 @@ function pm2_start {
 
     pushd ${HOME}
     # Try and startpm2
-    "${PM2}" start || {
+    "${PM2}" start --daemon || {
         state_set "${FUNCNAME[0]}" 'error_pm2_start_failed'
         log "Error - PM2 did not start. pm2 log last 1000 lines are:"
         tail -n 1000 ${HOME}/.pm2/pm2.log
