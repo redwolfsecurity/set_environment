@@ -175,13 +175,11 @@
 #
 ################################################################################
 function ask_for_value {
-    # Check dependencies
     local DEPENDENCIES="log read eval"
-    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1
 
     local VALUE=""
-
-    local  __RESULTVAR=${1}
+    local __RESULTVAR=${1}
     local QUESTION=${2}
     local TOOLTIP=${3}
     local DEFAULT=${4}
@@ -189,21 +187,22 @@ function ask_for_value {
     while [[ -z ${VALUE} ]]
     do
         log "${QUESTION}"
-        if [[ -z ${DEFAULT} ]]
-        then
-            read -p "${TOOLTIP}" VALUE
+        if [[ -z ${DEFAULT} ]]; then
+            read -r -p "${TOOLTIP}" VALUE
         else
-            read -e -p "${TOOLTIP}" -i "${DEFAULT}" VALUE
+            # -i requires -e, and -i only works in Bash
+            read -r -e -p "${TOOLTIP}" -i "${DEFAULT}" VALUE
         fi
     done
 
-    if [[ "${__RESULTVAR}" ]]; then
-        eval ${__RESULTVAR}="'${VALUE}'"
+    if [[ -n "${__RESULTVAR}" ]]; then
+        eval "${__RESULTVAR}='${VALUE}'"
     else
         echo "${VALUE}"
     fi
 }
 export -f ask_for_value
+
 
 ################################################################################
 # CATEGORY
@@ -243,7 +242,7 @@ function ask_for_yn {
     while [[ ${ANSWER,,} != "y" ]] && [[ ${ANSWER,,} != "n" ]]
     do
         log "${QUESTION}"
-        read -p "Answer [Y/n]: " ANSWER
+        read -r -p "Answer [Y/n]: " ANSWER
         if [[ -n ${ANSWER} ]] && [[ ${ANSWER,,} == "y" ]]
         then
             return 0
@@ -294,7 +293,7 @@ function command_exists {
   # Force bash to un-hash any previously memorized commands. This will require bash to look it up again.
   # This is for cases where it has 'memoried' a command that has actually been deleted.
   hash -d "${COMMAND}" >/dev/null 2>/dev/null
-  hash -d $(command -v "${COMMAND}" ) >/dev/null 2>/dev/null
+  hash -d "$(command -v "${COMMAND}" )" >/dev/null 2>/dev/null
 
   local COMMAND_RESOLVED
   COMMAND_RESOLVED=$(command -v "${COMMAND}" )
@@ -358,7 +357,7 @@ function file_toc {
   }
 
   # Parse ff_bash_functions and generate table of contents
-  cat "${FILEPATH}" | grep '^### BEGIN\|^### END\|^function' | sed 's/^function /\#    - /g' | sed 's/{//g' | sed 's/###/##/g'
+  grep '^### BEGIN\|^### END\|^function' "${FILEPATH}" | sed 's/^function /\#    - /g' | sed 's/{//g' | sed 's/###/##/g'
 }
 export -f file_toc
 
@@ -438,7 +437,7 @@ function help_toc {
   }
 
   # Parse ff_bash_functions and generate table of contents
-  cat "${TARGET_FILE}" | grep '^### BEGIN\|^### END\|^function' | sed 's/^function /\#    - /g' | sed 's/{//g' | sed 's/###/##/g'
+  grep '^### BEGIN\|^### END\|^function' "${TARGET_FILE}" | sed 's/^function /\#    - /g' | sed 's/{//g' | sed 's/###/##/g'
 }
 export -f help_toc
 
@@ -489,7 +488,7 @@ function apt_dist_upgrade {
       -yq \
       -o Dpkg::Options::="--force-confdef" \
       -o Dpkg::Options::="--force-confold" \
-      ${FORCE_YES} ${APT_COMMAND} || { error "${FUNCNAME[0]}" "Failed to apt_dist_upgrade"; return 1; }
+      "${FORCE_YES}" ${APT_COMMAND} || { error "${FUNCNAME[0]}" "Failed to apt_dist_upgrade"; return 1; }
 }
 export -f apt_dist_upgrade
 
@@ -520,11 +519,11 @@ function apt_install {
   local DEPENDENCIES="apt-get error sudo"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  local PACKAGES=${@}
+  local PACKAGES=("$@")
   local APT_COMMAND=install
 
   # Note: don't wrap ${PACKAGES} in quotes, otherwise it will not word split, and the loop will only run once.
-  for PACKAGE in ${PACKAGES}; do
+  for PACKAGE in "${PACKAGES[@]}"; do
       # Note: we suppress stdout noise (only stderr will still be "visible", but TODO: think of better way to collect evidences insted of just 1 large pile)
       sudo DEBIAN_FRONTEND=noninteractive \
       apt-get \
