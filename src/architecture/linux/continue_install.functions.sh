@@ -1116,33 +1116,6 @@ export -f install_authbind
 
 ################################################################################
 #
-# Function installs "build_tools" project.
-function install_build_tools {
-  state_set "${FUNCNAME[0]}" 'started'
-
-  # Check dependencies
-  local DEPENDENCIES=(
-    "git"
-  )
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
-    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
-    return 1
-  }
-
-  GIT_URL="git@github.com:redwolfsecurity/build_tools.git"
-
-  cd /tmp                 || { state_set "${FUNCNAME[0]}" 'failed_to_change_directory_to_temporary_folder'; return 1; }
-  rm -fr /tmp/build_tools || { state_set "${FUNCNAME[0]}" 'failed_to_cleanup_old_project_temporary_folder'; return 1; }
-  git clone "${GIT_URL}"  || { state_set "${FUNCNAME[0]}" 'failed_to_git_clone_project'; return 1; }
-  cd build_tools          || { state_set "${FUNCNAME[0]}" 'failed_to_change_directory_to_project_folder'; return 1; }
-  ./install               || { state_set "${FUNCNAME[0]}" 'failed_to_install'; return 1; }
-
-  state_set "${FUNCNAME[0]}" 'success'
-}
-export -f install_build_tools
-
-################################################################################
-#
 # Function installs "go" by certain version (see below) if it is not already installed.
 #
 # In case of successful install (or already at expected version) script return success code 0.
