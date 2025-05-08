@@ -1015,8 +1015,49 @@ EOT
 export -f ff_agent_update_install
 
 ################################################################################
+# CATEGORY
+#   SYSTEM SETUP FUNCTIONS
 #
-# Function installs "authbind" to allow binries to open ports <=1024
+# NAME
+#   install_authbind - Install and configure authbind for privileged ports
+#
+# SYNOPSIS
+#   install_authbind
+#
+# DESCRIPTION
+#   Installs the `authbind` package and configures port-level access permissions
+#   so non-root processes can bind to privileged ports (<=1024), such as 80 and 443.
+#
+#   This function performs the following steps:
+#     - Ensures `authbind` is installed
+#     - Ensures configuration files exist for ports 80 and 443 in /etc/authbind/byport/
+#     - Applies proper permissions and ownership to those files
+#
+#   It skips any step that is already completed and is safe to re-run (idempotent).
+#
+#   Once configured, you can run a binary (or symlink) with elevated bind privileges.
+#   Note: the path to the executable can be a symlink.
+#     Example:
+#       sudo authbind --deep /opt/ff_agent/bin/ff_agent_start
+#
+#     This grants permission to bind ports like 80/443 without running as root,
+#     provided the binary internally performs the binding itself (not via subprocess).
+#
+# DEPENDENCIES
+#   - apt_install
+#   - chmod
+#   - chown
+#   - command_exists
+#   - state_set
+#
+# USAGE EXAMPLE
+#   install_authbind
+#
+# EXIT STATUS
+#   Returns 0 on successful install or if already configured
+#   Returns 1 on error, setting appropriate state
+#
+################################################################################
 function install_authbind {
   state_set "${FUNCNAME[0]}" 'started'
 
@@ -1031,18 +1072,44 @@ function install_authbind {
     return 1
   }
 
-  apt_install authbind  || { state_set "${FUNCNAME[0]}" 'failed_to_install_authbind'; return 1; }
+  # Install authbind if missing
+  if ! command_exists authbind; then
+    apt_install authbind || {
+      state_set "${FUNCNAME[0]}" 'failed_to_install_authbind'
+      return 1
+    }
+  fi
 
-  # Create authbind configuration for ports 80 and 443
-  sudo touch /etc/authbind/byport/80  || { state_set "${FUNCNAME[0]}" 'failed_to_create_authbind_byport_80'; return 1; }
-  sudo touch /etc/authbind/byport/443 || { state_set "${FUNCNAME[0]}" 'failed_to_create_authbind_byport_443'; return 1; }
-  sudo chmod 500 /etc/authbind/byport/80 || { state_set "${FUNCNAME[0]}" 'failed_to_set_permission_authbind_byport_80'; return 1; }
-  sudo chmod 500 /etc/authbind/byport/443 || { state_set "${FUNCNAME[0]}" 'failed_to_set_permission_authbind_byport_443'; return 1; }
-  sudo chown root:root /etc/authbind/byport/80 || { state_set "${FUNCNAME[0]}" 'failed_to_set_ownership_authbind_byport_80'; return 1; }
-  sudo chown root:root /etc/authbind/byport/443 || { state_set "${FUNCNAME[0]}" 'failed_to_set_ownership_authbind_byport_443'; return 1; }
+  # Define list of ports to configure
+  local PORTS=(80 443)
+  for PORT in "${PORTS[@]}"; do
+    local FILE="/etc/authbind/byport/${PORT}"
 
-  # To run a program or symlink with the permission to authbind --deep $PATH_TO_EXECUTABLE
-  # PATH_TO_EXECUTABLE can be a symlink
+    # Create file if it doesn't exist
+    if [[ ! -f "${FILE}" ]]; then
+      sudo touch "${FILE}" || {
+        state_set "${FUNCNAME[0]}" "failed_to_create_authbind_byport_${PORT}"
+        return 1
+      }
+    fi
+
+    # Set restrictive permissions if not already 500
+    if [[ "$(stat -c '%a' "${FILE}")" != "500" ]]; then
+      sudo chmod 500 "${FILE}" || {
+        state_set "${FUNCNAME[0]}" "failed_to_set_permission_authbind_byport_${PORT}"
+        return 1
+      }
+    fi
+
+    # Set ownership to root:root if not already
+    if [[ "$(stat -c '%U:%G' "${FILE}")" != "root:root" ]]; then
+      sudo chown root:root "${FILE}" || {
+        state_set "${FUNCNAME[0]}" "failed_to_set_ownership_authbind_byport_${PORT}"
+        return 1
+      }
+    fi
+  done
+
   state_set "${FUNCNAME[0]}" 'success'
 }
 export -f install_authbind
