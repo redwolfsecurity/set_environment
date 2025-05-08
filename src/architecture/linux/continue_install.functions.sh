@@ -534,7 +534,7 @@ function ff_agent_register_pm2_systemd {
   }
 
   [[ "$(ps -p 1 -o comm= 2>/dev/null)" == "systemd" ]] || {
-    state_set "${FUNCNAME[0]}" 'systemd_not_detected'
+    state_set "${FUNCNAME[0]}" 'systemd_process_not_detected'
     return 0        # PID 1 must be systemd
   }
 
@@ -734,7 +734,7 @@ set_environment_is_working || {
 # Install @ff/ff_agent@latest
 npm install --global @ff/ff_agent@${VERSION} || {
   state_set "ff_agent_update" "npm_install_ff_agent_failed"
-  abort "ff_agent_update" "Failed to npm install @ff/ff_agent@${VERSION}"
+  abort "${FUNCNAME[0]}" "ff_agent_update" "Failed to npm install @ff/ff_agent@${VERSION}"
 }
 
 # Show installed @ff/ff_agent@latest version
@@ -745,13 +745,13 @@ log "Checking installed @ff/ff_agent@latest version: '\${FF_AGENT_VERSION}'"
 # Flush pm2
 pm2 flush ff_agent || {
   state_set "ff_agent_update" "pm2_flush_failed"
-  abort "ff_agent_update" "Failed to pm2 flush"
+  abort "${FUNCNAME[0]}" "ff_agent_update" "Failed to pm2 flush"
 }
 
 # Restart pm2
 pm2 restart ff_agent --update-env || {
   state_set "ff_agent_update" "pm2_restart_all_failed"
-  abort "ff_agent_update" "Failed to pm2 restart all"
+  abort "${FUNCNAME[0]}" "ff_agent_update" "Failed to pm2 restart all"
 }
 
 state_set "ff_agent_update" 'success'
@@ -1296,7 +1296,7 @@ function install_set_environment_baseline {
   }
 
   # Discover environment (choose user, make sure it's home folder exists, check FF_CONTENT_URL is set etc.)
-  discover_environment || { abort "${FUNCNAME[0]}" "terminal_error_failed_to_discover_environment"; }
+  discover_environment || abort "${FUNCNAME[0]}" "failed to discover_environment"
 
   # Now we can state_set()
   state_set "${FUNCNAME[0]}" 'started'

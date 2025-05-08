@@ -1126,14 +1126,14 @@ function assert_cd {
 
   # Check first if it is a directory.
   if [ ! -d "${1}" ]; then
-     abort "ERROR: Can not enter directory \"${1}\" -- it is not a directory."
+     abort "${FUNCNAME[0]}" "ERROR: Can not enter directory \"${1}\" -- it is not a directory."
   fi
 
   # Directory exists, now enter it. May fail due to permissions.
   if [ -d "${1}" ]; then
      assert_clean_exit cd "${1}"
   else
-     abort "ERROR: Can not enter directory \"${1}\". SUGGEST: check user ID and directory permissions."
+     abort "${FUNCNAME[0]}" "ERROR: Can not enter directory \"${1}\". SUGGEST: check user ID and directory permissions."
   fi
 }
 export -f assert_cd
@@ -2212,7 +2212,7 @@ export -f url_get
 #   the service's state to 'abort' before exiting.
 #
 # USAGE EXAMPLE
-#   do_critical_task || { abort "Critical task XYZ failed!"; }
+#   do_critical_task || abort "${FUNCNAME[0]}" "failed to xyz"
 #
 # EXIT STATUS
 #   Exits the script with status 1.
@@ -3388,7 +3388,7 @@ export -f process_is_running_as_me
 #   retry_command 5 10 wget "http://example.com/somefile.txt"
 #
 #   # Retry up to 5 times to install_xyz(), sleep 10 seconds between tries
-#   retry_command 5 10 install_xyz || { abort "Failed to install_xyz"; }
+#   retry_command 5 10 install_xyz || abort "${FUNCNAME[0]}" "failed to install_xyz"
 #
 # EXIT STATUS
 #   0 - Command executed successfully within the given attempts.
@@ -4551,7 +4551,7 @@ export -f user_exists
 #   Dependent on the successful setting of the FF_CONTENT_URL environment variable.
 #
 # USAGE EXAMPLE
-#   discover_environment || abort "Failed to discover_environment";
+#   discover_environment || abort "${FUNCNAME[0]}" "failed to discover_environment";
 #
 # EXIT STATUS
 #   0 - Success, environment discovered and initialized.
@@ -4594,37 +4594,37 @@ function discover_environment {
   #  FF_PROXY_PROTOCOL
   #  FF_PROXY_USERNAME
   #
-  ff_agent_home_get_best || { abort "Failed to ff_agent_home_get_best"; }
-  assert_ff_agent_home_exists || { abort "Failed to assert_ff_agent_home_exists"; }
+  ff_agent_home_get_best || abort "${FUNCNAME[0]}" "failed to ff_agent_home_get_best"
+  assert_ff_agent_home_exists || abort "${FUNCNAME[0]}" "failed to assert_ff_agent_home_exists"
 
   # Similarly for FF_AGENT_UUID
-  FF_AGENT_UUID=$( ff_agent_get_best_ff_agent_uuid )     || { abort "Failed to ff_agent_get_best_ff_agent_uuid"; }
+  FF_AGENT_UUID=$( ff_agent_get_best_ff_agent_uuid )     || abort "${FUNCNAME[0]}" "failed to ff_agent_get_best_ff_agent_uuid"
   secret_set ff_agent_uuid "${FF_AGENT_UUID}"
   export FF_AGENT_UUID
 
   # Similarly for FF_AGENT_URI
-  FF_AGENT_URI=$( ff_agent_get_best_ff_agent_uri )     || { abort "Failed to ff_agent_get_best_ff_agent_uri"; }
+  FF_AGENT_URI=$( ff_agent_get_best_ff_agent_uri )     || abort "${FUNCNAME[0]}" "failed to ff_agent_get_best_ff_agent_uri"
   secret_set ff_agent_uri "${FF_AGENT_URI}"
   export FF_AGENT_URI
 
   # Get best values, check errors, export and secret_set().
-  FF_CONTENT_URL=$( ff_agent_get_best_ff_content_url ) || { abort "Failed to ff_agent_get_best_ff_content_url"; }
+  FF_CONTENT_URL=$( ff_agent_get_best_ff_content_url ) || abort "${FUNCNAME[0]}" "failed to ff_agent_get_best_ff_content_url"
   secret_set ff_content_url "${FF_CONTENT_URL}"
   export FF_CONTENT_URL
 
-  FF_AGENT_FQDN=$( ff_agent_get_best_ff_agent_fqdn )               || { abort "Failed to ff_agent_get_best_ff_agent_fqdn"; }
+  FF_AGENT_FQDN=$( ff_agent_get_best_ff_agent_fqdn )               || abort "${FUNCNAME[0]}" "failed to ff_agent_get_best_ff_agent_fqdn"
   secret_set ff_agent_fqdn "${FF_AGENT_FQDN}"
   export FF_AGENT_FQDN
 
   # N_PREFIX is set in install_n() and added to ${FF_AGENT_HOME}/.profile
 
   # Similarly for best NAMESPACE
-  NAMESPACE=$( ff_agent_get_best_namespace ) || { abort "Failed to ff_agent_get_best_namespace"; }
+  NAMESPACE=$( ff_agent_get_best_namespace ) || abort "${FUNCNAME[0]}" "failed to ff_agent_get_best_namespace"
   secret_set namespace "${NAMESPACE}"
   export NAMESPACE
 
   # Similarly for best ORGANIZATION
-  ORGANIZATION=$( ff_agent_get_best_organization ) || { abort "Failed to ff_agent_get_best_organization"; }
+  ORGANIZATION=$( ff_agent_get_best_organization ) || abort "${FUNCNAME[0]}" "failed to ff_agent_get_best_organization"
   secret_set organization "${ORGANIZATION}"
   export ORGANIZATION
 }
@@ -5426,7 +5426,7 @@ export -f os_name_get
 #   dependencies before proceeding with the main operations.
 #
 # USAGE EXAMPLE
-#   assert_ff_agent_home_exists || { abort "FF_AGENT_HOME directory does not exist."; }
+#   assert_ff_agent_home_exists || abort abort "${FUNCNAME[0]}" "failed to assert_ff_agent_home_exists"
 #
 # EXIT STATUS
 #   0 - on success, indicating the FF_AGENT_HOME directory exists.
@@ -5481,7 +5481,7 @@ export -f assert_ff_agent_home_exists
 #   Requires 'tr' to be installed on the system for error handling purposes.
 #
 # USAGE EXAMPLE
-#   check_environment_variables_are_set || abort "One or more environment variables are not set.";
+#   check_environment_variables_are_set || abort "${FUNCNAME[0]}" "One or more environment variables are not set.";
 #
 # EXIT STATUS
 #   0 - on success, indicating all required environment variables are set.
@@ -5532,7 +5532,7 @@ export -f check_environment_variables_are_set
 #   Function sets state to indicate success or error code (because it is a complex multi-step function).
 #
 # USAGE EXAMPLE
-#   check_nodejs_installation || abort "Node.js installation checks failed.";
+#   check_nodejs_installation || abort "${FUNCNAME[0]}" "Node.js installation checks failed.";
 #
 # EXIT STATUS
 #   0 - on success, indicating Node.js is correctly installed.
