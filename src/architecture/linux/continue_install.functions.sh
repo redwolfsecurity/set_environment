@@ -151,11 +151,12 @@ function apt_install_basic_packages {
       # gnupg2
       lsb-release
 
-      # System: CA certificates
-      # ca-certificates # Common CA certificates - Docker requires
+      # ssh client (for the set environment ssh-keyscan command when the preserve set environment code is run)
+      openssh-client
 
-      # For generate_strong_password (which uuencode is part of)
-      # sharutils
+      # System: CA certificates
+      ca-certificates # Common CA certificates - Docker requires
+
   )
   local MISSING_PACKAGES=()
 
@@ -1799,14 +1800,10 @@ function set_environment_preserve_source_code {
 
   # We need to trust github.com to avoid errors like this:
   # The authenticity of host 'github.com (140.82.113.4)' can't be established.
-  # This fix was found here:
-  # https://gist.github.com/vikpe/34454d69fe03a9617f2b009cc3ba200b
-  # https://github.com/ome/devspace/issues/38
-  # And to avoid dublicates:
-  # https://serverfault.com/questions/132970/can-i-automatically-add-a-new-host-to-known-hosts
-  if ! grep --quiet "$(ssh-keyscan github.com 2>/dev/null)" ${HOME}/.ssh/known_hosts; then
-    ssh-keyscan github.com >> ${FF_AGENT_USER_HOME}/.ssh/known_hosts
+  if ! grep -q '^github\.com ' "${FF_AGENT_USER_HOME}/.ssh/known_hosts"; then
+      ssh-keyscan github.com >> "${FF_AGENT_USER_HOME}/.ssh/known_hosts"
   fi
+
 
   # Extract project owner from github repository URL
   local URL=$( git remote show origin | grep 'Fetch URL:' | awk -F'Fetch URL: ' '{print $2}' )
