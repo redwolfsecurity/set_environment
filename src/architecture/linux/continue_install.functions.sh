@@ -198,11 +198,11 @@ function assert_baseline_components {
   # Install pm2
   assert_clean_exit pm2_ensure
 
-  # Install scripts to manage ff_agent (update, logs, restart)
-  assert_clean_exit ff_agent_scripts_install
-
   # Install npm package "@ff/ff_agent"
   assert_clean_exit ff_agent_install
+
+  # Install scripts to manage ff_agent (update, logs, restart). Note: must be done after ff_agent installed, because ff_agent is dependency for them.
+  assert_clean_exit ff_agent_scripts_install
 
   # Run ff_agent by pm2
   assert_clean_exit ff_agent_run_pm2

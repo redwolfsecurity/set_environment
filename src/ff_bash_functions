@@ -1647,7 +1647,7 @@ function inject_into_file {
 
     # Append INJECT_CONTENT to the end of the target file. (same note on using "tee -a" instead of ">>" as above)
     echo "${INJECT_CONTENT}" | tee -a "${FILEPATH}" >/dev/null || {
-      error "${FUNCNAME[0]}" 'error_injecting_sourcing_custom_bashrc_to_home_bashrc'
+      error "${FUNCNAME[0]}" 'error_injecting_into_file'
       return 1
     }
 
