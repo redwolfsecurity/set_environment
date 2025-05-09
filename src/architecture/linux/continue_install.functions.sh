@@ -858,7 +858,6 @@ function install_n {
   local DEPENDENCIES=(
     "curl"
     "inject_into_file"
-    "npm"
     "popd"
     "printenv"
     "pushd"
@@ -1482,36 +1481,33 @@ function pm2_start {
     local DEPENDENCIES=(
       "command_exists"
       "pm2"
-      "pm2_is_running_as_me"
+      "pm2_is_installed_and_working"
     )
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
       state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
       return 1
     }
 
+    # Get the path to the pm2 command
+    local PM2=$( command_exists pm2 ) || { state_set "${FUNCNAME[0]}" 'error_pm2_command_not_found'; return 1; }
+
     # Check if it is running. If it is, we're happy.
-    pm2_is_running_as_me && { state_set "${FUNCNAME[0]}" 'success_no_action_pm2_is_running'; return 0; }
+    pm2_is_installed_and_working && { state_set "${FUNCNAME[0]}" 'success_no_action_pm2_is_already_running'; return 0; }
 
-    local PM2=$( command_exists pm2 )
-    [ -z "${PM2}" ] && { state_set "${FUNCNAME[0]}" 'error_dependency_not_met_pm2_command'; return 1; }
-
-    pushd ${HOME}
-    # Try and startpm2
-    "${PM2}" start --daemon || {
+    # We want to install pm2 in home directory, so we need to make sure we are in the right place.
+    pushd "${HOME}"
+    # Try and start pm2, and then save the state.
+    "${PM2}" start && "${PM2}" save || {
         state_set "${FUNCNAME[0]}" 'error_pm2_start_failed'
-        log "Error - PM2 did not start. pm2 log last 1000 lines are:"
+        error "Error - PM2 did not start. pm2 log last 1000 lines are:"
         tail -n 1000 ${HOME}/.pm2/pm2.log
+        error "Here are the last 1000 lines of pm2 log:"
+        pm2 logs --lines 1000
         return 1
     }
     popd
 
-    # Check if it is running. If it is, we're happy.
-    # Note: pm2 can start and still return non-zero (i.e. it started but there was no ecosystem.config.js
-    # So it is not sufficient to test for return code, but if it is running as me, then it is at least started
-    # We can't ensure it is running in a docker container as a daemon
-    # pm2_is_running_as_me && { state_set "${FUNCNAME[0]}" 'success'; return 0; }
-
-    state_set "${FUNCNAME[0]}" 'failed_to_pm2_start'
+    state_set "${FUNCNAME[0]}" 'success'
 }
 export -f pm2_start
 
@@ -1521,70 +1517,142 @@ export -f pm2_start
 # does not stop any root level or other user pm2 daemons.
 #
 function pm2_stop {
-    state_set "${FUNCNAME[0]}" 'started'
+  state_set "${FUNCNAME[0]}" 'started'
 
-    # Define dependencies
-    local DEPENDENCIES=(
-      "command_exists"
-      "pm2"
-      "pm2_is_running_as_me"
-    )
-    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
-      state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
-      return 1
-    }
+  local DEPENDENCIES=(
+    "command_exists"
+    "pm2_is_running_as_me"
+    "state_set"
+    "sleep"
+    "timeout"
+    "jq"
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {
+    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+    return 1
+  }
 
-    # Check if it is running. If it isn't, we finish.
-    # pm2_is_running_as_me || { state_set "${FUNCNAME[0]}" 'success_no_action_pm2_not_running'; return 0; }
+  local PM2
+  PM2="$(command_exists pm2)" || {
+    state_set "${FUNCNAME[0]}" 'error_pm2_command_not_found'
+    return 1
+  }
 
-    # Check if we have the pm2 command. We need it to be able to stop pm2
-    local PM2=$( command_exists pm2 ) || { state_set "${FUNCNAME[0]}" 'error_pm2_command_not_found'; return 1; }
+  # If PM2 is not running, no-op gracefully
+  if ! pm2_is_running_as_me; then
+    log "${FUNCNAME[0]}" "PM2 is not running — nothing to stop."
+    state_set "${FUNCNAME[0]}" 'noop_pm2_not_running'
+    return 0
+  fi
 
-    # Try and kill pm2
-    # Todo: do this with timeout - sometimes pm2 hangs. We ask it to kill itself, but sometimes the cat comes back :)
-    "${PM2}" kill || { state_set "${FUNCNAME[0]}" 'error_pm2_kill_failed'; return 1; }
+  # Get list of managed processes
+  local TASK_LIST_JSON
+  if ! TASK_LIST_JSON="$("${PM2}" list --json 2>/dev/null)"; then
+    state_set "${FUNCNAME[0]}" 'error_pm2_list_failed'
+    return 1
+  fi
 
-    # Verify that it is actually stopped. If it is still running after we killed it, it is a problem.
-    # pm2_is_running_as_me || { state_set "${FUNCNAME[0]}" 'error_unable_to_validate_pm2_daemon_gone_postcondition_pm2_still_running'; return 1; }
+  local TASK_COUNT=0
+  local TASK_NAME
+  while read -r TASK_NAME; do
+    "${PM2}" stop "${TASK_NAME}" > /dev/null 2>&1
+    ((TASK_COUNT++))
+  done < <(echo "${TASK_LIST_JSON}" | jq -r '.[].name // empty')
 
-    # We have stopped it, and it is not running.
-    state_set "${FUNCNAME[0]}" 'success'
+  log "${FUNCNAME[0]}" "Requested stop for ${TASK_COUNT} PM2 process(es)."
+
+  # Wait for processes to exit
+  local STOP_WAIT_TIMEOUT_S=10
+  local STOP_WAIT_INTERVAL_S=0.5
+  local ELAPSED_S=0
+
+  while "${PM2}" list --json | jq 'map(select(.pm2_env.status != "stopped")) | length > 0' | grep -q true; do
+    sleep "${STOP_WAIT_INTERVAL_S}"
+    ELAPSED_S=$(awk "BEGIN {print ${ELAPSED_S}+${STOP_WAIT_INTERVAL_S}}")
+    if (( $(echo "${ELAPSED_S} >= ${STOP_WAIT_TIMEOUT_S}" | bc -l) )); then
+      state_set "${FUNCNAME[0]}" 'warning_some_processes_did_not_stop_in_time'
+      break
+    fi
+  done
+
+  if ! timeout 10s "${PM2}" kill > /dev/null 2>&1; then
+    state_set "${FUNCNAME[0]}" 'error_pm2_kill_timeout_or_failed'
+    return 1
+  fi
+
+  sleep 1
+
+  if pm2_is_running_as_me; then
+    state_set "${FUNCNAME[0]}" 'error_pm2_still_running_after_graceful_shutdown'
+    return 1
+  fi
+
+  state_set "${FUNCNAME[0]}" 'success'
 }
 export -f pm2_stop
+
 
 ################################################################################
 # Category: process
 # pm2_uninstall
 # Removes PM2
+################################################################################
+# Category: process
+# pm2_uninstall
+# Removes PM2 if it is globally installed via npm
 function pm2_uninstall {
-    state_set "${FUNCNAME[0]}" 'started'
+  state_set "${FUNCNAME[0]}" 'started'
 
-    # Define dependencies
-    local DEPENDENCIES=(
-      "command_exists"
-      "pm2_is_installed_and_working"
-    )
-    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
-      state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
-      return 1
-    }
+  # Define dependencies
+  local DEPENDENCIES=(
+    "command_exists"
+    "state_set"
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {
+    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+    return 1
+  }
 
-    local PACKAGE="pm2"
+  local PACKAGE="pm2"
+  local NPM
+  NPM="$(command_exists npm)"
 
-    # If it is not installed, we are done.
-    pm2_is_installed_and_working || { state_set "${FUNCNAME[0]}" 'success_no_action_not_installed'; return 0; }
+  if [[ -z "${NPM}" ]]; then
+    state_set "${FUNCNAME[0]}" 'error_dependency_not_met_npm'
+    return 1
+  fi
 
-    # It's installed, so we will try to remove it
-    local NPM=$( command_exists npm )
-    [ "${NPM}" = "" ] && { state_set "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
-    "${NPM}" remove --global "${PACKAGE}" || { state_set "${FUNCNAME[0]}" 'error_uninstalling_package'; return 1; }
+  # Check if pm2 is globally installed via npm
+  local NPM_LIST_OUT
+  if ! NPM_LIST_OUT="$("${NPM}" list --global --depth=0 --json 2>/dev/null)"; then
+    state_set "${FUNCNAME[0]}" 'error_npm_list_failed'
+    return 1
+  fi
 
-    # Verify it is removed. If this returns 1, it is not found. If it returns 0, we still have it.
-    pm2_is_installed_and_working || { state_set "${FUNCNAME[0]}" 'success'; return 0; }
+  local IS_INSTALLED
+  IS_INSTALLED="$(echo "${NPM_LIST_OUT}" | jq -e --arg pkg "${PACKAGE}" '.dependencies[$pkg] // empty' > /dev/null && echo yes || echo no)"
 
+  if [[ "${IS_INSTALLED}" != "yes" ]]; then
+    state_set "${FUNCNAME[0]}" 'success_no_action_not_installed'
+    return 0
+  fi
+
+  # Try to uninstall it
+  if ! "${NPM}" remove --global "${PACKAGE}" > /dev/null 2>&1; then
+    state_set "${FUNCNAME[0]}" 'error_uninstalling_package'
+    return 1
+  fi
+
+  # Recheck to confirm removal
+  if "${NPM}" list --global --depth=0 --json 2>/dev/null | jq -e --arg pkg "${PACKAGE}" '.dependencies[$pkg]' > /dev/null; then
     state_set "${FUNCNAME[0]}" 'error_validating_uninstallation'
+    return 1
+  fi
+
+  state_set "${FUNCNAME[0]}" 'success'
 }
 export -f pm2_uninstall
+
 
 ################################################################################
 #
