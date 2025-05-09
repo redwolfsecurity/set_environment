@@ -1401,6 +1401,7 @@ function pm2_install {
     [ "${PM2}" != "" ] && { state_set "${FUNCNAME[0]}" 'success_no_action_already_installed'; return 0; }
 
     # Actually install it -- globally
+    local NPM=$( command_exists "npm" )
     ${NPM} install --global "${NPM_PACKAGE}@${VERSION}"  || { state_set "${FUNCNAME[0]}" 'error_installing_pm2_npm'; return 1; }
 
     # Verify it is installed and it is working
