@@ -12,8 +12,10 @@
 function continue_install {
     state_set "${FUNCNAME[0]}" 'started'
 
+    # Get this script directory
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     # Source OS-specific install functions
-    source src/architecture/linux/continue_install.functions.sh || { state_set "${FUNCNAME[0]}" "terminal_error_cant_source_os_specific_install_functions"; abort 'terminal_error_cant_source_os_specific_install_functions'; }
+    source "${SCRIPT_DIR}/continue_install.functions.sh" || { state_set "${FUNCNAME[0]}" "terminal_error_cant_source_os_specific_install_functions"; abort 'terminal_error_cant_source_os_specific_install_functions'; }
 
     # Before installer change directory multiple times let's preserve absolute path to the project's root
     # directory, so we can preserve soruces as one of the last steps after installation.
@@ -38,6 +40,9 @@ function continue_install {
 
 # Initialize terminal
 terminal_initialize || { state_set "${FUNCNAME[0]}" "terminal_error_initialize_terminal"; abort 'terminal_error_initialize_terminal'; }
+
+# Enable bash call trace
+bash_call_trace_enable
 
 # Continue installation
 # Note: no need to check errors here, the continue_install() f-n itself reports

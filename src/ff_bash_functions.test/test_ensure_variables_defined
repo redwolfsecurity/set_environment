@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+
+################################################################################
+# UNIT TEST: ensure_variables_defined
+#
+# This function validates ensure_variables_defined under various scenarios,
+# reporting all results and showing a final summary of pass/fail counts.
+################################################################################
+function test_ensure_variables_defined {
+
+    echo "Running unit test: test_ensure_variables_defined"
+
+    # Mock error function to capture error logs
+    local ERROR_LOG=""
+    function error {
+        local CALLER="$1"
+        shift
+        ERROR_LOG+="[${CALLER}] $*\n"
+    }
+    export -f error
+
+    # Prepare test environment
+    export VAR_DEFINED="foo"
+    export VAR_EMPTY=""
+    unset VAR_UNDEFINED1
+    unset VAR_UNDEFINED2
+
+    local VAR_LIST
+    local SUCCESS_COUNT=0
+    local FAILURE_COUNT=0
+
+    # === CASE 1: All defined (array style) ===
+    VAR_LIST=(VAR_DEFINED VAR_EMPTY)
+    ERROR_LOG=""
+    ensure_variables_defined "TEST_CASE_1" "${VAR_LIST[@]}"
+    if [[ $? -eq 0 ]]; then
+        echo "✅ CASE 1: All defined (array style) ... passed"
+        ((SUCCESS_COUNT++))
+    else
+        echo "❌ CASE 1: All defined (array style) ... failed"
+        echo -e "$ERROR_LOG"
+        ((FAILURE_COUNT++))
+    fi
+
+    # === CASE 2: One undefined (array style) ===
+    VAR_LIST=(VAR_DEFINED VAR_UNDEFINED1)
+    ERROR_LOG=""
+    ensure_variables_defined "TEST_CASE_2" "${VAR_LIST[@]}"
+    if [[ $? -eq 0 ]]; then
+        echo "❌ CASE 2: One undefined (array style) ... failed (expected error)"
+        ((FAILURE_COUNT++))
+    else
+        echo "✅ CASE 2: One undefined (array style) ... passed"
+        echo -e "$ERROR_LOG"
+        ((SUCCESS_COUNT++))
+    fi
+
+    # === CASE 3: Multiple undefined (string style) ===
+    ERROR_LOG=""
+    ensure_variables_defined "TEST_CASE_3" VAR_UNDEFINED1 VAR_UNDEFINED2
+    if [[ $? -eq 0 ]]; then
+        echo "❌ CASE 3: Multiple undefined (string style) ... failed (expected error)"
+        ((FAILURE_COUNT++))
+    else
+        echo "✅ CASE 3: Multiple undefined (string style) ... passed"
+        echo -e "$ERROR_LOG"
+        ((SUCCESS_COUNT++))
+    fi
+
+    # === CASE 4: Invalid usage - no variables ===
+    ERROR_LOG=""
+    ensure_variables_defined "TEST_CASE_4"
+    if [[ $? -eq 0 ]]; then
+        echo "❌ CASE 4: Invalid usage - no variables ... failed (expected error)"
+        ((FAILURE_COUNT++))
+    else
+        echo "✅ CASE 4: Invalid usage - no variables ... passed"
+        echo -e "$ERROR_LOG"
+        ((SUCCESS_COUNT++))
+    fi
+
+    # === CASE 5: Missing caller function name ===
+    ERROR_LOG=""
+    ensure_variables_defined "" VAR_DEFINED
+    if [[ $? -eq 0 ]]; then
+        echo "❌ CASE 5: Missing caller function name ... failed (expected error)"
+        ((FAILURE_COUNT++))
+    else
+        echo "✅ CASE 5: Missing caller function name ... passed"
+        echo -e "$ERROR_LOG"
+        ((SUCCESS_COUNT++))
+    fi
+
+    # === FINAL SUMMARY ===
+    local TOTAL_CASES=$((SUCCESS_COUNT + FAILURE_COUNT))
+    local SUCCESS_LABEL="test"
+    local FAILURE_LABEL="test"
+    [[ "${SUCCESS_COUNT}" -ne 1 ]] && SUCCESS_LABEL="tests"
+    [[ "${FAILURE_COUNT}" -ne 1 ]] && FAILURE_LABEL="tests"
+
+    if [[ "${FAILURE_COUNT}" -eq 0 ]]; then
+        echo "✅ All ${SUCCESS_COUNT} ${SUCCESS_LABEL} in test_ensure_variables_defined passed!"
+        return 0
+    else
+        echo ""
+        echo "❌ ${FAILURE_COUNT} ${FAILURE_LABEL} in test_ensure_variables_defined failed!"
+        echo "Note: ${SUCCESS_COUNT} ${SUCCESS_LABEL} passed."
+        return 1
+    fi
+}
+export -f test_ensure_variables_defined
+
+test_ensure_variables_defined

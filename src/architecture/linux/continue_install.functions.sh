@@ -29,7 +29,7 @@
 #    - pm2_configure
 #    - pm2_ensure
 #    - pm2_install
-#    - pm2_is_installed
+#    - pm2_is_installed_and_working
 #    - pm2_is_running_as_me
 #    - pm2_start
 #    - pm2_stop
@@ -95,13 +95,13 @@ function add_to_install_if_missing {
 	# Check if given package is already installed.
   # Note: grep exit code 0=installed, 1=not installed.
 	# Note we use grep to cover case "Status: deinstall ok config-files" when package was uninstalled.
-	dpkg --status ${PACKAGE} 2>/dev/null | grep --silent "installed"
+	dpkg --status "${PACKAGE}" 2>/dev/null | grep --silent "installed"
 	INSTALLED=${?}
 
   # Check exit code
 	if [ ${INSTALLED} != 0 ]; then
     # Not installed. Add package name into the list.
-		PACKAGES_TO_INSTALL+=(${PACKAGE})
+		PACKAGES_TO_INSTALL+=("${PACKAGE}")
 	fi
 
 }
@@ -151,25 +151,25 @@ function apt_install_basic_packages {
       # This script requires grep
       grep
 
-      # Docker requires these
-      gnupg2
+      # gnupg2
       lsb-release
+
+      # ssh client (for the set environment ssh-keyscan command when the preserve set environment code is run)
+      openssh-client
 
       # System: CA certificates
       ca-certificates # Common CA certificates - Docker requires
 
-      # For generate_strong_password (which uuencode is part of)
-      sharutils
   )
   local MISSING_PACKAGES=()
 
   # Iterate required packages and collect only missing ones
   for REQUIRED_PACKAGE in "${REQUIRED_PACKAGES[@]}"; do
-    add_to_install_if_missing ${REQUIRED_PACKAGE} MISSING_PACKAGES
+    add_to_install_if_missing "${REQUIRED_PACKAGE}" MISSING_PACKAGES
   done
 
   # Install only missing packages
-  apt_install ${MISSING_PACKAGES[@]} || { state_set "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
+  apt_install "${MISSING_PACKAGES[@]}" || { state_set "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
 
   state_set "${FUNCNAME[0]}" 'success'
 }
@@ -195,20 +195,25 @@ function assert_baseline_components {
   # Install nodejs suite and all its fixings (not using "apt") (Note: this will modify ff_agent/.profile)
   assert_clean_exit install_nodejs_suite
 
-  # Install pm2
-  assert_clean_exit pm2_ensure
-
   # Install npm package "@ff/ff_agent"
   assert_clean_exit ff_agent_install
 
-  # Install scripts to manage ff_agent (update, logs, restart). Note: must be done after ff_agent installed, because ff_agent is dependency for them.
-  assert_clean_exit ff_agent_scripts_install
+  # Install pm2
+  assert_clean_exit pm2_install
 
   # Run ff_agent by pm2
   assert_clean_exit ff_agent_run_pm2
 
+
   # Register ff_agent in systemd
   assert_clean_exit ff_agent_register_pm2_systemd
+
+
+  # Ensure pm2 is running properly
+  assert_clean_exit pm2_ensure
+
+  # Install a script to update ff_agent and restart it by pm2
+  assert_clean_exit ff_agent_update_install
 
   state_set "${FUNCNAME[0]}" 'success'
 }
@@ -242,6 +247,7 @@ function ff_agent_install {
     "apt_install"
     "command_exists"
     "hardware_architecture_get"
+    "node"
   )
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
     state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
@@ -251,15 +257,20 @@ function ff_agent_install {
   # Define the version of ff_agent npm package to install from CDN
   VERSION='latest'
 
-  local ARCHITECTURE=$( hardware_architecture_get ) || { state_set "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
+  local ARCHITECTURE
+  ARCHITECTURE=$( hardware_architecture_get ) || { state_set "${FUNCNAME[0]}" "error_getting_hardware_architecture"; return 1; }
 
   # If we are on arm64, we likely need to install some extra packages
   # This is done as a case, just in case we have other such architectural changes for other architectures.
   case "${ARCHITECTURE}" in
     arm64 | amd64)
       PACKAGES_TO_INSTALL=(
-        libcurl4-openssl-dev
-        build-essential
+        libcurl4-openssl-dev  # This provides the necessary headers and libraries for libcurl (core dependency).
+        libssl-dev            # Needed for OpenSSL support, often linked via libcurl.
+        build-essential       # Includes gcc, g++, make, etc., required to compile native Node.js modules.
+        node-gyp              # Used by npm to compile native modules (may already be installed globally or as part of npm).
+        python3               # Used by node-gyp as part of the native build process.
+        pkg-config            # This helps in locating the proper versions of libraries during the build process.
       )
       apt_install ${PACKAGES_TO_INSTALL[@]} || {
           state_set "${FUNCNAME[0]}" 'terminal_error_unable_to_ff_agent_install_dependencies'
@@ -836,8 +847,8 @@ function ff_agent_run_pm2 {
   if [[ -z "${PM2_STATUS}" ]]; then
     log "${FUNCNAME[0]}" "[INFO] ff_agent is not registered in pm2. Starting it..."
     command_run_as_user "${FF_AGENT_USERNAME}" 'pm2 start node --name ff_agent -- ff_agent' || {
-      state_set "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
-      abort "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
+    state_set "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
+    abort "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
     }
   fi
 
@@ -1114,180 +1125,6 @@ function install_authbind {
 }
 export -f install_authbind
 
-################################################################################
-#
-# Function installs "go" by certain version (see below) if it is not already installed.
-#
-# In case of successful install (or already at expected version) script return success code 0.
-# In case of any errors script prints error to standard error stream and exit with code 1.
-#
-function install_go {
-  state_set "${FUNCNAME[0]}" 'started'
-
-  # Check dependencies
-  local DEPENDENCIES=(
-    "command_exists"
-    "curl"
-    "hardware_architecture_get"
-    "inject_into_file"
-    "is_writable"
-    "mktemp"
-    "os_name_get"
-    "tar"
-  )
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
-    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
-    return 1
-  }
-
-  # Define required non-empty variables
-  local REQUIRED_NON_EMPTY_VARIABLES=(
-    "FF_AGENT_HOME"
-  )
-  ensure_variables_not_empty "${FUNCNAME[0]}" "${REQUIRED_NON_EMPTY_VARIABLES[@]}" || { # Note: ensure_variables_not_empty will report missing variables
-    state_set "${FUNCNAME[0]}" 'ensure_variables_not_empty_failed'
-    return 1
-  }
-
-  # Get the latest available version number. Note: the url below now returns 2 lines,
-  # 1st with version (example: go1.21.0)
-  # 2nd useless line that breaks it if not supressed (example: time 2023-08-04T20:14:06Z)
-  local URL="https://go.dev/VERSION?m=text"
-  local EXPECTED_VERSION=$( url_get "${URL}" '-' | head -n1 )
-
-  # Check status of 1st command in the excuted bove pipeline
-  if [ ${PIPESTATUS[0]} -ne 0 ]; then
-    state_set "${FUNCNAME[0]}" 'failed_to_get_latest_version_number'
-    return 1
-  fi
-
-  [ ! -z "${EXPECTED_VERSION}" ] || { state_set "${FUNCNAME[0]}" 'failed_to_get_latest_version_number'; return 1; }
-
-  # Check if go is already installed and has expected vesrion
-  if command_exists go >/dev/null; then
-      # Yes, 'go' is installed. Check if installed version matches expected one.
-      INSTALLED_VERSION="$( go version )" || { state_set "${FUNCNAME[0]}" 'failed_to_get_existing_version_number'; return 1; }
-
-      # Compare to expected version
-      if [[ "${INSTALLED_VERSION}" =~ ${EXPECTED_VERSION} ]]; then
-        # Match. Version is up to date, nothing to do.
-        state_set "${FUNCNAME[0]}" 'success'
-        return 0
-      fi
-      # Version mismatch, simply continue installation (to upgrade)...
-  fi
-
-  # Create temporary folder (for downloading 'go' archive)
-  local TEMP_DIR="$( mktemp --directory )" || { state_set "${FUNCNAME[0]}" 'failed_to_create_temp_dir'; return 1; }
-
-  # Check temporary folder created and we can write to it
-  if ! is_writable "${TEMP_DIR}"; then
-    state_set "${FUNCNAME[0]}" "error_temp_dir_is_not_writable"
-    return 1
-  fi
-
-  # Get OS
-  local OS="$( os_name_get )" || { state_set "${FUNCNAME[0]}" "failed_to_os_name_get"; return 1; }
-  [ ! -z "${OS}" ] || { state_set "${FUNCNAME[0]}" "failed_to_os_name_get"; return 1; }
-
-  # Get ARCHITECTURE
-  local ARCHITECTURE="$( hardware_architecture_get )" || { state_set "${FUNCNAME[0]}" "failed_to_hardware_architecture_get"; return 1; }
-  [ ! -z "${OS}" ] || { state_set "${FUNCNAME[0]}" "failed_to_hardware_architecture_get"; return 1; }
-
-  # Define archive filename
-  TARBALL_FILENAME="${EXPECTED_VERSION}.${OS}-${ARCHITECTURE}.tar.gz"
-
-  # Download archive
-  URL="https://go.dev/dl/${TARBALL_FILENAME}"
-  curl \
-    --silent    \
-    --retry 5    \
-    --location    \
-    --retry-delay 1 \
-    --retry-max-time 60 \
-    --max-time 185 \
-    --connect-timeout 12 \
-    -o "${TEMP_DIR}/${TARBALL_FILENAME}" \
-    "${URL}" || { state_set "${FUNCNAME[0]}" "failed_to_download_archive"; return 1; }
-
-  # Check if file downloaded (in case of "404 not found" curl return code 0 and will not create "-o file")
-  [ -f "${TEMP_DIR}/${TARBALL_FILENAME}" ] || { state_set "${FUNCNAME[0]}" "failed_to_download_archive"; return 1; }
-
-  # Remove previous local version of 'go' if exists
-  # 1st "blind assumption" to remove go from expected place
-  if [ -d "${FF_AGENT_HOME}/go" ]; then
-    rm -fr "${FF_AGENT_HOME}/go" || { state_set "${FUNCNAME[0]}" "failed_to_remove_existing_go"; return 1; }
-  fi
-  # 2nd remove "go" if it is in the path
-  if command_exists go >/dev/null; then
-      # Yes, 'go' is installed.
-      local EXISTING_GO_FILEPATH=$(command_exists go)
-      sudo rm "${EXISTING_GO_FILEPATH}"
-  fi
-  # Also noted other locations! Must improve "remove go" functionality to cleanup these as well:
-  # /usr/bin/go -> ../lib/go-1.13/bin/go
-  # /usr/lib/go -> go-1.13/
-
-  # Install 'go'
-
-  # Unzip downloaded archive (the "bin" folder of the golang will be available here: ${FF_AGENT_HOME}/go/bin/ )
-  tar -C "${FF_AGENT_HOME}" -xzf "${TEMP_DIR}/${TARBALL_FILENAME}" || { state_set "${FUNCNAME[0]}" "failed_to_extract_archive"; return 1; }
-
-  # Remove temporary folder
-  rm -fr "${TEMP_DIR}" || { error "Warning: failed to remove temporary folder: '${TEMP_DIR}'"; }
-
-  # Define the path to ff_agent profile file (we need to add a path to 'go' into ff_agent/.profile if missing)
-  TARGET_FILE="${FF_AGENT_HOME}/.profile"
-
-  # Create TARGET_FILE if does not exist and add a comment (who/when creaeted it)
-  if [ ! -f "${TARGET_FILE}" ]; then
-    (
-      cat <<EOT
-# File ${TARGET_FILE} created by set_environment ${FUNCNAME[0]}() on $( date --utc ).
-EOT
-    ) > "${TARGET_FILE}" || { state_set "${FUNCNAME[0]}" "failed_to_create_file"; return 1; }
-  fi
-
-  # Check if expected line was already injected into the profile.
-  # Note: it is not too specific, it is exactly the line that must be present in the ff_agent custom profille file.
-  PATTERN="^export PATH=\${PATH}:${FF_AGENT_HOME}/go/bin"
-  INJECT_CONTENT=$(
-    cat <<EOT
-# The path to 'go' inserted by $( pwd )/$( basename ${0} ) on $( date --utc )'
-export PATH=\${PATH}:${FF_AGENT_HOME}/go/bin
-EOT
-  )
-  ERROR_CODE='error_injecting_source_custom_profile'
-
-  # Inject and check result code
-  inject_into_file  \
-    "${TARGET_FILE}" \
-    "${PATTERN}" \
-    "${INJECT_CONTENT}" || { state_set "${FUNCNAME[0]}" "${ERROR_CODE}"; return 1; }
-
-  # Also inject path to 'go' into current PATH (if missing in PATH)
-  # do the export, so we don't have to relogin in order to call "go version"
-  echo ${PATH} | grep --quiet ${FF_AGENT_HOME}/go/bin
-  if [ ${?} -ne 0 ]; then
-    # Path to 'go' is missing from PATH environment variable. Inject it:
-    export PATH=${PATH}:${FF_AGENT_HOME}/go/bin
-  fi
-
-  # Check installed 'go' version
-  INSTALLED_VERSION="$( go version )" || { state_set "${FUNCNAME[0]}" 'failed_to_get_installed_version_number'; return 1; }
-
-  # Compare to the expected version
-  if [[ "${INSTALLED_VERSION}" =~ ${EXPECTED_VERSION} ]]; then
-    # Good - expected version installed.
-    state_set "${FUNCNAME[0]}" 'success'
-    return 0
-  else
-    # Mismatch.
-    state_set "${FUNCNAME[0]}" 'failed_to_match_expected_vs_installed_version'
-    return 1
-  fi
-}
-export -f install_go
 
 ################################################################################
 #
@@ -1796,9 +1633,10 @@ function pm2_ensure {
     # Define dependencies
     local DEPENDENCIES=(
       "abort"
+      "pm2"
       "pm2_configure"
       "pm2_is_running_as_me"
-      "pm2_is_installed"
+      "pm2_is_installed_and_working"
       "pm2_install"
       "pm2_start"
     )
@@ -1807,26 +1645,14 @@ function pm2_ensure {
       return 1
     }
 
-    # If pm2 is running, then we ensure it is properly configured. It might have been running already, but not properly configured.
-    pm2_is_running_as_me
-    if [ ${?} == 0 ]; then
-        pm2_configure || { state_set "${FUNCNAME[0]}" 'error_configuring_pm2'; abort 'error_configuring_pm2'; }
-        state_set "${FUNCNAME[0]}" 'success'
-        return 0
-    fi
+    # Check if pm2 is installed and working. If not, install it.
+    pm2_is_installed_and_working || pm2_install || { state_set "${FUNCNAME[0]}" 'error_failed_to_install_pm2'; abort 'error_failed_to_install_pm2'; }
 
-    # It is not running as me, it might not be installed. If that's the case, we install it.
-    # Is pm2 installed? If not, install it
-    pm2_is_installed || pm2_install || { state_set "${FUNCNAME[0]}" 'error_failed_to_install_pm2'; abort 'error_failed_to_install_pm2'; }
+    # If pm2 is running, then we ensure it is properly configured. It might have been running already, but not properly configured.
+    pm2_configure || { state_set "${FUNCNAME[0]}" 'error_configuring_pm2'; abort 'error_configuring_pm2'; }
 
     # Now it has to at least be installed, and not running, so we try to start it.
     pm2_start || { state_set "${FUNCNAME[0]}" 'failed_to_start_pm2'; abort 'failed_to_start_pm2'; }
-
-    # Check if pm2 started and running by expected user
-    pm2_is_running_as_me || { state_set "${FUNCNAME[0]}" 'error_pm2_not_running_as_user'; abort 'error_pm2_not_running_as_user'; }
-
-    # Now it is running, so let's configure it
-    pm2_configure || { state_set "${FUNCNAME[0]}" 'error_configuring_pm2'; abort 'error_configuring_pm2'; }
 
     # If all above works, we have it running
     state_set "${FUNCNAME[0]}" 'success'
@@ -1844,6 +1670,7 @@ function pm2_install {
     # Define dependencies
     local DEPENDENCIES=(
       "command_exists"
+      "npm"
     )
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
       state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
@@ -1862,15 +1689,12 @@ function pm2_install {
     local PM2=$( command_exists "${NPM_PACKAGE}" )
     [ "${PM2}" != "" ] && { state_set "${FUNCNAME[0]}" 'success_no_action_already_installed'; return 0; }
 
-    local NPM=$( command_exists npm )
-    [ "${NPM}" == "" ] && { state_set "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
-
     # Actually install it -- globally
+    local NPM=$( command_exists "npm" )
     ${NPM} install --global "${NPM_PACKAGE}@${VERSION}"  || { state_set "${FUNCNAME[0]}" 'error_installing_pm2_npm'; return 1; }
 
-    # Verify command actually exists in path after we have installed it
-    local PM2=$( command_exists "${NPM_PACKAGE}" )
-    [ "${PM2}" == "" ] && { state_set "${FUNCNAME[0]}" 'error_installing_pm2_command_not_found'; return 1; }
+    # Verify it is installed and it is working
+    pm2_is_installed_and_working || { state_set "${FUNCNAME[0]}" 'error_installing_pm2_command_not_found'; return 1; }
 
     state_set "${FUNCNAME[0]}" 'success'
 }
@@ -1878,18 +1702,22 @@ export -f pm2_install
 
 ################################################################################
 # Category: process
-# pm2_is_installed
+# pm2_is_installed_and_working
 # Checks if pm2 is installed
 # Returns 0 if it is, 1 if it isn't
-function pm2_is_installed {
+function pm2_is_installed_and_working {
   # Check dependencies
   local DEPENDENCIES="command_exists"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  # Return 0 if command exists
-  command_exists pm2 >/dev/null
+  # Return 1 if command does not exist
+  command_exists pm2 >/dev/null || { return 1; }
+
+  # Check if pm2 works
+  pm2 ping >/dev/null || { return 1; }
+
 }
-export -f pm2_is_installed
+export -f pm2_is_installed_and_working
 
 ################################################################################
 # Category: process
@@ -1914,9 +1742,22 @@ function pm2_is_running_as_me {
     process_is_running_as_me "${PATTERN}"
     local STATUS=${?}
 
+    if [ ${STATUS} -ne 0 ]; then
+        state_set "${FUNCNAME[0]}" 'error_pm2_not_running_as_user'
+        echo "DEBUG PM2======================================================"
+        echo "id: $( id )"
+        echo "pwd: $( pwd )"
+        echo "USER: $( whoami )"
+        echo "HOME: $( echo ${HOME} )"
+        echo "sudo ps aux"
+        sudo ps aux
+        echo "PM2 log:"
+        cat ~/.pm2/pm2.log
+        echo "pm2 ping"
+        pm2 ping || echo "pm2 ping failed"
+        return ${STATUS}
+    fi
     state_set "${FUNCNAME[0]}" 'success'
-
-    return ${STATUS}
 }
 export -f pm2_is_running_as_me
 
@@ -1930,26 +1771,33 @@ function pm2_start {
     local DEPENDENCIES=(
       "command_exists"
       "pm2"
-      "pm2_is_running_as_me"
+      "pm2_is_installed_and_working"
     )
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
       state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
       return 1
     }
 
-    # Check if it is running. If it is, we're happy.
-    pm2_is_running_as_me && { state_set "${FUNCNAME[0]}" 'success_no_action_pm2_is_running'; return 0; }
-
-    local PM2=$( command_exists pm2 )
-    [ -z "${PM2}" ] && { state_set "${FUNCNAME[0]}" 'error_dependency_not_met_pm2_command'; return 1; }
-    "${PM2}" start
+    # Get the path to the pm2 command
+    local PM2=$( command_exists pm2 ) || { state_set "${FUNCNAME[0]}" 'error_pm2_command_not_found'; return 1; }
 
     # Check if it is running. If it is, we're happy.
-    # Note: pm2 can start and still return non-zero (i.e. it started but there was no ecosystem.config.js
-    # So it is not sufficient to test for return code, but if it is running as me, then it is at least started
-    pm2_is_running_as_me && { state_set "${FUNCNAME[0]}" 'success'; return 0; }
+    pm2_is_installed_and_working && { state_set "${FUNCNAME[0]}" 'success_no_action_pm2_is_already_running'; return 0; }
 
-    state_set "${FUNCNAME[0]}" 'failed_to_pm2_start'
+    # We want to install pm2 in home directory, so we need to make sure we are in the right place.
+    pushd "${HOME}"
+    # Try and start pm2, and then save the state.
+    "${PM2}" start && "${PM2}" save || {
+        state_set "${FUNCNAME[0]}" 'error_pm2_start_failed'
+        error "Error - PM2 did not start. pm2 log last 1000 lines are:"
+        tail -n 1000 ${HOME}/.pm2/pm2.log
+        error "Here are the last 1000 lines of pm2 log:"
+        pm2 logs --lines 1000
+        return 1
+    }
+    popd
+
+    state_set "${FUNCNAME[0]}" 'success'
 }
 export -f pm2_start
 
@@ -1959,70 +1807,142 @@ export -f pm2_start
 # does not stop any root level or other user pm2 daemons.
 #
 function pm2_stop {
-    state_set "${FUNCNAME[0]}" 'started'
+  state_set "${FUNCNAME[0]}" 'started'
 
-    # Define dependencies
-    local DEPENDENCIES=(
-      "command_exists"
-      "pm2"
-      "pm2_is_running_as_me"
-    )
-    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
-      state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
-      return 1
-    }
+  local DEPENDENCIES=(
+    "command_exists"
+    "pm2_is_running_as_me"
+    "state_set"
+    "sleep"
+    "timeout"
+    "jq"
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {
+    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+    return 1
+  }
 
-    # Check if it is running. If it isn't, we finish.
-    pm2_is_running_as_me || { state_set "${FUNCNAME[0]}" 'success_no_action_pm2_not_running'; return 0; }
+  local PM2
+  PM2="$(command_exists pm2)" || {
+    state_set "${FUNCNAME[0]}" 'error_pm2_command_not_found'
+    return 1
+  }
 
-    # Check if we have the pm2 command. We need it to be able to stop pm2
-    local PM2=$( command_exists pm2 ) || { state_set "${FUNCNAME[0]}" 'error_pm2_command_not_found'; return 1; }
+  # If PM2 is not running, no-op gracefully
+  if ! pm2_is_running_as_me; then
+    log "${FUNCNAME[0]}" "PM2 is not running — nothing to stop."
+    state_set "${FUNCNAME[0]}" 'noop_pm2_not_running'
+    return 0
+  fi
 
-    # Try and kill pm2
-    # Todo: do this with timeout - sometimes pm2 hangs. We ask it to kill itself, but sometimes the cat comes back :)
-    "${PM2}" kill || { state_set "${FUNCNAME[0]}" 'error_pm2_kill_failed'; return 1; }
+  # Get list of managed processes
+  local TASK_LIST_JSON
+  if ! TASK_LIST_JSON="$("${PM2}" list --json 2>/dev/null)"; then
+    state_set "${FUNCNAME[0]}" 'error_pm2_list_failed'
+    return 1
+  fi
 
-    # Verify that it is actually stopped. If it is still running after we killed it, it is a problem.
-    pm2_is_running_as_me || { state_set "${FUNCNAME[0]}" 'error_unable_to_validate_pm2_daemon_gone_postcondition_pm2_still_running'; return 1; }
+  local TASK_COUNT=0
+  local TASK_NAME
+  while read -r TASK_NAME; do
+    "${PM2}" stop "${TASK_NAME}" > /dev/null 2>&1
+    ((TASK_COUNT++))
+  done < <(echo "${TASK_LIST_JSON}" | jq -r '.[].name // empty')
 
-    # We have stopped it, and it is not running.
-    state_set "${FUNCNAME[0]}" 'success'
+  log "${FUNCNAME[0]}" "Requested stop for ${TASK_COUNT} PM2 process(es)."
+
+  # Wait for processes to exit
+  local STOP_WAIT_TIMEOUT_S=10
+  local STOP_WAIT_INTERVAL_S=0.5
+  local ELAPSED_S=0
+
+  while "${PM2}" list --json | jq 'map(select(.pm2_env.status != "stopped")) | length > 0' | grep -q true; do
+    sleep "${STOP_WAIT_INTERVAL_S}"
+    ELAPSED_S=$(awk "BEGIN {print ${ELAPSED_S}+${STOP_WAIT_INTERVAL_S}}")
+    if (( $(echo "${ELAPSED_S} >= ${STOP_WAIT_TIMEOUT_S}" | bc -l) )); then
+      state_set "${FUNCNAME[0]}" 'warning_some_processes_did_not_stop_in_time'
+      break
+    fi
+  done
+
+  if ! timeout 10s "${PM2}" kill > /dev/null 2>&1; then
+    state_set "${FUNCNAME[0]}" 'error_pm2_kill_timeout_or_failed'
+    return 1
+  fi
+
+  sleep 1
+
+  if pm2_is_running_as_me; then
+    state_set "${FUNCNAME[0]}" 'error_pm2_still_running_after_graceful_shutdown'
+    return 1
+  fi
+
+  state_set "${FUNCNAME[0]}" 'success'
 }
 export -f pm2_stop
+
 
 ################################################################################
 # Category: process
 # pm2_uninstall
 # Removes PM2
+################################################################################
+# Category: process
+# pm2_uninstall
+# Removes PM2 if it is globally installed via npm
 function pm2_uninstall {
-    state_set "${FUNCNAME[0]}" 'started'
+  state_set "${FUNCNAME[0]}" 'started'
 
-    # Define dependencies
-    local DEPENDENCIES=(
-      "command_exists"
-      "pm2_is_installed"
-    )
-    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
-      state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
-      return 1
-    }
+  # Define dependencies
+  local DEPENDENCIES=(
+    "command_exists"
+    "state_set"
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {
+    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+    return 1
+  }
 
-    local PACKAGE="pm2"
+  local PACKAGE="pm2"
+  local NPM
+  NPM="$(command_exists npm)"
 
-    # If it is not installed, we are done.
-    pm2_is_installed || { state_set "${FUNCNAME[0]}" 'success_no_action_not_installed'; return 0; }
+  if [[ -z "${NPM}" ]]; then
+    state_set "${FUNCNAME[0]}" 'error_dependency_not_met_npm'
+    return 1
+  fi
 
-    # It's installed, so we will try to remove it
-    local NPM=$( command_exists npm )
-    [ "${NPM}" = "" ] && { state_set "${FUNCNAME[0]}" 'error_dependency_not_met_npm'; return 1; }
-    "${NPM}" remove --global "${PACKAGE}" || { state_set "${FUNCNAME[0]}" 'error_uninstalling_package'; return 1; }
+  # Check if pm2 is globally installed via npm
+  local NPM_LIST_OUT
+  if ! NPM_LIST_OUT="$("${NPM}" list --global --depth=0 --json 2>/dev/null)"; then
+    state_set "${FUNCNAME[0]}" 'error_npm_list_failed'
+    return 1
+  fi
 
-    # Verify it is removed. If this returns 1, it is not found. If it returns 0, we still have it.
-    pm2_is_installed || { state_set "${FUNCNAME[0]}" 'success'; return 0; }
+  local IS_INSTALLED
+  IS_INSTALLED="$(echo "${NPM_LIST_OUT}" | jq -e --arg pkg "${PACKAGE}" '.dependencies[$pkg] // empty' > /dev/null && echo yes || echo no)"
 
+  if [[ "${IS_INSTALLED}" != "yes" ]]; then
+    state_set "${FUNCNAME[0]}" 'success_no_action_not_installed'
+    return 0
+  fi
+
+  # Try to uninstall it
+  if ! "${NPM}" remove --global "${PACKAGE}" > /dev/null 2>&1; then
+    state_set "${FUNCNAME[0]}" 'error_uninstalling_package'
+    return 1
+  fi
+
+  # Recheck to confirm removal
+  if "${NPM}" list --global --depth=0 --json 2>/dev/null | jq -e --arg pkg "${PACKAGE}" '.dependencies[$pkg]' > /dev/null; then
     state_set "${FUNCNAME[0]}" 'error_validating_uninstallation'
+    return 1
+  fi
+
+  state_set "${FUNCNAME[0]}" 'success'
 }
 export -f pm2_uninstall
+
 
 ################################################################################
 #
@@ -2168,14 +2088,10 @@ function set_environment_preserve_source_code {
 
   # We need to trust github.com to avoid errors like this:
   # The authenticity of host 'github.com (140.82.113.4)' can't be established.
-  # This fix was found here:
-  # https://gist.github.com/vikpe/34454d69fe03a9617f2b009cc3ba200b
-  # https://github.com/ome/devspace/issues/38
-  # And to avoid dublicates:
-  # https://serverfault.com/questions/132970/can-i-automatically-add-a-new-host-to-known-hosts
-  if ! grep --quiet "$(ssh-keyscan github.com 2>/dev/null)" ${HOME}/.ssh/known_hosts; then
-    ssh-keyscan github.com >> ${FF_AGENT_USER_HOME}/.ssh/known_hosts
+  if ! grep -q '^github\.com ' "${FF_AGENT_USER_HOME}/.ssh/known_hosts"; then
+      ssh-keyscan github.com >> "${FF_AGENT_USER_HOME}/.ssh/known_hosts"
   fi
+
 
   # Extract project owner from github repository URL
   local URL=$( git remote show origin | grep 'Fetch URL:' | awk -F'Fetch URL: ' '{print $2}' )

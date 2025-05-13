@@ -59,6 +59,9 @@
 #    - abort
 #    - assert_clean_exit
 #    - banner
+#    - bash_call_trace_trap
+#    - bash_call_trace_trap_enable
+#    - bash_call_trace_trap_disable
 #    - error
 #    - log
 #    - step
@@ -172,13 +175,11 @@
 #
 ################################################################################
 function ask_for_value {
-    # Check dependencies
     local DEPENDENCIES="log read eval"
-    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1
 
     local VALUE=""
-
-    local  __RESULTVAR=${1}
+    local __RESULTVAR=${1}
     local QUESTION=${2}
     local TOOLTIP=${3}
     local DEFAULT=${4}
@@ -186,21 +187,22 @@ function ask_for_value {
     while [[ -z ${VALUE} ]]
     do
         log "${QUESTION}"
-        if [[ -z ${DEFAULT} ]]
-        then
-            read -p "${TOOLTIP}" VALUE
+        if [[ -z ${DEFAULT} ]]; then
+            read -r -p "${TOOLTIP}" VALUE
         else
-            read -e -p "${TOOLTIP}" -i "${DEFAULT}" VALUE
+            # -i requires -e, and -i only works in Bash
+            read -r -e -p "${TOOLTIP}" -i "${DEFAULT}" VALUE
         fi
     done
 
-    if [[ "${__RESULTVAR}" ]]; then
-        eval ${__RESULTVAR}="'${VALUE}'"
+    if [[ -n "${__RESULTVAR}" ]]; then
+        eval "${__RESULTVAR}='${VALUE}'"
     else
         echo "${VALUE}"
     fi
 }
 export -f ask_for_value
+
 
 ################################################################################
 # CATEGORY
@@ -240,7 +242,7 @@ function ask_for_yn {
     while [[ ${ANSWER,,} != "y" ]] && [[ ${ANSWER,,} != "n" ]]
     do
         log "${QUESTION}"
-        read -p "Answer [Y/n]: " ANSWER
+        read -r -p "Answer [Y/n]: " ANSWER
         if [[ -n ${ANSWER} ]] && [[ ${ANSWER,,} == "y" ]]
         then
             return 0
@@ -291,7 +293,7 @@ function command_exists {
   # Force bash to un-hash any previously memorized commands. This will require bash to look it up again.
   # This is for cases where it has 'memoried' a command that has actually been deleted.
   hash -d "${COMMAND}" >/dev/null 2>/dev/null
-  hash -d $(command -v "${COMMAND}" ) >/dev/null 2>/dev/null
+  hash -d "$(command -v "${COMMAND}" )" >/dev/null 2>/dev/null
 
   local COMMAND_RESOLVED
   COMMAND_RESOLVED=$(command -v "${COMMAND}" )
@@ -355,7 +357,7 @@ function file_toc {
   }
 
   # Parse ff_bash_functions and generate table of contents
-  cat "${FILEPATH}" | grep '^### BEGIN\|^### END\|^function' | sed 's/^function /\#    - /g' | sed 's/{//g' | sed 's/###/##/g'
+  grep '^### BEGIN\|^### END\|^function' "${FILEPATH}" | sed 's/^function /\#    - /g' | sed 's/{//g' | sed 's/###/##/g'
 }
 export -f file_toc
 
@@ -435,7 +437,7 @@ function help_toc {
   }
 
   # Parse ff_bash_functions and generate table of contents
-  cat "${TARGET_FILE}" | grep '^### BEGIN\|^### END\|^function' | sed 's/^function /\#    - /g' | sed 's/{//g' | sed 's/###/##/g'
+  grep '^### BEGIN\|^### END\|^function' "${TARGET_FILE}" | sed 's/^function /\#    - /g' | sed 's/{//g' | sed 's/###/##/g'
 }
 export -f help_toc
 
@@ -486,7 +488,7 @@ function apt_dist_upgrade {
       -yq \
       -o Dpkg::Options::="--force-confdef" \
       -o Dpkg::Options::="--force-confold" \
-      ${FORCE_YES} ${APT_COMMAND} || { error "${FUNCNAME[0]}" "Failed to apt_dist_upgrade"; return 1; }
+      "${FORCE_YES}" ${APT_COMMAND} || { error "${FUNCNAME[0]}" "Failed to apt_dist_upgrade"; return 1; }
 }
 export -f apt_dist_upgrade
 
@@ -517,11 +519,11 @@ function apt_install {
   local DEPENDENCIES="apt-get error sudo"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  local PACKAGES=${@}
+  local PACKAGES=("$@")
   local APT_COMMAND=install
 
   # Note: don't wrap ${PACKAGES} in quotes, otherwise it will not word split, and the loop will only run once.
-  for PACKAGE in ${PACKAGES}; do
+  for PACKAGE in "${PACKAGES[@]}"; do
       # Note: we suppress stdout noise (only stderr will still be "visible", but TODO: think of better way to collect evidences insted of just 1 large pile)
       sudo DEBIAN_FRONTEND=noninteractive \
       apt-get \
@@ -2325,6 +2327,39 @@ EOT
 export -f banner
 
 ################################################################################
+# Logs each function call with a stack trace
+################################################################################
+function bash_call_trace_trap() {
+  # Skip non-function calls or self-calls
+  [[ "${FUNCNAME[1]}" == "bash_call_trace_trap" ]] && return
+  local i
+  echo "📍 FUNCTION CALL: ${FUNCNAME[1]} at ${BASH_SOURCE[1]}:${BASH_LINENO[0]}"
+  for ((i=1; i<${#FUNCNAME[@]}-1; i++)); do
+    echo "    ↳ ${FUNCNAME[i]}() at ${BASH_SOURCE[i]}:${BASH_LINENO[i-1]}"
+  done
+}
+export -f bash_call_trace_trap
+
+################################################################################
+# Enables the function call trace trap
+################################################################################
+function bash_call_trace_enable() {
+  export PS4='+ ${BASH_SOURCE}:${LINENO}:${FUNCNAME[0]}: '
+  trap 'bash_call_trace_trap' DEBUG
+  echo "✅ bash_call_trace ENABLED"
+}
+export -f bash_call_trace_enable
+
+################################################################################
+# Disables the function call trace trap
+################################################################################
+function bash_call_trace_disable() {
+  trap - DEBUG
+  echo "⛔ bash_call_trace DISABLED"
+}
+export -f bash_call_trace_disable
+
+################################################################################
 # CATEGORY
 #   UTILITY FUNCTIONS: LOGGING / PROCESS CONTROL
 #
@@ -2575,8 +2610,8 @@ export -f bash_echo_on_set
 function bash_echo_setting_get {
 
   # Check dependencies
-  local DEPENDENCIES="echo is_shell_attribute_set"
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+  # local DEPENDENCIES="echo is_shell_attribute_set"
+  # check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Preserve current xtrace state
   if is_shell_attribute_set x; then
@@ -2610,8 +2645,8 @@ export -f bash_echo_setting_get
 function bash_echo_setting_set {
 
   # Check dependencies
-  local DEPENDENCIES="bash_echo_off_set bash_echo_on_set"
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+  # local DEPENDENCIES="bash_echo_off_set bash_echo_on_set"
+  # check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Preserve all arguments safely as an array
   local BASH_ECHO_SETTINGS=("${@}")
@@ -3161,6 +3196,9 @@ export -f terminal_reset
 #
 ################################################################################
 function check_dependencies {
+    BASH_ECHO_SETTINGS=$( bash_echo_setting_get ) || { error "${FUNCNAME[0]}" 'failed_to_bash_echo_setting_gets'; return 1; }
+
+    bash_echo_off_set || { error "${FUNCNAME[0]}" 'failed_to_bash_echo_off_set'; return 1; } # Disable xtrace to avoid priting secrets
 
     # Get 1st argument: caller function name
     local CALLER_FUNCTION_NAME="${1}"
@@ -3175,13 +3213,17 @@ function check_dependencies {
 
     # Ensure the caller function name is provided
     if [[ -z "${CALLER_FUNCTION_NAME}" ]]; then
+        # Restore old shell options
         error "${CALLER_FUNCTION_NAME}" "CALLER_FUNCTION_NAME must not be empty"
+        bash_echo_setting_set "${BASH_ECHO_SETTINGS}"
         return 1
     fi
 
     # Ensure there is at least one dependency to check
     if [[ ${#DEPENDENCIES[@]} -eq 0 ]]; then
+        # Restore old shell options
         error "${CALLER_FUNCTION_NAME}" "At least one dependency must be specified"
+        bash_echo_setting_set "${BASH_ECHO_SETTINGS}"
         return 1
     fi
 
@@ -3203,11 +3245,15 @@ function check_dependencies {
         local MISSING_LIST=$(IFS=' ' ; echo "${MISSING_DEPENDENCIES[*]}")
         if [[ "${MISSING_DEPENDENCY_COUNT}" -eq 1 ]]; then
             error "${CALLER_FUNCTION_NAME}" "Dependency not met: ${MISSING_LIST}"
+            bash_echo_setting_set "${BASH_ECHO_SETTINGS}"
         else
             error "${CALLER_FUNCTION_NAME}" "Dependencies not met: ${MISSING_LIST}"
+            bash_echo_setting_set "${BASH_ECHO_SETTINGS}"
         fi
         return 1
     fi
+    # Restore old shell options
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"
 }
 
 # Export the function if you need to use it in scripts sourced from this script
@@ -3344,26 +3390,28 @@ export -f command_run_as_user
 #
 ################################################################################
 function process_is_running_as_me {
-
-  # Check dependencies
+  local FUNC="${FUNCNAME[0]}"
   local DEPENDENCIES="command_exists current_user_get error grep ps"
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+  check_dependencies "${FUNC}" "${DEPENDENCIES}" || return 1
 
   local COMMAND_PATTERN="${1}"
-  [ -n "${COMMAND_PATTERN}" ] || { error "${FUNCNAME[0]}" 'error_require_pattern_to_search_for'; return 1; }
+  [ -n "${COMMAND_PATTERN}" ] || { error "${FUNC}" 'error_require_pattern_to_search_for'; return 1; }
 
-  # We require PS and GREP commands
   local PS
-  PS=$( command_exists ps ) || { error "${FUNCNAME[0]}" 'error_dependency_not_met_ps_command'; return 1; }
+  PS=$(command_exists ps) || { error "${FUNC}" 'error_dependency_not_met_ps_command'; return 1; }
 
   local GREP
-  GREP=$( command_exists grep ) || { error "${FUNCNAME[0]}" 'error_dependency_not_met_grep_command'; return 1; }
+  GREP=$(command_exists grep) || { error "${FUNC}" 'error_dependency_not_met_grep_command'; return 1; }
 
-  # Get current user. Note: the ${USER} environment is NOT set when running as 'root' in docker, we must use f-n current_user_get() instead.
   local CURRENT_USER
-  CURRENT_USER="$(current_user_get)" || { error "${FUNCNAME[0]}" "Can not get current user"; return 1; }
+  CURRENT_USER="$(current_user_get)" || { error "${FUNC}" "cannot_get_current_user"; return 1; }
 
-  "${PS}" -u "${CURRENT_USER}" -U "${CURRENT_USER}" o command | "${GREP}" --silent -e "^${COMMAND_PATTERN}"
+  # Loop through each command and test regex match (avoiding grep self-match)
+  while IFS= read -r CMD_LINE; do
+    echo "${CMD_LINE}" | "${GREP}" -E --quiet "${COMMAND_PATTERN}" && return 0
+  done < <("${PS}" -u "${CURRENT_USER}" -o command=)
+
+  return 1
 }
 export -f process_is_running_as_me
 
@@ -3975,6 +4023,11 @@ export -f state_get
 ################################################################################
 function state_set {
 
+  # Preserve current bash echo settings and enable bash echo setting
+  BASH_ECHO_SETTINGS=$( bash_echo_setting_get ) || { error "${FUNCNAME[0]}" 'failed_to_bash_echo_setting_gets'; return 1; }
+
+  bash_echo_off_set || { error "${FUNCNAME[0]}" 'failed_to_bash_echo_off_set'; return 1; } # Disable xtrace to avoid priting secrets
+
   # Check dependencies
   local DEPENDENCIES=(
     "command_exists"
@@ -3989,23 +4042,27 @@ function state_set {
     "publish_message"
     "tr"
   )
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || return 1  # Note: check_dependencies will report missing dependencies
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
+    return 1
+  }  # Note: check_dependencies will report missing dependencies
 
   # Get 2 arguments: state and value
   local STATE_NAME="${1}"
   local STATE_VALUE="${2}"
 
   # Check state name / value aren't blank
-  [ -n "${STATE_NAME}" ] || { error "state_set(): blank state name argument"; return 1; }
-  [ -n "${STATE_VALUE}" ] || { error "state_set(): blank state value argument"; return 1; }
+  [ -n "${STATE_NAME}" ] || { error "state_set(): blank state name argument"; bash_echo_setting_set "${BASH_ECHO_SETTINGS}"; return 1; }
+  [ -n "${STATE_VALUE}" ] || { error "state_set(): blank state value argument"; bash_echo_setting_set "${BASH_ECHO_SETTINGS}"; return 1; }
 
   # Check if state name / vaue contains any prohibited symbols, then error out.
-  [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { error "state_set(): illigal characters in the state name argument: '${BASH_REMATCH[1]}'"; return 1; }
-  [[ ! "${STATE_VALUE}" =~ ([^a-z0-9_]+) ]] || { error "state_set(): illigal characters in the state value argument: '${BASH_REMATCH[1]}'"; return 1; }
+  [[ ! "${STATE_NAME}" =~ ([^a-z0-9_]+) ]] || { error "state_set(): illegal characters in the state name argument: '${BASH_REMATCH[1]}'"; bash_echo_setting_set "${BASH_ECHO_SETTINGS}"; return 1; }
+  [[ ! "${STATE_VALUE}" =~ ([^a-z0-9_]+) ]] || { error "state_set(): illegal characters in the state value argument: '${BASH_REMATCH[1]}'"; bash_echo_setting_set "${BASH_ECHO_SETTINGS}"; return 1; }
 
   # Make sure "${FF_AGENT_HOME}" is not empty
   if [ -z "${FF_AGENT_HOME}" ]; then
       error "Can not set state. FF_AGENT_HOME variable not set. State would have been set to ${STATE_NAME}=${STATE_VALUE}"
+      bash_echo_setting_set "${BASH_ECHO_SETTINGS}"
       return 1
   fi
 
@@ -4015,7 +4072,8 @@ function state_set {
   if [ ! -d "${STATE_DIR}" ]; then
     mkdir -p "${STATE_DIR}" || {
       error "Can not set state. State directory ${STATE_DIR} can not be created. State would have been set to ${STATE_NAME}=${STATE_VALUE}"
-      return 1;
+      bash_echo_setting_set "${BASH_ECHO_SETTINGS}"
+      return 1
     }
   fi
 
@@ -4023,7 +4081,13 @@ function state_set {
   local STATE_FILE="${STATE_DIR}/${STATE_NAME}"
 
   # Write value into the file
-  echo "${STATE_VALUE}" >"${STATE_FILE}" || { error "${FUNCNAME[0]}: failed_to_write_state. State would have been set to ${STATE_NAME}=${STATE_VALUE}"; return 1; }
+  echo "${STATE_VALUE}" >"${STATE_FILE}" || {
+    error "${FUNCNAME[0]}: failed_to_write_state. State would have been set to ${STATE_NAME}=${STATE_VALUE}"
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"
+    return 1
+  }
+
+  log "${FUNCNAME[0]}: state ${STATE_NAME} -> ${STATE_VALUE}"
 
   # ------------------ Build JSON object "state/change" and send to FF_AGENT_API_FQDN
 
@@ -4034,7 +4098,9 @@ function state_set {
   if [ "$( is_framework_api_defined )" != "true" ]; then
     # No, the framework API is not defined. Simply return, we're done.
     # Return with success code 0
-    return 0
+    echo "${FUNCNAME[0]}: framework API is not defined, skipping state/change message."
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"
+    return 1
   fi
 
   # Temporary: On early stages the FF_AGENT_URI is not yet defined. Check & log it if this is the case.
@@ -4048,10 +4114,18 @@ function state_set {
 
   # Get current epoch time
   local TIMESTAMP_EPOCH_MS
-  TIMESTAMP_EPOCH_MS="$( epoch_ms_get )" || { error "${FUNCNAME[0]}: failed to get time by calling epoch_ms_get()"; return 1; }
+  TIMESTAMP_EPOCH_MS="$( epoch_ms_get )" || {
+    error "${FUNCNAME[0]}: failed to get time by calling epoch_ms_get()"
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"
+    return 1
+    }
 
   # Check if we actually got non-empty string?
-  [ -n "${TIMESTAMP_EPOCH_MS}" ] || { error "${FUNCNAME[0]}: got empty timestamp_epoch_ms value"; return 1; }
+  [ -n "${TIMESTAMP_EPOCH_MS}" ] || {
+    error "${FUNCNAME[0]}: got empty timestamp_epoch_ms value"
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"
+    return 1
+  }
 
   # If state value contains: success|running, then: "is_success": true
   # else
@@ -4080,7 +4154,11 @@ function state_set {
   # Compose "state/chate" JSON and pipe it to publish_message()
   # Note: we POST "state/change" JSON to ff_agent_api_fqdn. (from portal to self, from 'traffic generator' to portal, from 'inside docker' to (agent?)).
   local UUID
-  UUID="$( ff_uuid )" || { error "${FUNCNAME[0]}" 'failed_generate_uuid'; return 1; }
+  UUID="$( ff_uuid )" || {
+    error "${FUNCNAME[0]}" 'failed_generate_uuid'
+    bash_echo_setting_set "${BASH_ECHO_SETTINGS}"
+    return 1
+  }
 
   # Check: all the environment variables used in JSON are actually set.
   local ALL_EXPECTED_ENVRIONMENT_VARIABLES=(
@@ -4143,8 +4221,8 @@ function state_set {
     "policy_language": "ff",
     "scope": {
       "can_read": "organization",
-      "can_write": "system",
-      "can_delete": "system"
+      "can_write": "organization",
+      "can_delete": "organization"
     }
   }
 }
@@ -4154,8 +4232,14 @@ EOF
   # If we have ff_metric command handy try to sent the metric with name STATE_NAME and value 1
   if command_exists ff_metric >/dev/null; then
     # Report metric: start:1    tags: service:ipsec_tunnel  (+public_ip, organization)
-    ff_metric --metric-name="${STATE_NAME}" --metric-value=1 --tag=state:"${STATE_VALUE}" --tag=is_error:"${IS_ERROR}"
+    ff_metric --metric-name="${STATE_NAME}" \
+      --metric-value=1 \
+      --tag=state:"${STATE_VALUE}" \
+      --tag=is_error:"${IS_ERROR}"
   fi
+
+  # Restore shell options
+  bash_echo_setting_set "${BASH_ECHO_SETTINGS}"
 }
 export -f state_set
 
