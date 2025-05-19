@@ -4665,8 +4665,15 @@ export -f user_exists
 function discover_environment {
 
   # Check dependencies
-  local DEPENDENCIES="ff_agent_home_get_best ff_agent_get_best_ff_agent_uri ff_agent_get_best_ff_agent_uuid ff_agent_get_best_ff_agent_fqdn ff_agent_get_best_ff_content_url abort"
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+  local DEPENDENCIES=(
+    ff_agent_home_get_best
+    ff_agent_get_best_ff_agent_uri
+    ff_agent_get_best_ff_agent_uuid
+    ff_agent_get_best_ff_agent_fqdn
+    ff_agent_get_best_ff_content_url
+    abort
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || return 1  # Note: check_dependencies will report missing dependencies
 
   ######################################################################
   # Choose user, agent home and make sure agent home folder exists

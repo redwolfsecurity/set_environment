@@ -74,21 +74,30 @@ function install_set_environment () {
   fi
 
   # shellcheck disable=SC1090
-  bash "$OS_INSTALLER" "${@}"
+  source "$OS_INSTALLER" "${@}"
+
   SOURCE_EXIT_CODE=$?
 
   if [[ $SOURCE_EXIT_CODE -eq 0 ]]; then
     state_set "${FUNCNAME[0]}" "sourced_os_installer_success"
+    log "✅ OS-specific installer success"
   elif [[ $SOURCE_EXIT_CODE -eq 2 ]]; then
     state_set "${FUNCNAME[0]}" "terminal_error_syntax_in_installer"
-    abort "Syntax error or invalid command inside: ${OS_INSTALLER}"
+    abort "❌ Syntax error or invalid command inside: ${OS_INSTALLER}"
   else
     state_set "${FUNCNAME[0]}" "terminal_error_runtime_in_installer_exit_${SOURCE_EXIT_CODE}"
-    abort "Installer script exited with non-zero status: ${SOURCE_EXIT_CODE}"
+    abort "❌ Installer script exited with non-zero status: ${SOURCE_EXIT_CODE}"
   fi
 
   # Last step: run a selfcheck
-  set_environment_is_working || { state_set "${FUNCNAME[0]}" "terminal_error_selfcheck_failed"; abort 'The install_set_environment final check of set_environment_is_working failed.'; }
+  command_run_as_user "${FF_AGENT_USERNAME}" set_environment_is_working || {
+    state_set "${FUNCNAME[0]}" "terminal_error_selfcheck_failed";
+    log "Debug state is:"
+    grep . "${FF_AGENT_HOME}/state/*."
+    abort '❌ The install_set_environment final check of set_environment_is_working failed.';
+  }
+
+  log "✅ Set environment is installed and working!"
 
   state_set "${FUNCNAME[0]}" 'success'
 }
