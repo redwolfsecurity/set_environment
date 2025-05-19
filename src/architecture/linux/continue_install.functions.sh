@@ -20,7 +20,8 @@
 #    - install_n
 #    - install_nodejs
 #    - install_nodejs_suite
-#    - pm2_configure
+#    - pm2_configure_container
+#    - pm2_configure_host
 #    - pm2_install
 #    - pm2_is_installed_and_working
 #    - pm2_is_running_as_me

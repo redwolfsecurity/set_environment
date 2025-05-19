@@ -2999,8 +2999,13 @@ export -f is_shell_option_set
 function terminal_initialize {
 
   # Check dependencies
-  local DEPENDENCIES="check_dependencies command_exists terminal_is_tty tput"
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+  local DEPENDENCIES=(
+    check_dependencies
+    command_exists
+    terminal_is_tty
+    tput
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[0]}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # If we do not have a terminal type, set up dumb
   if [ -z "${TERM}" ]; then
