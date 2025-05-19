@@ -4061,7 +4061,7 @@ function state_set {
 
   # Make sure "${FF_AGENT_HOME}" is not empty
   if [ -z "${FF_AGENT_HOME}" ]; then
-      error "Can not set state. FF_AGENT_HOME variable not set. State would have been set to ${STATE_NAME}=${STATE_VALUE}"
+      error "Can not set state. FF_AGENT_HOME variable not set (yet?). State would have been set to ${STATE_NAME}=${STATE_VALUE}"
       bash_echo_setting_set "${BASH_ECHO_SETTINGS}"
       return 1
   fi
@@ -4507,24 +4507,39 @@ export -f is_effectively_root
 function is_user_in_group {
 
   # Check dependencies
-  local DEPENDENCIES="getent grep"
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+  local DEPENDENCIES=(
+    getent
+    grep
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  # Get arguments
+  # -----------------------------------------------------------------------------
+  # Get and validate arguments
+  # -----------------------------------------------------------------------------
   local USERNAME="${1}"
   local GROUP="${2}"
 
-  # Check arguments are not empty
   [ -z "${USERNAME}" ] && return 1
   [ -z "${GROUP}" ] && return 1
 
-  # Check if user is in group
-  if getent group "${GROUP}" | grep --quiet "\b${USERNAME}\b"; then
-      # Yes, user is in group
+  # -----------------------------------------------------------------------------
+  # Check if the group exists and contains the user (exact match)
+  # -----------------------------------------------------------------------------
+  local GROUP_ENTRY
+  GROUP_ENTRY="$(getent group "${GROUP}")" || return 1
+
+  local IFS=":"
+  read -r _ _ _ MEMBERS <<< "${GROUP_ENTRY}"
+
+  # Match full word in comma-delimited list
+  IFS="," read -ra MEMBER_ARRAY <<< "${MEMBERS}"
+  for MEMBER in "${MEMBER_ARRAY[@]}"; do
+    if [ "${MEMBER}" = "${USERNAME}" ]; then
       return 0
-  else
-      return 1
-  fi
+    fi
+  done
+
+  return 1
 }
 export -f is_user_in_group
 
@@ -6031,7 +6046,9 @@ function nodejs_desired_version_get {
     ;;
     22.*) echo "v20.5.1"
     ;;
-    *) echo 'v18.4.0';;
+    24.*) echo "v24.0.1"
+    ;;
+    *) echo 'v24.0.1';;
   esac
 }
 export -f nodejs_desired_version_get
