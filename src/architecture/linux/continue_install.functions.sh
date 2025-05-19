@@ -1308,7 +1308,7 @@ function pm2_configure_host {
   }
     state_set "${FUNCNAME[0]}" 'success'
 }
-export -f pm2_configure
+export -f pm2_configure_host
 
 ################################################################################
 # Category: process
