@@ -17,11 +17,12 @@ function continue_install {
   terminal_initialize || { state_set "${FUNCNAME[0]}" "terminal_error_initialize_terminal"; abort 'terminal_error_initialize_terminal'; }
 
   # Enable bash call trace
-  bash_call_trace_enable
+  # bash_call_trace_enable
 
   # Source OS-specific install functions to continue installation
   # Get this script directory
   SET_ENVIRONMENT_CONTINUE_INSTALL_SCRIPT_DIRECTORY="$( script_directory_get )"
+  log "${FUNCNAME[0]}" "🟧 SET_ENVIRONMENT_CONTINUE_INSTALL_SCRIPT_DIRECTORY: ${SET_ENVIRONMENT_CONTINUE_INSTALL_SCRIPT_DIRECTORY}"
   export SET_ENVIRONMENT_CONTINUE_INSTALL_SCRIPT_DIRECTORY
   # shellcheck disable=SC1091
   source "${SET_ENVIRONMENT_CONTINUE_INSTALL_SCRIPT_DIRECTORY}/continue_install.functions.sh" || { state_set "${FUNCNAME[0]}" "terminal_error_cant_source_os_specific_install_functions"; abort 'terminal_error_cant_source_os_specific_install_functions'; }
