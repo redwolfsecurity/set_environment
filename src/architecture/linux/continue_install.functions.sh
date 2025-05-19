@@ -1834,6 +1834,6 @@ function logging_script_set_deprecated {
   # Note: we can not yet call "state_set" on that early stages
  	#state_set "${FUNCNAME[0]}" 'success'
 }
-export -f logging_script_set
+export -f logging_script_set_deprecated
 
 
