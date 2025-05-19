@@ -60,6 +60,7 @@ function install_set_environment () {
   local OS
   OS="$( discover_os )"
   OS_INSTALLER="./src/architecture/${OS}/continue_install.sh"
+  export OS_INSTALLER
 
   if [[ ! -f "$OS_INSTALLER" ]]; then
     state_set "${FUNCNAME[0]}" "terminal_error_missing_os_installer"

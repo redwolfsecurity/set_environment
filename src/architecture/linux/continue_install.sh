@@ -21,7 +21,7 @@ function continue_install {
 
   # Source OS-specific install functions to continue installation
   # Get this script directory
-  SET_ENVIRONMENT_CONTINUE_INSTALL_SCRIPT_DIRECTORY="$( script_directory_get )"
+  SET_ENVIRONMENT_CONTINUE_INSTALL_SCRIPT_DIRECTORY="$( dirname ${OS_INSTALLER} )"
   log "${FUNCNAME[0]}" "🟧 SET_ENVIRONMENT_CONTINUE_INSTALL_SCRIPT_DIRECTORY: ${SET_ENVIRONMENT_CONTINUE_INSTALL_SCRIPT_DIRECTORY}"
   export SET_ENVIRONMENT_CONTINUE_INSTALL_SCRIPT_DIRECTORY
   # shellcheck disable=SC1091
