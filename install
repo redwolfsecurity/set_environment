@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Install set_environment - Copyright (2018-2025) RedOKI
 
+# Temporarily disable u (nounset)
+set +u
+
 # Do not run this script as root
 [ "$EUID" -ne 0 ] || { echo "❌ Do not run this script as root." >&2; exit 1; }
 
@@ -36,8 +39,9 @@ function install_set_environment () {
   # Bootstraping
 
   # Change directory into the script's directory. This ensure all relative paths working correctly.
+  # TODO Error Check
   SET_ENVIRONMENT_SCRIPT_DIRECTORY="$( script_directory_get )"
-  log "🟧 top level install script directory is set to: ${SET_ENVIRONMENT_SCRIPT_DIRECTORY}"
+  echo "🟧 top level install script directory is set to: ${SET_ENVIRONMENT_SCRIPT_DIRECTORY}"
 
   export SET_ENVIRONMENT_SCRIPT_DIRECTORY
   cd "${SET_ENVIRONMENT_SCRIPT_DIRECTORY}" || { echo "Error: failed to change directory to ${SET_ENVIRONMENT_SCRIPT_DIRECTORY}" >&2; exit 1; }
@@ -47,10 +51,12 @@ function install_set_environment () {
   log "✅ sourced ff_bash_functions."
 
   # Create ff_agent home directories - THIS IS WHERE THE INSTALLER CREATES THE FIRST DIRECTORIES
+  ## TODO: Error check and check what it outputs
   ff_agent_home_get_best
   export FF_AGENT_HOME
   [ -n "${FF_AGENT_HOME}" ] || { state_set "${FUNCNAME[0]}" "terminal_error_variable_ff_agent_home_not_set"; abort 'Failed to read FF_AGENT_HOME env var. ff_agent_home_get_best did not set it.'; }
   mkdir -p "${FF_AGENT_HOME}" || { state_set "${FUNCNAME[0]}" "terminal_error_cant_create_home_directory"; abort 'terminal_error_cant_create_home_directory'; }
+  local DIR
   for DIR in bin state secrets applications git; do
       mkdir -p "${FF_AGENT_HOME}/${DIR}" || { state_set "${FUNCNAME[0]}" "terminal_error_cant_create_${DIR}_directory"; abort "terminal_error_cant_create_${DIR}_directory"; }
   done
@@ -63,19 +69,21 @@ function install_set_environment () {
   # Continue by calling OS-specific installer
   local OS
   OS="$( discover_os )"
+  # TODO: Add error checks
   log "🟧 Discovered OS: ${OS}"
   OS_INSTALLER="${SET_ENVIRONMENT_SCRIPT_DIRECTORY}/src/architecture/${OS}/continue_install.sh"
   log "🟧 OS-specific installer script: ${OS_INSTALLER}"
   export OS_INSTALLER
 
-  if [[ ! -f "$OS_INSTALLER" ]]; then
+  if [[ ! -f "${OS_INSTALLER}" ]]; then
     state_set "${FUNCNAME[0]}" "terminal_error_missing_os_installer"
     abort "Missing OS-specific installer script: ${OS_INSTALLER} (OS: ${OS})"
   fi
 
   # shellcheck disable=SC1090
-  source "$OS_INSTALLER" "${@}"
+  source "${OS_INSTALLER}" "${@}"
 
+  local SOURCE_EXIT_CODE
   SOURCE_EXIT_CODE=$?
 
   if [[ $SOURCE_EXIT_CODE -eq 0 ]]; then
