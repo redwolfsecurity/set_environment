@@ -37,11 +37,35 @@ export -f script_directory_get
 # shellcheck disable=SC2120
 function install_set_environment () {
   # Bootstraping
+  log "🚀🚀🚀 Starting Redoki ff_agent Setup Script 🚀🚀🚀"
+
+  # --- System & Environment Context ---
+  log "🔍 Current System Details:"
+  log "  Hostname                     : $(hostname)"
+  log "  Operating System             : $(lsb_release -ds 2>/dev/null || cat /etc/os-release | grep PRETTY_NAME | cut -d'=' -f2 | tr -d '"')" # Ubuntu-specific
+  log "  Kernel Version               : $(uname -r)"
+  log "  Architecture                 : $(uname -m)"
+  log "  Current user ID & groups     : $(id)"
+  log "  Effective user               : $(whoami)"
+  log "  Current working directory    : $(pwd)"
+  log "  Shell in use                 : ${SHELL}"
+  log "  PATH                         : ${PATH}"
+  # --- Dependency & Network Configuration ---
+  log "🔍 Dependency & Network Configuration:"
+  log "  FF Content URL               : ${FF_CONTENT_URL:-Not Set}"
+  # --- Script Invocation Details ---
+  log "🔍 Script Invocation Details:"
+  log "  Arguments passed to script   : $@" # Shows all arguments passed to this build script
+
+  log "-----------------------------------------------------------------"
+  log "🚀 Proceeding with setup tasks..."
 
   # Change directory into the script's directory. This ensure all relative paths working correctly.
   # TODO Error Check
   SET_ENVIRONMENT_SCRIPT_DIRECTORY="$( script_directory_get )"
   echo "🟧 top level install script directory is set to: ${SET_ENVIRONMENT_SCRIPT_DIRECTORY}"
+
+  log "  Script path                  : ${SCRIPT_PATH}" # Assumes SCRIPT_PATH holds the script's actual location
 
   export SET_ENVIRONMENT_SCRIPT_DIRECTORY
   cd "${SET_ENVIRONMENT_SCRIPT_DIRECTORY}" || { echo "Error: failed to change directory to ${SET_ENVIRONMENT_SCRIPT_DIRECTORY}" >&2; exit 1; }
@@ -53,15 +77,20 @@ function install_set_environment () {
   # Create ff_agent home directories - THIS IS WHERE THE INSTALLER CREATES THE FIRST DIRECTORIES
   ## TODO: Error check and check what it outputs
   ff_agent_home_get_best
+  log "✅ FF_AGENT_HOME is set to: ${FF_AGENT_HOME}"
+  log "✅ FF_AGENT_USERNAME is set to: ${FF_AGENT_USERNAME}"
   export FF_AGENT_HOME
   [ -n "${FF_AGENT_HOME}" ] || { state_set "${FUNCNAME[0]}" "terminal_error_variable_ff_agent_home_not_set"; abort 'Failed to read FF_AGENT_HOME env var. ff_agent_home_get_best did not set it.'; }
   mkdir -p "${FF_AGENT_HOME}" || { state_set "${FUNCNAME[0]}" "terminal_error_cant_create_home_directory"; abort 'terminal_error_cant_create_home_directory'; }
+
+
   local DIR
   for DIR in bin state secrets applications git; do
       mkdir -p "${FF_AGENT_HOME}/${DIR}" || { state_set "${FUNCNAME[0]}" "terminal_error_cant_create_${DIR}_directory"; abort "terminal_error_cant_create_${DIR}_directory"; }
   done
 
   state_set "${FUNCNAME[0]}" 'started'
+
 
   # Initialize terminal
   terminal_initialize
@@ -79,6 +108,22 @@ function install_set_environment () {
     state_set "${FUNCNAME[0]}" "terminal_error_missing_os_installer"
     abort "Missing OS-specific installer script: ${OS_INSTALLER} (OS: ${OS})"
   fi
+
+    log "🚀🚀🚀 Starting Redoki ff_agent Setup Script 🚀🚀🚀"
+
+  # --- System & Environment Context ---
+  log "🔍 Current System Details:"
+  log "  Hostname                     : $(hostname)"
+  log "  Operating System             : $(lsb_release -ds 2>/dev/null || cat /etc/os-release | grep PRETTY_NAME | cut -d'=' -f2 | tr -d '"')" # Ubuntu-specific
+  log "  Kernel Version               : $(uname -r)"
+  log "  Architecture                 : $(uname -m)"
+  log "  Current user ID & groups     : $(id)"
+  log "  Effective user               : $(whoami)"
+  log "  Current working directory    : $(pwd)"
+  log "  Script path                  : ${SCRIPT_PATH}" # Assumes SCRIPT_PATH holds the script's actual location
+  log "  Shell in use                 : ${SHELL}"
+  log "  Detected OS Family           : $(discover_os)" # Assuming discover_os function is available and fixed
+  log "  FF_AGENT_HOME                : ${FF_AGENT_HOME}"
 
   # shellcheck disable=SC1090
   source "${OS_INSTALLER}" "${@}"

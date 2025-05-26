@@ -220,6 +220,7 @@ function ff_agent_install {
   # Previously we tried to install from CDN: npm install --global "${FF_CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}
   npm install --global "@ff/ff_agent@${VERSION}" || {
     log "${FUNCNAME[0]}" "[ERROR] npm install @ff/ff_agent@${VERSION} failed Debug info of .npmrc :"
+    log "Debug: home directory is ${HOME}"
     cat "${HOME}/.npmrc" || true
     state_set "${FUNCNAME[0]}" 'failed_to_ff_agent_install'
     abort "${FUNCNAME[0]}" 'failed_to_ff_agent_install'
