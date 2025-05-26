@@ -3,3 +3,4 @@ build_commit_id
 node_modules
 *.tgz
 tests_candidate
+*.img

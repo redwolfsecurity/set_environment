@@ -218,7 +218,9 @@ function ff_agent_install {
 
   # Install ff_agent
   # Previously we tried to install from CDN: npm install --global "${FF_CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}
-  npm install --global @ff/ff_agent@${VERSION} || {
+  npm install --global "@ff/ff_agent@${VERSION}" || {
+    log "${FUNCNAME[0]}" "[ERROR] npm install @ff/ff_agent@${VERSION} failed Debug info of .npmrc :"
+    cat "${HOME}/.npmrc" || true
     state_set "${FUNCNAME[0]}" 'failed_to_ff_agent_install'
     abort "${FUNCNAME[0]}" 'failed_to_ff_agent_install'
   }
