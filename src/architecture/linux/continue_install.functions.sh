@@ -16,7 +16,6 @@
 #    - ff_agent_update_install
 #    - install_authbind
 #    - install_build_tools
-#    - install_go
 #    - install_n
 #    - install_nodejs
 #    - install_nodejs_suite
@@ -173,6 +172,7 @@ export -f apt_install_basic_packages
 #
 # Install npm package "@ff/ff_agent" to FF_AGENT_HOME globally.
 #
+# TODO: Some of this needs to go to basic node setup?
 function ff_agent_install {
   state_set "${FUNCNAME[0]}" 'started'
 
