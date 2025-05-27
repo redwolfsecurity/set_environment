@@ -121,9 +121,13 @@ function apt_install_basic_packages {
   }
 
   # Update apt index and installed components, before installing additional packages.
+  state_set "${FUNCNAME[0]}" 'apt_update_started'
   apt_update || { state_set "${FUNCNAME[0]}" 'error_failed_apt_update'; return 1; }
+  state_set "${FUNCNAME[0]}" 'apt_update_complete'
 
+  state_set "${FUNCNAME[0]}" 'apt_upgrade_started'
   apt_upgrade || { state_set "${FUNCNAME[0]}" 'error_failed_apt_upgrade'; return 1; }
+  state_set "${FUNCNAME[0]}" 'apt_upgrade_complete'
 
   # Define list of all required packages (by category, comment why we need the package for non-obvious ones)
   local REQUIRED_PACKAGES=(
