@@ -39,7 +39,7 @@ function continue_install {
   set_environment_preserve_source_code || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_set_environment_preserve_source_code"; abort 'terminal_error_failed_to_set_environment_preserve_source_code'; }
 
   # Install basic packages before installing anything else. This will install "curl", thus "state_set" will be able to POST JSON.
-  assert_clean_exit apt_install_basic_packages
+  # assert_clean_exit apt_install_basic_packages
 
   # Ensure file "ff_agent/.profile" created and sourced from ~/.bashrc (Note: this must be done before install node)
   assert_clean_exit ff_agent_install_bashrc

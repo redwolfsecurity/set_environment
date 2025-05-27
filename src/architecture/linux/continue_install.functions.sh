@@ -131,31 +131,31 @@ function apt_install_basic_packages {
 
   # Define list of all required packages (by category, comment why we need the package for non-obvious ones)
   local REQUIRED_PACKAGES=(
-      apt-utils # apt-utils required to avoid error: debconf: delaying package configuration, since apt-utils is not installed
-      apt-transport-https # APT transport for downloading via the HTTP Secure protocol (HTTPS)
-      software-properties-common # Part of "apt": manage the repositories that you install software from 3rd party repos (i.e. add their repo + gpg key)
+      # apt-utils # apt-utils required to avoid error: debconf: delaying package configuration, since apt-utils is not installed
+      # apt-transport-https # APT transport for downloading via the HTTP Secure protocol (HTTPS)
+      # software-properties-common # Part of "apt": manage the repositories that you install software from 3rd party repos (i.e. add their repo + gpg key)
 
       # The GNU Core Utilities are the basic file, shell and text manipulation utilities of the GNU operating system.
       # These are the core utilities which are expected to exist on every operating system.
-      coreutils
+      # coreutils
 
       # Curl must exist for this script and many others
-      curl
+      # curl
 
       # The ff_bash_functions require jq
-      jq
+      # jq
 
       # This script requires grep
-      grep
+      # grep
 
       # gnupg2
-      lsb-release
+      # lsb-release
 
       # ssh client (for the set environment ssh-keyscan command when the preserve set environment code is run)
-      openssh-client
+      # openssh-client
 
       # System: CA certificates
-      ca-certificates # Common CA certificates - Docker requires
+      # ca-certificates # Common CA certificates - Docker requires
   )
   local MISSING_PACKAGES=()
 
@@ -165,7 +165,9 @@ function apt_install_basic_packages {
   # done
 
   # Install only missing packages
+  state_set "${FUNCNAME[0]}" 'apt_install_started'
   apt_install "${REQUIRED_PACKAGES[@]}" || { state_set "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
+  state_set "${FUNCNAME[0]}" 'apt_install_complete'
 
   state_set "${FUNCNAME[0]}" 'success'
 }
