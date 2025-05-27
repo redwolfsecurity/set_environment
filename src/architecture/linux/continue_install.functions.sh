@@ -121,8 +121,9 @@ function apt_install_basic_packages {
   }
 
   # Update apt index and installed components, before installing additional packages.
-  assert_clean_exit apt_update
-  assert_clean_exit apt_upgrade
+  apt_update || { state_set "${FUNCNAME[0]}" 'error_failed_apt_update'; return 1; }
+
+  apt_upgrade || { state_set "${FUNCNAME[0]}" 'error_failed_apt_upgrade'; return 1; }
 
   # Define list of all required packages (by category, comment why we need the package for non-obvious ones)
   local REQUIRED_PACKAGES=(
@@ -151,17 +152,16 @@ function apt_install_basic_packages {
 
       # System: CA certificates
       ca-certificates # Common CA certificates - Docker requires
-
   )
   local MISSING_PACKAGES=()
 
   # Iterate required packages and collect only missing ones
-  for REQUIRED_PACKAGE in "${REQUIRED_PACKAGES[@]}"; do
-    add_to_install_if_missing "${REQUIRED_PACKAGE}" MISSING_PACKAGES
-  done
+  # for REQUIRED_PACKAGE in "${REQUIRED_PACKAGES[@]}"; do
+  #  add_to_install_if_missing "${REQUIRED_PACKAGE}" MISSING_PACKAGES
+  # done
 
   # Install only missing packages
-  apt_install "${MISSING_PACKAGES[@]}" || { state_set "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
+  apt_install "${REQUIRED_PACKAGES[@]}" || { state_set "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
 
   state_set "${FUNCNAME[0]}" 'success'
 }
