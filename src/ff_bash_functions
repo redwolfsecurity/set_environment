@@ -5651,8 +5651,6 @@ function assert_ff_agent_home_exists {
   local DEPENDENCIES="state_set ensure_variable_not_empty error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  state_set "${FUNCNAME[0]}" 'started'
-
   # Define required variables
   local REQUIRED_VARIABLES=(
     FF_AGENT_HOME
@@ -5669,7 +5667,6 @@ function assert_ff_agent_home_exists {
 
   # Make sure ${FF_AGENT_HOME} folder exist
   [ -d "${FF_AGENT_HOME}" ] || { state_set "${FUNCNAME[0]}" "error_ff_agent_home_does_not_exist"; return 1; }
-  state_set "${FUNCNAME[0]}" 'success'
 }
 export -f assert_ff_agent_home_exists
 

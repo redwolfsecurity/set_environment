@@ -9,7 +9,7 @@ set +u
 
 # Enable tracing (more verbose output)
 export PS4='+ [${BASH_SOURCE##*/}:${LINENO}] [${FUNCNAME[0]:-MAIN}] '
-set -x
+# set -x
 
 # Set optional SERVICE variable. If it is set, then it will be used:
 #  - as a tag for logger in log()
