@@ -579,7 +579,8 @@ function ff_agent_run_pm2 {
   if [[ -z "${PM2_STATUS}" ]]; then
     log "${FUNCNAME[0]}" "[INFO] ff_agent is not registered in pm2. Starting it..."
     # We need to start it as ff_agent.sh because pm2 does not start things with shebangs and we want this to be run in a login shell.
-    command_run_as_user "${FF_AGENT_USERNAME}" 'pm2 start node --name ff_agent -- ff_agent.sh' || {
+
+    command_run_as_user "${FF_AGENT_USERNAME}" 'pm2 start "bash -l -c ff_agent.sh" --name ff_agent' || {
     state_set "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
     abort "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
     }
