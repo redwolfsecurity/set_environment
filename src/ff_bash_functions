@@ -2524,7 +2524,7 @@ function warning {
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
     # Check input: not empty
-    if [ $# -eq 0 ]; then
+    if [ "$#" -eq 0 ]; then
       log warning: "No message provided."
       return
     fi
