@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-
+# shellcheck shell=bash
+set -u
 # This file is a collection of useful bash functions, which we want to source for all
 # users and other scripts.
 #
@@ -578,13 +579,9 @@ function apt_list {
   # Official doc: https://help.ubuntu.com/community/AptGet/Offline/PrintUris
   # apt-get --print-uris
   #  --print-uris : instead of fetching the files to install, their URIs (links to download them) are printed.
-  PACKAGE_URI=$( apt-get download \
+  if ! apt-get download \
     -o Dir::Cache::archives="./" \
-    --print-uris "${PACKAGE_NAME}"
-  )
-
-  # Check errors
-  if [ ${?} -ne 0 ]; then
+    --print-uris "${PACKAGE_NAME}" >/dev/null 2>&1; then
     error "${FUNCNAME[0]}" "Failed to find_package_uris"
     return 1
   fi
@@ -635,8 +632,7 @@ function apt_reinstall {
 
     # Note: don't wrap ${PACKAGES} in quotes, otherwise it will not word split, and the loop will only run once.
     for PACKAGE in ${PACKAGES}; do
-        sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} ${PACKAGE}
-        if [ ${?} -ne 0 ]; then
+        if ! sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true "${APT_COMMAND}" "${PACKAGE}"; then
             error "Error reinstalling packages: ${PACKAGE}"
             return 1
         fi
@@ -678,8 +674,7 @@ function apt_remove {
     # Note: don't wrap ${PACKAGES} in quotes, otherwise it will not word split, and the loop will only run once.
     for PACKAGE in ${PACKAGES}
     do
-        sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} "${PACKAGE}"
-        if [ ${?} -ne 0 ]; then
+        if ! sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} "${PACKAGE}"; then
             error "Error removing packages: ${PACKAGE}"
             return 1
         fi
@@ -724,9 +719,8 @@ function apt_update {
     #       replaced by --allow-unauthenticated , --allow-downgrades , --allow-remove-essential , --allow-change-held-packages in 1.1.
     local FORCE_YES="--allow-unauthenticated --allow-downgrades --allow-remove-essential --allow-change-held-packages"
 
-    sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${FORCE_YES} ${APT_COMMAND}
-    if [ ${?} -ne 0 ]; then
-       error "updating packages"
+    if ! sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true "${FORCE_YES}" "${APT_COMMAND}"; then
+       error "error_updating_apt_packages"
        return 1
     fi
 }
@@ -768,9 +762,8 @@ function apt_upgrade {
     #       replaced by --allow-unauthenticated , --allow-downgrades , --allow-remove-essential , --allow-change-held-packages in 1.1.
     local FORCE_YES="--allow-unauthenticated --allow-downgrades --allow-remove-essential --allow-change-held-packages"
 
-    sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${FORCE_YES} ${APT_COMMAND}
-    if [ ${?} -ne 0 ]; then
-       error "Error upgrading packages"
+    if ! sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true "${FORCE_YES}" "${APT_COMMAND}"; then
+       error "error_apt_updating_packages"
        return 1
     fi
 }
@@ -1015,15 +1008,18 @@ function semantic_version_parse {
   case "${VERSION_COMPONENT_NAME}" in
 
   --major)
-    local EXTRACTED_COMPONENT_VERSION=$( echo "${FULL_VERSION}" | cut -d"." -f 1 )
+    local EXTRACTED_COMPONENT_VERSION
+    EXTRACTED_COMPONENT_VERSION=$( echo "${FULL_VERSION}" | cut -d"." -f 1 )
     ;;
 
   --minor)
-    local EXTRACTED_COMPONENT_VERSION=$( echo "${FULL_VERSION}" | cut -d"." -f 2 )
+    local EXTRACTED_COMPONENT_VERSION
+    EXTRACTED_COMPONENT_VERSION=$( echo "${FULL_VERSION}" | cut -d"." -f 2 )
     ;;
 
   --patch)
-    local EXTRACTED_COMPONENT_VERSION=$( echo "${FULL_VERSION}" | cut -d"." -f 3 )
+    local EXTRACTED_COMPONENT_VERSION
+    EXTRACTED_COMPONENT_VERSION=$( echo "${FULL_VERSION}" | cut -d"." -f 3 )
     ;;
 
   *)
@@ -1942,6 +1938,8 @@ function replace_all_lines_by_regexp {
   local REGEX="${2-}"
   local INJECT_CONTENT="${3-}"
 
+  local MODIFIED_LINES_COUNT=0
+
   # Check required arguments are not empty (note: ${INJECT_CONTENT} can be empty)
   # Define required variables
   local REQUIRED_VARIABLES=(
@@ -2013,13 +2011,13 @@ function replace_all_lines_by_regexp {
 
   # Count the number of modified lines
   # Note: sed always return 0, so it won't let us know how many changes were done unless we count "before" and "after"
-  MODIFIED_LINES_COUNT=$( diff "${FILEPATH}" "${ORIGINAL_FILE_COPY}" | grep '^<' | wc -l ) || { error "${FUNCNAME[0]}" 'failed_to_calculate_difference_after_edit'; return 13; }
+  MODIFIED_LINES_COUNT=$( diff "${FILEPATH}" "${ORIGINAL_FILE_COPY}" | grep -c '^<' ) || { error "${FUNCNAME[0]}" 'failed_to_calculate_difference_after_edit'; return 13; }
 
   # Remove temporary file
   rm "${ORIGINAL_FILE_COPY}" || { error "${FUNCNAME[0]}" 'error_removing_temporary_file'; return 12; }
 
   # Check the number of modified lines is > 0
-  if [ ${MODIFIED_LINES_COUNT} -gt 0 ]; then
+  if [ "${MODIFIED_LINES_COUNT}" -gt 0 ]; then
     # Success. Pass the number of modified lines through stdout.
     echo "${MODIFIED_LINES_COUNT}"
     # Indicate: function succeed
@@ -2039,40 +2037,139 @@ export -f replace_all_lines_by_regexp
 #   UTILITY FUNCTIONS: FILE
 #
 # NAME
-#   s - Searches files from the current directory down for a given pattern, ignoring node_modules.
+#   s
 #
 # SYNOPSIS
-#   s PATTERN
+#   s [options] [pattern]
 #
 # DESCRIPTION
 #   Performs a recursive search for files containing the specified PATTERN, starting
 #   from the current directory. It ignores any files within 'node_modules' directories
 #   and is case-insensitive.
-#
+
 # USAGE EXAMPLE
-#   s "search term"
+#
+# Options:
+#   --dir DIR        Search in the specified directory (default: current directory).
+#   --ignore EXT     Ignore files with the specified extension(s) (comma-separated).
+#   --exclude DIR    Exclude directories from the search (comma-separated).
+#   --color          Enable or disable colorized output.
+#   --help           Show this help message.
 #
 # EXIT STATUS
 #   Success if the pattern is found in any file; failure otherwise.
 #
 ################################################################################
-function s {
-    # Check dependencies
-    local DEPENDENCIES="echo find grep"
-    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+s() {
+    local -a REQUIRED_DEPENDENCIES=("find" "grep" "sed" "cut")
+    local SEARCH_DIRECTORY="."
+    local -a IGNORE_EXTENSIONS=("ico" "jpg" "jpeg" "png" "gif" "pdf" "webp")
+    local -a EXCLUDE_DIRECTORIES=(".git" ".npm" "node_modules")
+    local -a PATTERN_ARGS=()
+    local COLOR_ENABLED="always"
 
-    GREP_OPTIONS="--color=always"
-    PATTERN="${1-}"
-    if [ "${PATTERN}" != "" ]; then
-        find . -name "*" -type f -not -path "*node_modules*" -exec grep --ignore-case --text --line-number -H "${PATTERN}" {} \;
-        return ${?}
-    else
-        echo "Search files in a subtree for a regex. Case insensitive." 1>&2
-        echo "Usage: s pattern" 1>&2
+    local ORIGINAL_LC_CTYPE="${LC_CTYPE:-}"
+    local ORIGINAL_LANG="${LANG:-}"
+
+    while [[ $# -gt 0 && "$1" == --* ]]; do
+        case "$1" in
+            --dir)
+                SEARCH_DIRECTORY="$2"
+                shift 2
+                ;;
+            --ignore)
+                IFS=',' read -r -a IGNORE_EXTENSIONS <<< "$2"
+                shift 2
+                ;;
+            --exclude)
+                IFS=',' read -r -a EXCLUDE_DIRECTORIES <<< "$2"
+                shift 2
+                ;;
+            --color)
+                COLOR_ENABLED="always"
+                shift
+                ;;
+            --color=*)
+                COLOR_ENABLED="${1#--color=}"
+                shift
+                ;;
+            --help)
+                printf '%s\n' \
+                    "Usage: s [options] PATTERN" \
+                    "" \
+                    "Recursively search files for PATTERN from a directory, ignoring specified types." \
+                    "" \
+                    "Options:" \
+                    "  --dir DIR           Root directory to search (default: .)" \
+                    "  --ignore EXT[,EXT]  Ignore file extensions (default: common binaries)" \
+                    "  --exclude DIR[,DIR] Exclude directory names (default: .git,.npm,node_modules)" \
+                    "  --color[=WHEN]      Enable grep color output (WHEN: always, never, auto)" \
+                    "  --help              Show this help and exit"
+                return 0
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done
+
+    if [[ $# -eq 0 ]]; then
+        echo "[ERROR] No pattern specified. Use --help for usage." >&2
         return 1
     fi
+    PATTERN_ARGS=("$@")
+
+    for REQUIRED_COMMAND in "${REQUIRED_DEPENDENCIES[@]}"; do
+        if ! command -v "$REQUIRED_COMMAND" >/dev/null 2>&1; then
+            printf '[ERROR] %s: required command not found: %s\n' "${FUNCNAME[0]}" "$REQUIRED_COMMAND" >&2
+            return 1
+        fi
+    done
+
+    local TERMINAL_WIDTH="${COLUMNS:-}"
+    if [[ -z "$TERMINAL_WIDTH" ]]; then
+        TERMINAL_WIDTH=$(tput cols 2>/dev/null || echo 160)
+    fi
+
+    printf '[INFO] Searching from %s for pattern: %s\n' "$SEARCH_DIRECTORY" "${PATTERN_ARGS[*]}"
+    printf '[INFO] Output trimmed to %s columns\n' "$TERMINAL_WIDTH"
+
+    export LC_CTYPE=C
+    export LANG=C
+
+    local -a GREP_OPTIONS=(
+        --color="$COLOR_ENABLED"
+        --ignore-case
+        --extended-regexp
+        --line-number
+        --binary
+        -H
+    )
+
+    local -a FIND_COMMAND=("find" "$SEARCH_DIRECTORY")
+
+    for EXCLUDED_DIRECTORY in "${EXCLUDE_DIRECTORIES[@]}"; do
+        FIND_COMMAND+=("(" "-type" "d" "-name" "$EXCLUDED_DIRECTORY" "-prune" ")" "-o")
+    done
+
+    FIND_COMMAND+=("(" "-type" "f")
+    for IGNORED_EXTENSION in "${IGNORE_EXTENSIONS[@]}"; do
+        FIND_COMMAND+=("!" "-iname" "*.${IGNORED_EXTENSION}")
+    done
+    FIND_COMMAND+=("!" "-path" "*/.git/*" ")")
+
+    FIND_COMMAND+=("-exec" grep "${GREP_OPTIONS[@]}" "--" "${PATTERN_ARGS[@]}" "{}" "+")
+
+    "${FIND_COMMAND[@]}" 2>/dev/null \
+        | cut -c "1-${TERMINAL_WIDTH}" \
+        | sed -E $'s/$/\x1B[0m/'
+
+    export LC_CTYPE="${ORIGINAL_LC_CTYPE}"
+    export LANG="${ORIGINAL_LANG}"
 }
 export -f s
+
+
 
 ################################################################################
 # CATEGORY
@@ -2144,7 +2241,7 @@ function url_get {
   # with random characters.
 
   local TMP_FILEPATH
-  TMP_FILEPATH=$(mktemp -t ${FUNCNAME[0]}.XXXXXXX) || { state_set "${FUNCNAME[0]}" "error_generating_tmp_filepath"; return 1; }
+  TMP_FILEPATH=$(mktemp -t "${FUNCNAME[0]}.XXXXXXX") || { state_set "${FUNCNAME[0]}" "error_generating_tmp_filepath"; return 1; }
 
   # Chmod file from "-rw-------" to default "-rw-rw-r--" 664
   chmod 664 "${TMP_FILEPATH}" || { state_set "${FUNCNAME[0]}" "error_chmod_tmp_filepath"; return 1; }
@@ -2161,7 +2258,7 @@ function url_get {
   --connect-timeout 12 \
   -o "${TMP_FILEPATH}" \
   -w "%{http_code}" \
-  ${URL}) \
+  "${URL}") \
   || { state_set "${FUNCNAME[0]}" 'error_downloading_file'; return 1; }
 
   # Note: curl return code 0 does not mean successful file download.
@@ -2248,7 +2345,7 @@ function abort {
 
     # Check if the SERVICE is set (not blank string), then also set corresponding state
     if [ -n "${SERVICE-}" ]; then
-        state_set ${SERVICE} abort
+        state_set "${SERVICE}" abort
     fi
     exit 1
 }
@@ -2284,7 +2381,7 @@ function assert_clean_exit {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   "${@}"
-  local STATUS=${?}
+  local STATUS="${?}"
   if [ ${STATUS} -ne 0 ]; then
     # [Q] Why printf '%q'?
     # [A] Due to the seveeral reasons:
@@ -3017,8 +3114,13 @@ export -f is_shell_option_set
 function terminal_initialize {
 
   # Check dependencies
-  local DEPENDENCIES="check_dependencies command_exists terminal_is_tty tput"
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+  local DEPENDENCIES=(
+    check_dependencies
+    command_exists
+    terminal_is_tty
+    tput
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[0]}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # If we do not have a terminal type, set up dumb
   if [ -z "${TERM}" ]; then
@@ -4079,7 +4181,7 @@ function state_set {
 
   # Make sure "${FF_AGENT_HOME}" is not empty
   if [ -z "${FF_AGENT_HOME}" ]; then
-      error "Can not set state. FF_AGENT_HOME variable not set. State would have been set to ${STATE_NAME}=${STATE_VALUE}"
+      error "Can not set state. FF_AGENT_HOME variable not set (yet?). State would have been set to ${STATE_NAME}=${STATE_VALUE}"
       bash_echo_setting_set "${BASH_ECHO_SETTINGS}"
       return 1
   fi
@@ -4150,8 +4252,10 @@ function state_set {
   #   if state value contains: error|fail|'', then "is_error": true
   # else
   #   don't include neither "is_success" nor "is_error".
-  local IS_SUCCESS_OR_IS_ERROR_JSON=''
-  local IS_ERROR=false
+  local IS_SUCCESS_OR_IS_ERROR_JSON
+  IS_SUCCESS_OR_IS_ERROR_JSON=''
+  local
+  IS_ERROR=false
   if [[ "${STATE_VALUE}" =~ success|running ]]; then
     IS_SUCCESS_OR_IS_ERROR_JSON='"is_success": true,'
   else
@@ -4162,8 +4266,10 @@ function state_set {
   fi
 
   # Get previous "old" state value
-  local PREVIOUS_STATE_JSON=""
-  local PREVIOUS_STATE_VALUE="$( cat ${STATE_FILE} )"
+  local PREVIOUS_STATE_JSON
+  PREVIOUS_STATE_JSON=""
+  local PREVIOUS_STATE_VALUE
+  PREVIOUS_STATE_VALUE="$( cat ${STATE_FILE} )"
   # Only include "old_state" property if it is not-empty string
   if [ "${PREVIOUS_STATE_VALUE}" != "" ]; then
     PREVIOUS_STATE_JSON="\"previous_state\": \"${PREVIOUS_STATE_VALUE}\","
@@ -4525,24 +4631,37 @@ export -f is_effectively_root
 function is_user_in_group {
 
   # Check dependencies
-  local DEPENDENCIES="getent grep"
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+  local DEPENDENCIES=(
+    getent
+    grep
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Get arguments
   local USERNAME="${1-}"
   local GROUP="${2-}"
 
-  # Check arguments are not empty
   [ -z "${USERNAME}" ] && return 1
   [ -z "${GROUP}" ] && return 1
 
-  # Check if user is in group
-  if getent group "${GROUP}" | grep --quiet "\b${USERNAME}\b"; then
-      # Yes, user is in group
+  # -----------------------------------------------------------------------------
+  # Check if the group exists and contains the user (exact match)
+  # -----------------------------------------------------------------------------
+  local GROUP_ENTRY
+  GROUP_ENTRY="$(getent group "${GROUP}")" || return 1
+
+  local IFS=":"
+  read -r _ _ _ MEMBERS <<< "${GROUP_ENTRY}"
+
+  # Match full word in comma-delimited list
+  IFS="," read -ra MEMBER_ARRAY <<< "${MEMBERS}"
+  for MEMBER in "${MEMBER_ARRAY[@]}"; do
+    if [ "${MEMBER}" = "${USERNAME}" ]; then
       return 0
-  else
-      return 1
-  fi
+    fi
+  done
+
+  return 1
 }
 export -f is_user_in_group
 
@@ -4579,7 +4698,8 @@ function ppid_command_get {
     local DEPENDENCIES="cat echo"
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-    local PPID_CMD=$( cat /proc/${PPID}/cmdline )
+    local PPID_CMD
+    PPID_CMD=$( cat /proc/${PPID}/cmdline )
     echo "${PPID_CMD}"
 }
 export -f ppid_command_get
@@ -4663,8 +4783,15 @@ export -f user_exists
 function discover_environment {
 
   # Check dependencies
-  local DEPENDENCIES="ff_agent_home_get_best ff_agent_get_best_ff_agent_uri ff_agent_get_best_ff_agent_uuid ff_agent_get_best_ff_agent_fqdn ff_agent_get_best_ff_content_url abort"
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+  local DEPENDENCIES=(
+    ff_agent_home_get_best
+    ff_agent_get_best_ff_agent_uri
+    ff_agent_get_best_ff_agent_uuid
+    ff_agent_get_best_ff_agent_fqdn
+    ff_agent_get_best_ff_content_url
+    abort
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || return 1  # Note: check_dependencies will report missing dependencies
 
   ######################################################################
   # Choose user, agent home and make sure agent home folder exists
@@ -4697,6 +4824,7 @@ function discover_environment {
   #  FF_PROXY_USERNAME
   #
   ff_agent_home_get_best || { abort "Failed to ff_agent_home_get_best"; }
+  # TODO: refactor this as it sets state.
   assert_ff_agent_home_exists || { abort "Failed to assert_ff_agent_home_exists"; }
 
   # Similarly for FF_AGENT_UUID
@@ -4784,8 +4912,10 @@ function discover_optional_environment_variable {
   fi
 
   # Try to get value by "secret_get()"
-  local NAME_LOWERCASE="$( echo "${NAME}" | tr '[:upper:]' '[:lower:]' )"
-  local RESTORED_VALUE=$( secret_get "${NAME_LOWERCASE}" 2> /dev/null ) # Suppress error: secret_get failed_to_find_secret_value
+  local NAME_LOWERCASE
+  NAME_LOWERCASE="$( echo "${NAME}" | tr '[:upper:]' '[:lower:]' )"
+  local RESTORED_VALUE
+  RESTORED_VALUE=$( secret_get "${NAME_LOWERCASE}" 2> /dev/null ) # Suppress error: secret_get failed_to_find_secret_value
   if [ -n "${RESTORED_VALUE}" ]; then
       # Got non-empty value from secrets, use it to export variable
       export "${NAME}"="${RESTORED_VALUE}"
@@ -4837,8 +4967,8 @@ function discover_os {
   # Detect the platform based on "OS_TYPE" variable. E.g. on a mac it might be 'darwin22.1.0'
   case "${OS_TYPE}" in
   darwin*)  OS_FAMILY="macos" ;;
-  linux*)   OS_FAMILY="linux" ;;
   linux-gnu*)   OS_FAMILY="linux" ;;
+  linux*)   OS_FAMILY="linux" ;;
   bsd*)     OS_FAMILY="bsd" ;;
   msys*)    OS_FAMILY="windows" ;;
   cygwin*)  OS_FAMILY="windows" ;;
@@ -4952,7 +5082,7 @@ function epoch_ms_get {
   local DEPENDENCIES="cut date echo"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  echo "$( date +%s%N | cut -b1-13 )"  # https://serverfault.com/a/151112/413686>
+  date +%s%N | cut -b1-13  # https://serverfault.com/a/151112/413686>
 }
 export -f epoch_ms_get
 
@@ -5542,8 +5672,6 @@ function assert_ff_agent_home_exists {
   local DEPENDENCIES="state_set ensure_variable_not_empty error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  state_set "${FUNCNAME[0]}" 'started'
-
   # Define required variables
   local REQUIRED_VARIABLES=(
     FF_AGENT_HOME
@@ -5560,7 +5688,6 @@ function assert_ff_agent_home_exists {
 
   # Make sure ${FF_AGENT_HOME} folder exist
   [ -d "${FF_AGENT_HOME}" ] || { state_set "${FUNCNAME[0]}" "error_ff_agent_home_does_not_exist"; return 1; }
-  state_set "${FUNCNAME[0]}" 'success'
 }
 export -f assert_ff_agent_home_exists
 
@@ -5959,7 +6086,7 @@ function ff_api_get {
         return 1
     fi
 
-    echo ${RESULT}
+    echo "${RESULT}"
 }
 export -f ff_api_get
 
@@ -6049,7 +6176,9 @@ function nodejs_desired_version_get {
     ;;
     22.*) echo "v20.5.1"
     ;;
-    *) echo 'v18.4.0';;
+    24.*) echo "v22.15.0" # 24.0.1 not working yet for libcurl it seems
+    ;;
+    *) echo 'v22.15.0';;
   esac
 }
 export -f nodejs_desired_version_get
@@ -6093,8 +6222,8 @@ function publish_message {
 
   bash_echo_off_set || { error "${FUNCNAME[0]}" "Failed to bash_echo_off_set"; return 1; }
 
-  # Read piped json
-  INPUT_JSON=`cat`
+  # Read piped json from stdin
+  INPUT_JSON=$( cat - )
 
   # Check if API is defined (this will check for:
   #  - FF_AGENT_API_FQDN
@@ -6120,7 +6249,8 @@ function publish_message {
     return 1
   fi
 
-  local UUID="$( ff_uuid )"
+  local UUID
+  UUID="$( ff_uuid )"
   if [ "${UUID}" == "" ]; then
     bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     error "${FUNCNAME[0]}" "failed to generate UUID"
@@ -6256,7 +6386,7 @@ function secret_check_set_and_get {
   RETRIEVED_VALUE=$( secret_get "${SECRET_NAME}" ) || { error "${FUNCNAME[0]}" "failed to retrieve secret '${SECRET_NAME}'"; return 1; }
 
   # Compare retrieved and expected values
-  local EPOCH_DELTA_S=$(( ${RETRIEVED_VALUE} - ${EXPECTED_VALUE} ))
+  local EPOCH_DELTA_S=$(( RETRIEVED_VALUE - EXPECTED_VALUE ))
   if [[ ${EPOCH_DELTA_S} -ge 0 ]] && [[ ${EPOCH_DELTA_S} -lt 5 ]]; then
     # Test passed: the retrieved value is within couple seconds of expected value
     return 0
@@ -6453,7 +6583,7 @@ function state_check_set_and_get {
   RETRIEVED_VALUE=$( state_get "${STATE_NAME}" ) || { error "${FUNCNAME[0]}" "failed to retrieve state '${STATE_NAME}'"; return 1; }
 
   # Compare retrieved and expected values
-  local EPOCH_DELTA_S=$(( ${RETRIEVED_VALUE} - ${EXPECTED_VALUE} ))
+  local EPOCH_DELTA_S=$(( RETRIEVED_VALUE - EXPECTED_VALUE ))
   if [[ ${EPOCH_DELTA_S} -ge 0 ]] && [[ ${EPOCH_DELTA_S} -lt 5 ]]; then
     # Test passed: the retrieved value is within couple seconds of expected value
     return 0

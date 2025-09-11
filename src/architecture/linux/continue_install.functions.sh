@@ -9,8 +9,6 @@
 #
 #    - add_to_install_if_missing
 #    - apt_install_basic_packages
-#    - assert_baseline_components
-#    - assert_core_credentials
 #    - ff_agent_install
 #    - ff_agent_install_bashrc
 #    - ff_agent_register_pm2_systemd
@@ -18,24 +16,21 @@
 #    - ff_agent_update_install
 #    - install_authbind
 #    - install_build_tools
-#    - install_go
 #    - install_n
 #    - install_nodejs
 #    - install_nodejs_suite
-#    - install_set_environment_baseline
-#    - pm2_configure
-#    - pm2_ensure
+#    - pm2_configure_container
+#    - pm2_configure_host
 #    - pm2_install
 #    - pm2_is_installed_and_working
 #    - pm2_is_running_as_me
 #    - pm2_start
 #    - pm2_stop
+#    - pm2_update
 #    - pm2_uninstall
-#    - set_environment_ensure_ff_agent_bin_exists
 #    - set_environment_ensure_install_exists
 #    - set_environment_preserve_source_code
-#    - set_script_logging
-#    - setup_logging
+#    - logging_script_set_deprecated
 
 ################################################################################
 #
@@ -126,115 +121,64 @@ function apt_install_basic_packages {
   }
 
   # Update apt index and installed components, before installing additional packages.
-  assert_clean_exit apt_update
-  assert_clean_exit apt_upgrade
+  state_set "${FUNCNAME[0]}" 'apt_update_started'
+  apt_update || { state_set "${FUNCNAME[0]}" 'error_failed_apt_update'; return 1; }
+  state_set "${FUNCNAME[0]}" 'apt_update_complete'
+
+  state_set "${FUNCNAME[0]}" 'apt_upgrade_started'
+  apt_upgrade || { state_set "${FUNCNAME[0]}" 'error_failed_apt_upgrade'; return 1; }
+  state_set "${FUNCNAME[0]}" 'apt_upgrade_complete'
 
   # Define list of all required packages (by category, comment why we need the package for non-obvious ones)
   local REQUIRED_PACKAGES=(
-      apt-utils # apt-utils required to avoid error: debconf: delaying package configuration, since apt-utils is not installed
-      apt-transport-https # APT transport for downloading via the HTTP Secure protocol (HTTPS)
-      software-properties-common # Part of "apt": manage the repositories that you install software from 3rd party repos (i.e. add their repo + gpg key)
+      # apt-utils # apt-utils required to avoid error: debconf: delaying package configuration, since apt-utils is not installed
+      # apt-transport-https # APT transport for downloading via the HTTP Secure protocol (HTTPS)
+      # software-properties-common # Part of "apt": manage the repositories that you install software from 3rd party repos (i.e. add their repo + gpg key)
 
       # The GNU Core Utilities are the basic file, shell and text manipulation utilities of the GNU operating system.
       # These are the core utilities which are expected to exist on every operating system.
-      coreutils
+      # coreutils
 
       # Curl must exist for this script and many others
-      curl
+      # curl
 
       # The ff_bash_functions require jq
-      jq
+      # jq
 
       # This script requires grep
-      grep
+      # grep
 
       # gnupg2
-      lsb-release
+      # lsb-release
 
       # ssh client (for the set environment ssh-keyscan command when the preserve set environment code is run)
-      openssh-client
+      # openssh-client
 
       # System: CA certificates
-      ca-certificates # Common CA certificates - Docker requires
-
+      # ca-certificates # Common CA certificates - Docker requires
   )
   local MISSING_PACKAGES=()
 
   # Iterate required packages and collect only missing ones
-  for REQUIRED_PACKAGE in "${REQUIRED_PACKAGES[@]}"; do
-    add_to_install_if_missing "${REQUIRED_PACKAGE}" MISSING_PACKAGES
-  done
+  # for REQUIRED_PACKAGE in "${REQUIRED_PACKAGES[@]}"; do
+  #  add_to_install_if_missing "${REQUIRED_PACKAGE}" MISSING_PACKAGES
+  # done
 
   # Install only missing packages
-  apt_install "${MISSING_PACKAGES[@]}" || { state_set "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
+  state_set "${FUNCNAME[0]}" 'apt_install_started'
+  apt_install "${REQUIRED_PACKAGES[@]}" || { state_set "${FUNCNAME[0]}" 'error_failed_apt_install'; return 1; }
+  state_set "${FUNCNAME[0]}" 'apt_install_complete'
 
   state_set "${FUNCNAME[0]}" 'success'
 }
 export -f apt_install_basic_packages
 
-################################################################################
-#
-# Install set of basic packages (most installed by "apt", but some installed by
-# different means (example: docker, n, npm, nodejs)), bash functions, .bashrc and .profile files.
-#
-function assert_baseline_components {
-  state_set "${FUNCNAME[0]}" 'started'
-
-  # Install basic packages before installing anything else. This will install "curl", thus "state_set" will be able to POST JSON.
-  assert_clean_exit apt_install_basic_packages
-
-  # Install NTP and make sure timesyncd is disabled (not working in parallel)
-  # assert_clean_exit replace_timesyncd_with_ntpd
-
-  # Ensure file "ff_agent/.profile" created and sourced from ~/.bashrc (Note: this must be done before install node)
-  assert_clean_exit ff_agent_install_bashrc
-
-  # Install nodejs suite and all its fixings (not using "apt") (Note: this will modify ff_agent/.profile)
-  assert_clean_exit install_nodejs_suite
-
-  # Install npm package "@ff/ff_agent"
-  assert_clean_exit ff_agent_install
-
-  # Install pm2
-  assert_clean_exit pm2_install
-
-  # Run ff_agent by pm2
-  assert_clean_exit ff_agent_run_pm2
-
-
-  # Register ff_agent in systemd
-  assert_clean_exit ff_agent_register_pm2_systemd
-
-
-  # Ensure pm2 is running properly
-  assert_clean_exit pm2_ensure
-
-  # Install a script to update ff_agent and restart it by pm2
-  assert_clean_exit ff_agent_update_install
-
-  state_set "${FUNCNAME[0]}" 'success'
-}
-export -f assert_baseline_components
-
-################################################################################
-#
-# Assert core credentials (npmrc, docker, ...)
-#
-function assert_core_credentials {
-    state_set "${FUNCNAME[0]}" 'started'
-
-    # [Q] We should be part of docker group. That's about it I think.
-    # [A] Nope, we don't install docker as a 'baseline' environment, thus assection of core credentials will
-    #     only take care of user being part of the 'docker group' in case corresponding environment was installed.
-
-    state_set "${FUNCNAME[0]}" 'success'
-}
-export -f assert_core_credentials
 
 ################################################################################
 #
 # Install npm package "@ff/ff_agent" to FF_AGENT_HOME globally.
 #
+# TODO: Some of this needs to go to basic node setup?
 function ff_agent_install {
   state_set "${FUNCNAME[0]}" 'started'
 
@@ -269,7 +213,7 @@ function ff_agent_install {
         python3               # Used by node-gyp as part of the native build process.
         pkg-config            # This helps in locating the proper versions of libraries during the build process.
       )
-      apt_install ${PACKAGES_TO_INSTALL[@]} || {
+      apt_install "${PACKAGES_TO_INSTALL[@]}" || {
           state_set "${FUNCNAME[0]}" 'terminal_error_unable_to_ff_agent_install_dependencies'
           abort "${FUNCNAME[0]}" 'terminal_error_unable_to_ff_agent_install_dependencies'
         }
@@ -280,7 +224,10 @@ function ff_agent_install {
 
   # Install ff_agent
   # Previously we tried to install from CDN: npm install --global "${FF_CONTENT_URL}/ff/npm/ff-ff_agent-${VERSION}
-  npm install --global @ff/ff_agent@${VERSION} || {
+  npm install --global "@ff/ff_agent@${VERSION}" || {
+    log "${FUNCNAME[0]}" "[ERROR] npm install @ff/ff_agent@${VERSION} failed Debug info of .npmrc :"
+    log "Debug: home directory is ${HOME}"
+    cat "${HOME}/.npmrc" || true
     state_set "${FUNCNAME[0]}" 'failed_to_ff_agent_install'
     abort "${FUNCNAME[0]}" 'failed_to_ff_agent_install'
   }
@@ -474,9 +421,16 @@ EOT
   local FF_AGENT_BIN="${FF_AGENT_HOME}/bin"
 
   # Update PATH variable (if it not yet contains expected string)
-  printenv PATH | grep --quiet "${FF_AGENT_BIN}"
-  if [ ${?} -ne 0 ]; then
-    export PATH="${FF_AGENT_BIN}:${PATH}" || { state_set "${FUNCNAME[0]}" 'error_modifying_path'; return 1; }
+  # printenv PATH | grep --quiet "${FF_AGENT_BIN}"
+  # if [ ${?} -ne 0 ]; then
+  #  export PATH="${FF_AGENT_BIN}:${PATH}" || { state_set "${FUNCNAME[0]}" 'error_modifying_path'; return 1; }
+  # fi
+  # Update PATH variable if it does not yet contain the expected bin directory
+  if [[ ":$PATH:" != *":${FF_AGENT_BIN}:"* ]]; then
+    export PATH="${FF_AGENT_BIN}:${PATH}" || {
+      state_set "${FUNCNAME[0]}" 'error_modifying_path'
+      return 1
+    }
   fi
 
   TARGET_FILE="${FF_AGENT_PROFILE_FILE}"
@@ -522,7 +476,6 @@ export -f ff_agent_install_bashrc
 #   - state_set
 #   - abort
 #   - command_exists
-#   - command_run_as_user
 #   - systemd (must be PID 1)
 #   - pm2
 #
@@ -550,13 +503,13 @@ function ff_agent_register_pm2_systemd {
   }
 
   # Ensuring pm2 startup works on boot for ${FF_AGENT_USERNAME}
-  command_run_as_user "${FF_AGENT_USERNAME}" 'sudo env PATH=$PATH:${FF_AGENT_HOME}/.n/bin pm2 startup systemd -u ${USER} --hp ${HOME}' || {
+  sudo env PATH="${PATH}":"${FF_AGENT_HOME}/.n/bin" pm2 startup systemd -u "${FF_AGENT_USERNAME}" --hp "${FF_AGENT_USER_HOME}" || {
     state_set "${FUNCNAME[0]}" 'terminal_error_unable_to_ff_agent_register_pm2_systemd'
     abort "${FUNCNAME[0]}" "Failed to ensure pm2 startup works on boot for ${FF_AGENT_USERNAME}"
   }
 
   # Enable systemd unit
-  command_run_as_user "${FF_AGENT_USERNAME}" 'sudo systemctl enable pm2-${USER}' || {
+  sudo systemctl enable "pm2-${FF_AGENT_USERNAME}" || {
     state_set "${FUNCNAME[0]}" 'terminal_error_unable_to_ff_agent_register_pm2_systemd'
     abort "${FUNCNAME[0]}" "Failed to ensure pm2 startup works on boot for ${FF_AGENT_USERNAME}"
   }
@@ -584,7 +537,6 @@ export -f ff_agent_register_pm2_systemd
 # DEPENDENCIES
 #   - command_exists
 #   - state_set
-#   - abort
 #   - command_run_as_user
 #   - pm2
 #
@@ -626,7 +578,9 @@ function ff_agent_run_pm2 {
 
   if [[ -z "${PM2_STATUS}" ]]; then
     log "${FUNCNAME[0]}" "[INFO] ff_agent is not registered in pm2. Starting it..."
-    command_run_as_user "${FF_AGENT_USERNAME}" 'pm2 start node --name ff_agent -- ff_agent' || {
+    # We need to start it as ff_agent.sh because pm2 does not start things with shebangs and we want this to be run in a login shell.
+
+    command_run_as_user "${FF_AGENT_USERNAME}" 'pm2 start "bash -l -c ff_agent.sh" --name ff_agent' || {
     state_set "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
     abort "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
     }
@@ -642,8 +596,8 @@ function ff_agent_run_pm2 {
     log "${FUNCNAME[0]}" "[INFO] ff_agent is already running under pm2."
   fi
 
-  # Save current pm2 process list
-  pm2 save || {
+  # Save current pm2 process list - this must run as the correct user
+  command_run_as_user "${FF_AGENT_USERNAME}" 'pm2 save' || {
     state_set "${FUNCNAME[0]}" 'failed_to_pm2_save'
     abort "${FUNCNAME[0]}" 'failed_to_pm2_save'
   }
@@ -888,52 +842,46 @@ function install_n {
     return 1
   fi
 
-  # Create tmp folder and change directory into it
-  TMPDIR="$( mktemp -d )"
-  pushd "${TMPDIR}" || { state_set "${FUNCNAME[0]}" 'error_pushd_to_tmp_directory'; return 1; }
+    # -----------------------------------------------------------------------------
+  # Create and enter a temporary working directory
+  # -----------------------------------------------------------------------------
+  TMPDIR="$(mktemp -d)" || { state_set "${FUNCNAME[0]}" 'failed_to_create_tmpdir'; return 1; }
+  pushd "${TMPDIR}" > /dev/null || { state_set "${FUNCNAME[0]}" 'error_pushd_to_tmp_directory'; return 1; }
 
-  # Attempt 1: download 'n' from FF_CONTENT_URL
-  # Try FF_CONTENT_URL first because it gives more control over what version of 'n' will be executed.
-  # The magour update on the github might introduce some breaking change, let's leave it for 2nd attept only.
+  # -----------------------------------------------------------------------------
+  # Download 'n' binary using a prioritized fallback strategy
+  # -----------------------------------------------------------------------------
   SAVE_AS='n'
-  URL="${FF_CONTENT_URL}/ff/ff_agent/hotpatch/hotpatch_files/${SAVE_AS}"
-  curl \
-    --silent    \
-    --retry 5    \
-    --location    \
-    --retry-delay 1 \
-    --retry-max-time 60 \
-    --max-time 55 \
-    --connect-timeout 12 \
-    -o "${SAVE_AS}" \
-    "${URL}"
+  DOWNLOAD_LOCATIONS=(
+    "${FF_CONTENT_URL}/ff/ff_agent/hotpatch/hotpatch_files/${SAVE_AS}"
+    "https://raw.githubusercontent.com/tj/n/master/bin/n"
+  )
 
-  # Check curl exit code
-  if [ ${?} -ne 0 ]; then
-      state_set "${FUNCNAME[0]}" 'failed_to_download_n_from_content_server'
+    DOWNLOAD_SUCCESS=0
+  for URL in "${DOWNLOAD_LOCATIONS[@]}"; do
+    if curl \
+      --silent \
+      --location \
+      --retry 5 \
+      --retry-delay 1 \
+      --retry-max-time 60 \
+      --max-time 55 \
+      --connect-timeout 12 \
+      -o "${SAVE_AS}" \
+      "${URL}"; then
+      DOWNLOAD_SUCCESS=1
+      break
+    else
+      state_set "${FUNCNAME[0]}" "download_failed_from_$(basename "${URL}")"
+    fi
+  done
 
-      # Attempt 2: download 'n' from from github
-      URL="https://raw.githubusercontent.com/tj/n/master/bin/n"
-      curl \
-        --silent    \
-        --retry 5    \
-        --location    \
-        --retry-delay 1 \
-        --retry-max-time 60 \
-        --max-time 55 \
-        --connect-timeout 12 \
-        -o "${SAVE_AS}" \
-        "${URL}"
 
-      # Check curl exit code
-      if [ ${?} -ne 0 ]; then
-        # The 2nd attempt failed too, giving up.
-        # Error: clean up tmp folder, report an error and return error code 1
-        popd || { state_set "${FUNCNAME[0]}" 'error_popd'; return 1; }
-        rm -fr "${TMPDIR}" || { state_set "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
-        state_set "${FUNCNAME[0]}" 'warning_failed_to_download_n_from_github'
-        return 1
-      fi
+  if [ "${DOWNLOAD_SUCCESS}" -ne 1 ]; then
+    popd > /dev/null || { state_set "${FUNCNAME[0]}" 'error_popd'; return 1; }
+    rm -rf "${TMPDIR}" || { state_set "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
+    state_set "${FUNCNAME[0]}" 'error_all_download_attempts_failed'
+    return 1
   fi
 
   # Export 2 env variables we need for "n" to operate properly:  and NODE_PATH
@@ -1000,13 +948,14 @@ EOT
 
   # ------------------ Inject "ff_agent/.n/bin" into PATH and inject that export into FF_AGENT_PROFILE_FILE (begin) ----------------
 
-  # Update PATH variable (if it not yet contains expected string)
-  printenv PATH | grep --quiet "${N_PREFIX}/bin"
-  if [ ${?} -ne 0 ]; then
+  # -----------------------------------------------------------------------------
+  # Update PATH variable if it does not yet contain the expected N_PREFIX/bin
+  # -----------------------------------------------------------------------------
+  if ! grep --quiet "${N_PREFIX}/bin" <<< "${PATH}"; then
     export PATH="${N_PREFIX}/bin:${PATH}" || {
-        # Error: clean up tmp folder, report an error and return error code 1
-        popd || { state_set "${FUNCNAME[0]}" 'error_popd'; return 1; }; rm -fr "${TMPDIR}"  || { state_set "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
-        state_set "${FUNCNAME[0]}" 'error_modifying_path'; return 1;
+      popd > /dev/null || { state_set "${FUNCNAME[0]}" 'error_popd'; return 1; }
+      rm -rf "${TMPDIR}" || { state_set "${FUNCNAME[0]}" 'failed_to_remove_tmpdir'; return 1; }
+      state_set "${FUNCNAME[0]}" 'error_modifying_path'; return 1
     }
   fi
 
@@ -1072,7 +1021,8 @@ function install_nodejs {
   }
 
   # Get desired nodejs version
-  local VERSION="$( nodejs_desired_version_get )"
+  local VERSION
+  VERSION="$( nodejs_desired_version_get )"
   [ -z "${VERSION}" ] && { state_set "${FUNCNAME[0]}" 'failed_to_nodejs_desired_version_get'; abort 'failed_to_nodejs_desired_version_get'; }
 
 
@@ -1112,45 +1062,6 @@ function install_nodejs_suite {
 }
 export -f install_nodejs_suite
 
-################################################################################
-#
-# Continuation of the "set_environment". Installing baseline components.
-# On error: function aborts (so no need to errorcheck on caller side)
-#
-function install_set_environment_baseline {
-  state_set "${FUNCNAME[0]}" 'started'
-
- # Check dependencies
-  local DEPENDENCIES=(
-    "abort"
-    "assert_clean_exit"
-    "discover_environment"
-    "set_environment_ensure_ff_agent_bin_exists"
-    "setup_logging"
-  )
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
-    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
-    return 1
-  }
-
-  # Discover environment (choose user, make sure it's home folder exists, check FF_CONTENT_URL is set etc.)
-  discover_environment || { abort "${FUNCNAME[0]}" "terminal_error_failed_to_discover_environment"; }
-
-  # Now we can state_set()
-  state_set "${FUNCNAME[0]}" 'started'
-
-  # Put logs in best location
-  setup_logging || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_setup_logging"; abort 'terminal_error_failed_to_setup_logging'; }
-
-  # Ensure ff_agent/bin folder exists before assert_baseline_components
-  set_environment_ensure_ff_agent_bin_exists || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_set_environment_ensure_ff_agent_bin_exists"; abort 'terminal_error_failed_to_set_environment_ensure_ff_agent_bin_exists'; }
-
-  # Install set of basic packages, bash functions, .bashrc and .profile files
-  assert_clean_exit assert_baseline_components || { state_set "${FUNCNAME[0]}" "terminal_error_failed_to_assert_baseline_components"; abort 'terminal_error_failed_to_assert_baseline_components'; }
-
-  state_set "${FUNCNAME[0]}" 'success'
-}
-export -f install_set_environment_baseline
 
 # ##########################################################################################
 # #
@@ -1294,25 +1205,103 @@ export -f install_set_environment_baseline
 
 ################################################################################
 # Category: process
-# pm2_configure
-# Configures pm2 the way we want it configured
-function pm2_configure {
+# pm2_configure_container
+# Configures pm2 the way we want it configured for a container
+# No .pm2/logs/* files -- Letting Docker/systemd/journald handle log routing
+# Clean stdout/stderr separation
+# Disable PM2 update banner
+# Clean and readable timestamp format in log lines (stdout/stderr)
+# Extend kill timeout for graceful shutdowns
+# Set default memory cap for auto-restart
+# Disable all file-based logging (PM2 won't write .pm2/logs/*)
+function pm2_configure_container {
+  state_set "${FUNCNAME[0]}" 'started'
+
+  # Check dependencies
+  local DEPENDENCIES=(
+    "timeout"
+    "pm2"
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {
+    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+    return 1
+  }
+
+  # Disable PM2 update banner
+  timeout 30 pm2 set pm2:update_notif false || {
+    state_set "${FUNCNAME[0]}" 'pm2_set_update_notif_error'
+    return 1
+  }
+
+  # Clean and readable timestamp format in log lines (stdout/stderr)
+  timeout 30 pm2 set pm2:log_date_format 'YYYY-MM-DD HH:mm:ss' || {
+    state_set "${FUNCNAME[0]}" 'pm2_set_log_date_format_error'
+    return 1
+  }
+
+  # Extend kill timeout for graceful shutdowns
+  timeout 30 pm2 set pm2:kill_timeout 5000 || {
+    state_set "${FUNCNAME[0]}" 'pm2_set_kill_timeout_error'
+    return 1
+  }
+
+  # Set default memory cap for auto-restart
+  timeout 30 pm2 set pm2:max_memory_restart 500M || {
+    state_set "${FUNCNAME[0]}" 'pm2_set_max_memory_restart_error'
+    return 1
+  }
+
+  # Disable all file-based logging (PM2 won't write .pm2/logs/*)
+  timeout 30 pm2 set pm2:out_file /dev/null || {
+    state_set "${FUNCNAME[0]}" 'pm2_set_out_file_error'
+    return 1
+  }
+
+  timeout 30 pm2 set pm2:error_file /dev/null || {
+    state_set "${FUNCNAME[0]}" 'pm2_set_error_file_error'
+    return 1
+  }
+
+  timeout 30 pm2 save || {
+    state_set "${FUNCNAME[0]}" 'pm2_save_failed'
+    return 1
+  }
+
+  state_set "${FUNCNAME[0]}" 'success'
+}
+export -f pm2_configure_container
+
+################################################################################
+# Category: process
+# pm2_configure_host
+# Configures pm2 the way we want it configured for a host
+function pm2_configure_host {
     state_set "${FUNCNAME[0]}" 'started'
 
     # Define dependencies
     local DEPENDENCIES=(
       "timeout"
-      "seq"
       "pm2"
     )
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
       state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
       return 1
     }
-
-    # Now it is installed, and command is in path. So we shall configure it
-    # Configure it to automatically save state
+    # Automatically call pm2 save after every process start/stop/restart so that the current process list is persisted to disk.
     timeout 30 pm2 set pm2:autodump true            || { state_set "${FUNCNAME[0]}" "pm2_configure_autodump_error"; return 1; }
+
+    # Disables PM2's periodic check for new versions (and annoying update banners in the CLI).
+    timeout 30 pm2 set pm2:update_notif false
+
+    # Customizes the timestamp format for PM2 log output.
+    timeout 30 pm2 set pm2:log_date_format 'YYYY-MM-DD HH:mm:ss'
+
+    # Time (in milliseconds) PM2 waits between sending SIGINT or SIGTERM and force-killing (SIGKILL) a process on stop/restart.
+    timeout 30 pm2 set pm2:kill_timeout 5000
+
+    # Sets the default maximum memory (in megabytes) any process is allowed to use before PM2 forcefully restarts it.
+    # Can be overridden on a per-process basis. But applies to all apps if not set per app.
+    pm2 set pm2:max_memory_restart 500M
 
     # Configure it to rotate logs
     timeout 45 pm2 install pm2-logrotate            || { state_set "${FUNCNAME[0]}" "pm2_install_logrotate_error"; return 1; }
@@ -1323,53 +1312,13 @@ function pm2_configure {
     # configure it to rotate logs every hour
     timeout 30 pm2 set pm2-logrotate:rotateInterval '0 0 * * * *'  || { state_set "${FUNCNAME[0]}" "pm2_configure_logrotate_error"; return 1; }
 
-    # pm2 update sometimes fail on 1st attempt, but then works on the 2nd. Let's add 3 attempts to make sure.
-    local IS_PM2_UPDATED=false MAX_ATTEMPTS=3 ATTEMPT
-    for ATTEMPT in $( seq 1 ${MAX_ATTEMPTS} ); do
-      timeout 55 pm2 update && { IS_PM2_UPDATED=true; break; }
-    done
-    [ "${IS_PM2_UPDATED}" == "true" ] || { state_set "${FUNCNAME[0]}" "pm2_update_error"; return 1; } # "Error: failed to update pm2 after ${ATTEMPT} attempts"
-
+  timeout 30 pm2 save || {
+    state_set "${FUNCNAME[0]}" 'pm2_save_failed'
+    return 1
+  }
     state_set "${FUNCNAME[0]}" 'success'
 }
-export -f pm2_configure
-
-################################################################################
-# Category: process
-# pm2_ensure
-# This ensures that pm2 is running, and working as we wish. aborts otherwise.
-# If it is not installed, we install it.
-function pm2_ensure {
-    state_set "${FUNCNAME[0]}" 'started'
-
-    # Define dependencies
-    local DEPENDENCIES=(
-      "abort"
-      "pm2"
-      "pm2_configure"
-      "pm2_is_running_as_me"
-      "pm2_is_installed_and_working"
-      "pm2_install"
-      "pm2_start"
-    )
-    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
-      state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
-      return 1
-    }
-
-    # Check if pm2 is installed and working. If not, install it.
-    pm2_is_installed_and_working || pm2_install || { state_set "${FUNCNAME[0]}" 'error_failed_to_install_pm2'; abort 'error_failed_to_install_pm2'; }
-
-    # If pm2 is running, then we ensure it is properly configured. It might have been running already, but not properly configured.
-    pm2_configure || { state_set "${FUNCNAME[0]}" 'error_configuring_pm2'; abort 'error_configuring_pm2'; }
-
-    # Now it has to at least be installed, and not running, so we try to start it.
-    pm2_start || { state_set "${FUNCNAME[0]}" 'failed_to_start_pm2'; abort 'failed_to_start_pm2'; }
-
-    # If all above works, we have it running
-    state_set "${FUNCNAME[0]}" 'success'
-}
-export -f pm2_ensure
+export -f pm2_configure_host
 
 ################################################################################
 # Category: process
@@ -1392,17 +1341,13 @@ function pm2_install {
     local NPM_PACKAGE="pm2"
     local VERSION="latest"
 
-    # Commented out, since stop_pm2() does not exist (was removed as empty function). If you want to kill that daemon process then run command
-    # "pm2 kill" instead of trying to use f-n stop_pm(). Also then update f-n comments to say that this f-n stops pm2 if it is already installed.
-    #
-    # # We will try to stop it. But that won't stop us from uninstalling it.
-    # pm2_is_running_as_me && stop_pm2
-
-    local PM2=$( command_exists "${NPM_PACKAGE}" )
+    local PM2
+    PM2=$( command_exists "${NPM_PACKAGE}" )
     [ "${PM2}" != "" ] && { state_set "${FUNCNAME[0]}" 'success_no_action_already_installed'; return 0; }
 
     # Actually install it -- globally
-    local NPM=$( command_exists "npm" )
+    local NPM
+    NPM=$( command_exists "npm" )
     ${NPM} install --global "${NPM_PACKAGE}@${VERSION}"  || { state_set "${FUNCNAME[0]}" 'error_installing_pm2_npm'; return 1; }
 
     # Verify it is installed and it is working
@@ -1419,8 +1364,10 @@ export -f pm2_install
 # Returns 0 if it is, 1 if it isn't
 function pm2_is_installed_and_working {
   # Check dependencies
-  local DEPENDENCIES="command_exists"
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
+  local DEPENDENCIES=(
+    "command_exists"
+  )
+  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Return 1 if command does not exist
   command_exists pm2 >/dev/null || { return 1; }
@@ -1460,7 +1407,7 @@ function pm2_is_running_as_me {
         echo "id: $( id )"
         echo "pwd: $( pwd )"
         echo "USER: $( whoami )"
-        echo "HOME: $( echo ${HOME} )"
+        echo "HOME: ${HOME}"
         echo "sudo ps aux"
         sudo ps aux
         echo "PM2 log:"
@@ -1491,27 +1438,36 @@ function pm2_start {
     }
 
     # Get the path to the pm2 command
-    local PM2=$( command_exists pm2 ) || { state_set "${FUNCNAME[0]}" 'error_pm2_command_not_found'; return 1; }
+    local PM2
+    PM2=$( command_exists pm2 ) || { state_set "${FUNCNAME[0]}" 'error_pm2_command_not_found'; return 1; }
 
     # Check if it is running. If it is, we're happy.
     pm2_is_installed_and_working && { state_set "${FUNCNAME[0]}" 'success_no_action_pm2_is_already_running'; return 0; }
 
     # We want to install pm2 in home directory, so we need to make sure we are in the right place.
-    pushd "${HOME}"
+    pushd "${HOME}" || { state_set "${FUNCNAME[0]}" 'error_pushd'; return 1; }
+
     # Try and start pm2, and then save the state.
-    "${PM2}" start && "${PM2}" save || {
+    "${PM2}" start || {
         state_set "${FUNCNAME[0]}" 'error_pm2_start_failed'
         error "Error - PM2 did not start. pm2 log last 1000 lines are:"
-        tail -n 1000 ${HOME}/.pm2/pm2.log
+        tail -n 1000 "${HOME}/.pm2/pm2.log"
         error "Here are the last 1000 lines of pm2 log:"
         pm2 logs --lines 1000
         return 1
     }
-    popd
+
+    "${PM2}" save || {
+        state_set "${FUNCNAME[0]}" 'error_pm2_save_failed'
+        return 1
+    }
+
+    popd || { state_set "${FUNCNAME[0]}" 'error_popd'; return 1; }
 
     state_set "${FUNCNAME[0]}" 'success'
 }
 export -f pm2_start
+
 
 ################################################################################
 # Category: process
@@ -1593,11 +1549,53 @@ function pm2_stop {
 }
 export -f pm2_stop
 
-
 ################################################################################
 # Category: process
-# pm2_uninstall
-# Removes PM2
+# pm2_update
+# Updates pm2 to the latest version
+function pm2_update {
+    state_set "${FUNCNAME[0]}" 'started'
+
+    # Define dependencies
+    local DEPENDENCIES=(
+      "command_exists"
+      "pm2"
+      "timeout"
+      "seq"
+    )
+    check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
+      state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
+      return 1
+    }
+
+    # Get the path to the pm2 command
+    local PM2
+    PM2=$( command_exists pm2 ) || { state_set "${FUNCNAME[0]}" 'error_pm2_command_not_found'; return 1; }
+
+    # Check if it is running. If it is, we're happy.
+    pm2_is_installed_and_working && { state_set "${FUNCNAME[0]}" 'success_no_action_pm2_is_already_running'; return 0; }
+  # pm2 update performs a self-healing and state-preserving refresh of the PM2 runtime and ecosystem.
+    # It does not update the pm2 NPM package itself — instead, it resets internal state, reloads the process list, and upgrades the underlying PM2 metadata if needed.
+    # pm2 update sometimes fail on 1st attempt, but then works on the 2nd. Let's add 3 attempts to make sure.
+    local IS_PM2_UPDATED=false
+    local MAX_ATTEMPTS=3
+    local ATTEMPT
+    for ATTEMPT in $(seq 1 "${MAX_ATTEMPTS}"); do
+      log "Attempt ${ATTEMPT}/${MAX_ATTEMPTS}: updating PM2..."
+      if timeout 55 pm2 update; then
+        IS_PM2_UPDATED=true
+        break
+      else
+        warn "Attempt ${ATTEMPT} failed to update PM2."
+      fi
+    done
+
+    [ "${IS_PM2_UPDATED}" == "true" ] || { state_set "${FUNCNAME[0]}" "pm2_update_error"; return 1; } # "Error: failed to update pm2 after ${ATTEMPT} attempts"
+
+    state_set "${FUNCNAME[0]}" 'success'
+}
+export -f pm2_update
+
 ################################################################################
 # Category: process
 # pm2_uninstall
@@ -1655,57 +1653,6 @@ function pm2_uninstall {
 }
 export -f pm2_uninstall
 
-
-################################################################################
-#
-# Function makes sure "${FF_AGENT_HOME}/bin" folder is created.
-#
-function set_environment_ensure_ff_agent_bin_exists {
-
-  state_set "${FUNCNAME[0]}" 'started'
-
-  # Define dependencies
-  local DEPENDENCIES=(
-    "ensure_variable_not_empty"
-    "mkdir"
-  )
-  check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES[@]}" || {  # Note: check_dependencies will report missing dependencies
-    state_set "${FUNCNAME[0]}" 'dependencies_check_failed'
-    return 1
-  }
-
-
-  # Loop through dependencies
-  for DEPENDENCY in "${DEPENDENCIES[@]}"; do
-    if ! command_exists "${DEPENDENCY}"; then
-      error "${FUNCNAME[0]}" "error_dependency_not_met_${DEPENDENCY}"
-      state_set "${FUNCNAME[0]}" "error_dependency_not_met_${DEPENDENCY}"
-      return 1
-    fi
-  done
-
-  # Define required non-empty variables
-  local REQUIRED_NON_EMPTY_VARIABLES=(
-    "FF_AGENT_HOME"
-  )
-  ensure_variables_not_empty "${FUNCNAME[0]}" "${REQUIRED_NON_EMPTY_VARIABLES[@]}" || { # Note: ensure_variables_not_empty will report missing variables
-    state_set "${FUNCNAME[0]}" 'ensure_variables_not_empty_failed'
-    return 1
-  }
-
-
-  # Define target directory
-  TARGET_DIR="${FF_AGENT_HOME}/bin"
-
-  # Check if target directory exists
-  [ -d "${TARGET_DIR}" ] || {
-    # Does not exist. Create new.
-    mkdir -p "${TARGET_DIR}" || { state_set "${FUNCNAME[0]}" 'failed_to_create_directory'; return 1; }
-  }
-
-  state_set "${FUNCNAME[0]}" 'success'
-}
-export -f set_environment_ensure_ff_agent_bin_exists
 
 ################################################################################
 #
@@ -1791,26 +1738,28 @@ function set_environment_preserve_source_code {
     return 1
   }
 
-  # Get passed parameters (path to currently installed project folder)
-  PROJECT_ROOT_DIR="${1}"
-  [ -d "${PROJECT_ROOT_DIR}" ] || { state_set "${FUNCNAME[0]}" 'failed_to_set_environment_preserve_source_code'; return 1; }
+  # Before installer change directory multiple times let's preserve absolute path to the project's root
+  # directory, so we can preserve soruces as one of the last steps after installation.
+  [ -n "${SET_ENVIRONMENT_SCRIPT_DIRECTORY}" ] || { state_set "${FUNCNAME[0]}" "terminal_error_variable_set_environment_script_directory_not_set"; abort 'The environment variable SET_ENVIRONMENT_SCRIPT_DIRECTORY is unset and is required for set_environment_preserve_source_code'; }
 
   # As a preparation to preserve project source files (used during this installation), let's change directory to the project root directory.
-  pushd "${PROJECT_ROOT_DIR}" || { state_set "${FUNCNAME[0]}" 'failed_to_cd_into_project'; return 1; }
+  pushd "${SET_ENVIRONMENT_SCRIPT_DIRECTORY}" || { state_set "${FUNCNAME[0]}" 'failed_to_cd_into_project'; return 1; }
 
   # We need to trust github.com to avoid errors like this:
   # The authenticity of host 'github.com (140.82.113.4)' can't be established.
+  mkdir -p "${FF_AGENT_USER_HOME}/.ssh" || { state_set "${FUNCNAME[0]}" 'failed_to_create_ff_agent_user_home_ssh_folder'; return 1; }
   if ! grep -q '^github\.com ' "${FF_AGENT_USER_HOME}/.ssh/known_hosts"; then
       ssh-keyscan github.com >> "${FF_AGENT_USER_HOME}/.ssh/known_hosts"
   fi
 
-
   # Extract project owner from github repository URL
-  local URL=$( git remote show origin | grep 'Fetch URL:' | awk -F'Fetch URL: ' '{print $2}' )
-  [ ! -z "${URL}" ] || { state_set "${FUNCNAME[0]}" 'failed_to_extract_project_url'; return 1; }
+  local URL
+  URL="$(git remote get-url origin 2>/dev/null)" || { state_set ...; return 1; }
+  [ -n "${URL}" ] || { state_set "${FUNCNAME[0]}" 'failed_to_extract_project_url'; return 1; }
 
-  local OWNER=$( github_repository_url_parse "${URL}" --owner )
-  [ ! -z "${OWNER}" ] || { state_set "${FUNCNAME[0]}" 'failed_to_extract_project_owner'; return 1; }
+  local OWNER
+  OWNER=$( github_repository_url_parse "${URL}" --owner )
+  [ -n "${OWNER}" ] || { state_set "${FUNCNAME[0]}" 'failed_to_extract_project_owner'; return 1; }
 
   # All projects sources got preserved in this folder
   local PRESERVED_PROJECTS_DIR="${FF_AGENT_HOME}/git"
@@ -1857,7 +1806,7 @@ export -f set_environment_preserve_source_code
 
 ################################################################################
 # Log this script standard output and standard error to a log file AND system logger
-function set_script_logging {
+function logging_script_set_deprecated {
 
   # Note: we can not yet call "state_set" on that early stages
  	#state_set "${FUNCNAME[0]}" 'started'
@@ -1879,13 +1828,15 @@ function set_script_logging {
   done
 
   if [ -z "${LOG_DIRECTORY}" ]; then
-      error "Unable to find a place to log! Tried: ${POTENTIAL_LOG_DIRECTORIES[@]}"
-      export LOG_PATH=$( tty )
+      error "Unable to find a place to log! Tried: ${POTENTIAL_LOG_DIRECTORIES[*]}"
+      LOG_PATH=$( tty )
+      export LOG_PATH
   else
       # Get current epoch ms. (note: we can't yet use   # "$( epoch_ms_get )" because ff_bash_functions arent installed/updated yet)
       TIMESTAMP_EPOCH_MS="$( epoch_ms_get )"
       LOG_FILE="set_environment.${TIMESTAMP_EPOCH_MS}.log"
-      export LOG_PATH="${LOG_DIRECTORY}/${LOG_FILE}"
+      LOG_PATH="${LOG_DIRECTORY}/${LOG_FILE}"
+      export LOG_PATH
       # PREVIOUSLY THIS WAS exec &> >(tee -a "${LOG_PATH}")
       exec &> >(tee >(tee -a "${LOG_PATH}" | logger -t set_environment ))
   fi
@@ -1893,12 +1844,6 @@ function set_script_logging {
   # Note: we can not yet call "state_set" on that early stages
  	#state_set "${FUNCNAME[0]}" 'success'
 }
-export -f set_script_logging
+export -f logging_script_set_deprecated
 
-################################################################################
-# Orchestrator function
-function setup_logging {
-  # Ensure script output sent to standard output and standard error to a log file AND system logger
-	set_script_logging
-}
-export -f setup_logging
+

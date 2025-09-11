@@ -1,19 +1,15 @@
 #!/usr/bin/env bash
+# Install set_environment - Copyright (2018-2025) RedOKI
+
+# Temporarily disable u (nounset)
+set +u
+
+# Do not run this script as root
+[ "$EUID" -ne 0 ] || { echo "❌ Do not run this script as root." >&2; exit 1; }
 
 # Enable tracing (more verbose output)
-set -x
-
-# This script implements the installer logic of the "set_environment" project.
-# Project github page: https://github.com/redwolfsecurity/set_environment
-#
-# Caller must source this script, so it can inject environment into the current terminal as well.
-# To check the installation result one can use "set_environment_is_working" selfcheck function.
-# If installation succeed then selfcheck function will return success code 0.
-#
-# Caller can check if set_environment was started by the right user (after sourcing ". ./install")
-# by chkecking environment variable ${FF_AGENT_USERNAME}.
-#      Example: if [ "${FF_AGENT_USERNAME}" == "$(whoami)" ]; then echo "I'm the right/proper user"; fi
-#
+export PS4='+ [${BASH_SOURCE##*/}:${LINENO}] [${FUNCNAME[0]:-MAIN}] '
+# set -x
 
 # Set optional SERVICE variable. If it is set, then it will be used:
 #  - as a tag for logger in log()
@@ -22,28 +18,144 @@ export SERVICE="set_environment"
 
 ###############################################################################
 #
-function install_set_environment {
-    # Can't state_set() here yet
-    # state_set "${FUNCNAME[0]}" 'started'
+# This function dynamically gets the directory the script is running in
+script_directory_get() {
+  local SOURCE="${BASH_SOURCE[0]}"
+  while [ -h "$SOURCE" ]; do
+    local DIR
+    DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+  done
+  cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd
+}
+export -f script_directory_get
 
-    # Change directory into the script's directory. This ensure all relative paths working correctly.
-    cd "$( dirname $( readlink -f "${BASH_SOURCE[0]}" ) )" || { echo "Error: failed to change directory to $( dirname ${BASH_SOURCE[0]} )" >&2; exit 1; } # note: can not yet use error() / abort() / state_set()
 
-    # Source common functions
-    source src/ff_bash_functions || { echo "Error: failed to source common functions." >&2; exit 1; } # note: can not yet use error() / abort() / state_set()
+###############################################################################
+#
+# shellcheck disable=SC2120
+function install_set_environment () {
+  # Bootstraping
+  log "🚀🚀🚀 Starting Redoki ff_agent Setup Script 🚀🚀🚀"
 
-    # Initialize terminal
-    terminal_initialize || { state_set "${FUNCNAME[0]}" "terminal_error_initialize_terminal"; abort 'terminal_error_initialize_terminal'; }
+  # --- System & Environment Context ---
+  log "🔍 Current System Details:"
+  log "  Hostname                     : $(hostname)"
+  log "  Operating System             : $(lsb_release -ds 2>/dev/null || cat /etc/os-release | grep PRETTY_NAME | cut -d'=' -f2 | tr -d '"')" # Ubuntu-specific
+  log "  Kernel Version               : $(uname -r)"
+  log "  Architecture                 : $(uname -m)"
+  log "  Current user ID & groups     : $(id)"
+  log "  Effective user               : $(whoami)"
+  log "  Current working directory    : $(pwd)"
+  log "  Shell in use                 : ${SHELL}"
+  log "  PATH                         : ${PATH}"
+  # --- Dependency & Network Configuration ---
+  log "🔍 Dependency & Network Configuration:"
+  log "  FF Content URL               : ${FF_CONTENT_URL:-Not Set}"
+  # --- Script Invocation Details ---
+  log "🔍 Script Invocation Details:"
+  log "  Arguments passed to script   : $*" # Shows all arguments passed to this build script
 
-    # Continue by calling OS-specific installer
-    source "src/architecture/$( discover_os )/continue_install.sh" "${@}" || { state_set "${FUNCNAME[0]}" "terminal_error_continue_install"; abort 'terminal_error_continue_install'; }
+  log "-----------------------------------------------------------------"
+  log "🚀 Proceeding with setup tasks..."
 
-    # Last step: run a selfcheck
-    set_environment_is_working || { state_set "${FUNCNAME[0]}" "terminal_error_selfcheck_failed"; abort 'terminal_error_selfcheck_failed'; }
+  # Change directory into the script's directory. This ensure all relative paths working correctly.
+  # TODO Error Check
+  SET_ENVIRONMENT_SCRIPT_DIRECTORY="$( script_directory_get )"
+  echo "🟧 top level install script directory is set to: ${SET_ENVIRONMENT_SCRIPT_DIRECTORY}"
 
-    state_set "${FUNCNAME[0]}" 'success'
+  log "  Script path                  : ${SCRIPT_PATH}" # Assumes SCRIPT_PATH holds the script's actual location
+
+  export SET_ENVIRONMENT_SCRIPT_DIRECTORY
+  cd "${SET_ENVIRONMENT_SCRIPT_DIRECTORY}" || { echo "Error: failed to change directory to ${SET_ENVIRONMENT_SCRIPT_DIRECTORY}" >&2; exit 1; }
+
+  # Source common functions
+  source ./src/ff_bash_functions || { echo "Error: failed to source ff_bash_functions common functions." >&2; exit 1; }
+  log "✅ sourced ff_bash_functions."
+
+  # Create ff_agent home directories - THIS IS WHERE THE INSTALLER CREATES THE FIRST DIRECTORIES
+  ## TODO: Error check and check what it outputs
+  ff_agent_home_get_best
+  log "✅ FF_AGENT_HOME is set to: ${FF_AGENT_HOME}"
+  log "✅ FF_AGENT_USERNAME is set to: ${FF_AGENT_USERNAME}"
+  export FF_AGENT_HOME
+  [ -n "${FF_AGENT_HOME}" ] || { state_set "${FUNCNAME[0]}" "terminal_error_variable_ff_agent_home_not_set"; abort 'Failed to read FF_AGENT_HOME env var. ff_agent_home_get_best did not set it.'; }
+  mkdir -p "${FF_AGENT_HOME}" || { state_set "${FUNCNAME[0]}" "terminal_error_cant_create_home_directory"; abort 'terminal_error_cant_create_home_directory'; }
+
+
+  local DIR
+  for DIR in bin state secrets applications git; do
+      mkdir -p "${FF_AGENT_HOME}/${DIR}" || { state_set "${FUNCNAME[0]}" "terminal_error_cant_create_${DIR}_directory"; abort "terminal_error_cant_create_${DIR}_directory"; }
+  done
+
+  state_set "${FUNCNAME[0]}" 'started'
+
+
+  # Initialize terminal
+  terminal_initialize
+
+  # Continue by calling OS-specific installer
+  local OS
+  OS="$( discover_os )"
+  # TODO: Add error checks
+  log "🟧 Discovered OS: ${OS}"
+  OS_INSTALLER="${SET_ENVIRONMENT_SCRIPT_DIRECTORY}/src/architecture/${OS}/continue_install.sh"
+  log "🟧 OS-specific installer script: ${OS_INSTALLER}"
+  export OS_INSTALLER
+
+  if [[ ! -f "${OS_INSTALLER}" ]]; then
+    state_set "${FUNCNAME[0]}" "terminal_error_missing_os_installer"
+    abort "Missing OS-specific installer script: ${OS_INSTALLER} (OS: ${OS})"
+  fi
+
+    log "🚀🚀🚀 Starting Redoki ff_agent Setup Script 🚀🚀🚀"
+
+  # --- System & Environment Context ---
+  log "🔍 Current System Details:"
+  log "  Hostname                     : $(hostname)"
+  log "  Operating System             : $(lsb_release -ds 2>/dev/null || cat /etc/os-release | grep PRETTY_NAME | cut -d'=' -f2 | tr -d '"')" # Ubuntu-specific
+  log "  Kernel Version               : $(uname -r)"
+  log "  Architecture                 : $(uname -m)"
+  log "  Current user ID & groups     : $(id)"
+  log "  Effective user               : $(whoami)"
+  log "  Current working directory    : $(pwd)"
+  log "  Script path                  : ${SCRIPT_PATH}" # Assumes SCRIPT_PATH holds the script's actual location
+  log "  Shell in use                 : ${SHELL}"
+  log "  Detected OS Family           : $(discover_os)" # Assuming discover_os function is available and fixed
+  log "  FF_AGENT_HOME                : ${FF_AGENT_HOME}"
+
+  # shellcheck disable=SC1090
+  source "${OS_INSTALLER}" "${@}"
+
+  local SOURCE_EXIT_CODE
+  SOURCE_EXIT_CODE=$?
+
+  if [[ $SOURCE_EXIT_CODE -eq 0 ]]; then
+    state_set "${FUNCNAME[0]}" "sourced_os_installer_success"
+    log "✅ OS-specific installer success"
+  elif [[ $SOURCE_EXIT_CODE -eq 2 ]]; then
+    state_set "${FUNCNAME[0]}" "terminal_error_syntax_in_installer"
+    abort "❌ Syntax error or invalid command inside: ${OS_INSTALLER}"
+  else
+    state_set "${FUNCNAME[0]}" "terminal_error_runtime_in_installer_exit_${SOURCE_EXIT_CODE}"
+    abort "❌ Installer script exited with non-zero status: ${SOURCE_EXIT_CODE}"
+  fi
+
+  # Last step: run a selfcheck
+  command_run_as_user "${FF_AGENT_USERNAME}" set_environment_is_working || {
+    state_set "${FUNCNAME[0]}" "terminal_error_selfcheck_failed";
+    log "Debug state is:"
+    grep . "${FF_AGENT_HOME}/state/*."
+    abort '❌ The install_set_environment final check of set_environment_is_working failed.';
+  }
+
+  log "✅ Set environment is installed and working!"
+
+  state_set "${FUNCNAME[0]}" 'success'
 }
 
-install_set_environment  # no need to check errors here, the f-n itself reports errors (all of which are "terminal" errors) and aborts/exits.
+install_set_environment
 
+# Turn off tracing
 set +x
