@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-
+# shellcheck shell=bash
+set -u
 # This file is a collection of useful bash functions, which we want to source for all
 # users and other scripts.
 #
@@ -2325,7 +2326,7 @@ function abort {
     error "abort called - aborting ${*}"
 
     # Check if the SERVICE is set (not blank string), then also set corresponding state
-    if [ -n "${SERVICE}" ]; then
+    if [ -n "${SERVICE-}" ]; then
         state_set "${SERVICE}" abort
     fi
     exit 1
@@ -2513,14 +2514,14 @@ function log {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Check if optional environment SERVICE is defined, then use it as a tag for logger
-  if [ "${SERVICE}" != "" ]; then
+  if [ "${SERVICE-}" != "" ]; then
     local LOGGER_TAG="--tag '${SERVICE}'"
     local SERVICE_PREFIX="${SERVICE}: "
   else
     local SERVICE_PREFIX=''
   fi
 
-  echo "${SERVICE_PREFIX}${*}" | tee >(logger ${LOGGER_TAG} ) >&2
+  echo "${SERVICE_PREFIX}${*}" | tee >(logger ${LOGGER_TAG-} ) >&2
 }
 export -f log
 
@@ -2585,7 +2586,7 @@ function successful_exit {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Check if SERVICE is defined
-  if [ "${SERVICE}" != "" ]; then
+  if [ "${SERVICE-}" != "" ]; then
     local SERVICE_SUFFIX="${SERVICE}_"
     state_set "${SERVICE_SUFFIX}last_run_state" success
   fi
@@ -4247,8 +4248,10 @@ function state_set {
   fi
 
   # Get previous "old" state value
-  local PREVIOUS_STATE_JSON=""
-  local PREVIOUS_STATE_VALUE="$( cat ${STATE_FILE} )"
+  local PREVIOUS_STATE_JSON
+  PREVIOUS_STATE_JSON=""
+  local PREVIOUS_STATE_VALUE
+  PREVIOUS_STATE_VALUE="$( cat ${STATE_FILE} )"
   # Only include "old_state" property if it is not-empty string
   if [ "${PREVIOUS_STATE_VALUE}" != "" ]; then
     PREVIOUS_STATE_JSON="\"previous_state\": \"${PREVIOUS_STATE_VALUE}\","
