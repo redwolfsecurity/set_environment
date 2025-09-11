@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
-set -u
+# set -u
 # This file is a collection of useful bash functions, which we want to source for all
 # users and other scripts.
 #
@@ -5165,7 +5165,7 @@ function ff_agent_get_best_ff_agent_uri {
   discover_optional_environment_variable "FF_AGENT_URI" || { error "${FUNCNAME[0]}" "Failed to discover optional environment variable FF_AGENT_URI"; return 1; }
 
   # Check if variable already set. If not set - generate new value
-  if [ -z "${FF_AGENT_URI}" ]; then
+  if [ -z "${FF_AGENT_URI-}" ]; then
       # Generate new uuid, check errors, export new value
       local UUID
       UUID="$( ff_agent_get_best_ff_agent_uuid )" || { error "${FUNCNAME[0]}" "Failed to ff_agent_get_best_ff_agent_uuid"; return 1; }
@@ -5217,7 +5217,7 @@ function ff_agent_get_best_ff_agent_uuid {
   discover_optional_environment_variable "FF_AGENT_UUID" || { error "${FUNCNAME[0]}" "failed to discover optional environment variable FF_AGENT_UUID"; return 1; }
 
   # Check if variable already set. If not set - generate new uuid
-  if [ -z "${FF_AGENT_UUID}" ]; then
+  if [ -z "${FF_AGENT_UUID-}" ]; then
       # Generate new FF_AGENT_UUID, check errors, export new value
       FF_AGENT_UUID="$( ff_uuid )" || { error "${FUNCNAME[0]}" "failed to generate new uuid"; return 1; }
   fi
