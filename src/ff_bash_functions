@@ -578,13 +578,9 @@ function apt_list {
   # Official doc: https://help.ubuntu.com/community/AptGet/Offline/PrintUris
   # apt-get --print-uris
   #  --print-uris : instead of fetching the files to install, their URIs (links to download them) are printed.
-  PACKAGE_URI=$( apt-get download \
+  if ! apt-get download \
     -o Dir::Cache::archives="./" \
-    --print-uris "${PACKAGE_NAME}"
-  )
-
-  # Check errors
-  if [ ${?} -ne 0 ]; then
+    --print-uris "${PACKAGE_NAME}" >/dev/null 2>&1; then
     error "${FUNCNAME[0]}" "Failed to find_package_uris"
     return 1
   fi
@@ -635,8 +631,7 @@ function apt_reinstall {
 
     # Note: don't wrap ${PACKAGES} in quotes, otherwise it will not word split, and the loop will only run once.
     for PACKAGE in ${PACKAGES}; do
-        sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} ${PACKAGE}
-        if [ ${?} -ne 0 ]; then
+        if ! sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true "${APT_COMMAND}" "${PACKAGE}"; then
             error "Error reinstalling packages: ${PACKAGE}"
             return 1
         fi
@@ -678,8 +673,7 @@ function apt_remove {
     # Note: don't wrap ${PACKAGES} in quotes, otherwise it will not word split, and the loop will only run once.
     for PACKAGE in ${PACKAGES}
     do
-        sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} "${PACKAGE}"
-        if [ ${?} -ne 0 ]; then
+        if ! sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${APT_COMMAND} "${PACKAGE}"; then
             error "Error removing packages: ${PACKAGE}"
             return 1
         fi
@@ -724,9 +718,8 @@ function apt_update {
     #       replaced by --allow-unauthenticated , --allow-downgrades , --allow-remove-essential , --allow-change-held-packages in 1.1.
     local FORCE_YES="--allow-unauthenticated --allow-downgrades --allow-remove-essential --allow-change-held-packages"
 
-    sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${FORCE_YES} ${APT_COMMAND}
-    if [ ${?} -ne 0 ]; then
-       error "updating packages"
+    if ! sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true "${FORCE_YES}" "${APT_COMMAND}"; then
+       error "error_updating_apt_packages"
        return 1
     fi
 }
@@ -768,9 +761,8 @@ function apt_upgrade {
     #       replaced by --allow-unauthenticated , --allow-downgrades , --allow-remove-essential , --allow-change-held-packages in 1.1.
     local FORCE_YES="--allow-unauthenticated --allow-downgrades --allow-remove-essential --allow-change-held-packages"
 
-    sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true ${FORCE_YES} ${APT_COMMAND}
-    if [ ${?} -ne 0 ]; then
-       error "Error upgrading packages"
+    if ! sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confold" -yq -o Acquire::ForceIPv4=true "${FORCE_YES}" "${APT_COMMAND}"; then
+       error "error_apt_updating_packages"
        return 1
     fi
 }
@@ -1015,15 +1007,18 @@ function semantic_version_parse {
   case "${VERSION_COMPONENT_NAME}" in
 
   --major)
-    local EXTRACTED_COMPONENT_VERSION=$( echo "${FULL_VERSION}" | cut -d"." -f 1 )
+    local EXTRACTED_COMPONENT_VERSION
+    EXTRACTED_COMPONENT_VERSION=$( echo "${FULL_VERSION}" | cut -d"." -f 1 )
     ;;
 
   --minor)
-    local EXTRACTED_COMPONENT_VERSION=$( echo "${FULL_VERSION}" | cut -d"." -f 2 )
+    local EXTRACTED_COMPONENT_VERSION
+    EXTRACTED_COMPONENT_VERSION=$( echo "${FULL_VERSION}" | cut -d"." -f 2 )
     ;;
 
   --patch)
-    local EXTRACTED_COMPONENT_VERSION=$( echo "${FULL_VERSION}" | cut -d"." -f 3 )
+    local EXTRACTED_COMPONENT_VERSION
+    EXTRACTED_COMPONENT_VERSION=$( echo "${FULL_VERSION}" | cut -d"." -f 3 )
     ;;
 
   *)
@@ -1925,6 +1920,8 @@ function replace_all_lines_by_regexp {
   local REGEX="${2}"
   local INJECT_CONTENT="${3}"
 
+  local MODIFIED_LINES_COUNT=0
+
   # Check required arguments are not empty (note: ${INJECT_CONTENT} can be empty)
   # Define required variables
   local REQUIRED_VARIABLES=(
@@ -1995,13 +1992,13 @@ function replace_all_lines_by_regexp {
 
   # Count the number of modified lines
   # Note: sed always return 0, so it won't let us know how many changes were done unless we count "before" and "after"
-  MODIFIED_LINES_COUNT=$( diff "${FILEPATH}" "${ORIGINAL_FILE_COPY}" | grep '^<' | wc -l ) || { error "${FUNCNAME[0]}" 'failed_to_calculate_difference_after_edit'; return 13; }
+  MODIFIED_LINES_COUNT=$( diff "${FILEPATH}" "${ORIGINAL_FILE_COPY}" | grep -c '^<' ) || { error "${FUNCNAME[0]}" 'failed_to_calculate_difference_after_edit'; return 13; }
 
   # Remove temporary file
   rm "${ORIGINAL_FILE_COPY}" || { error "${FUNCNAME[0]}" 'error_removing_temporary_file'; return 12; }
 
   # Check the number of modified lines is > 0
-  if [ ${MODIFIED_LINES_COUNT} -gt 0 ]; then
+  if [ "${MODIFIED_LINES_COUNT}" -gt 0 ]; then
     # Success. Pass the number of modified lines through stdout.
     echo "${MODIFIED_LINES_COUNT}"
     # Indicate: function succeed
@@ -2225,7 +2222,7 @@ function url_get {
   # with random characters.
 
   local TMP_FILEPATH
-  TMP_FILEPATH=$(mktemp -t ${FUNCNAME[0]}.XXXXXXX) || { state_set "${FUNCNAME[0]}" "error_generating_tmp_filepath"; return 1; }
+  TMP_FILEPATH=$(mktemp -t "${FUNCNAME[0]}.XXXXXXX") || { state_set "${FUNCNAME[0]}" "error_generating_tmp_filepath"; return 1; }
 
   # Chmod file from "-rw-------" to default "-rw-rw-r--" 664
   chmod 664 "${TMP_FILEPATH}" || { state_set "${FUNCNAME[0]}" "error_chmod_tmp_filepath"; return 1; }
@@ -2242,7 +2239,7 @@ function url_get {
   --connect-timeout 12 \
   -o "${TMP_FILEPATH}" \
   -w "%{http_code}" \
-  ${URL}) \
+  "${URL}") \
   || { state_set "${FUNCNAME[0]}" 'error_downloading_file'; return 1; }
 
   # Note: curl return code 0 does not mean successful file download.
@@ -2329,7 +2326,7 @@ function abort {
 
     # Check if the SERVICE is set (not blank string), then also set corresponding state
     if [ -n "${SERVICE}" ]; then
-        state_set ${SERVICE} abort
+        state_set "${SERVICE}" abort
     fi
     exit 1
 }
@@ -4152,8 +4149,8 @@ function state_set {
   }  # Note: check_dependencies will report missing dependencies
 
   # Get 2 arguments: state and value
-  local STATE_NAME="${1}"
-  local STATE_VALUE="${2}"
+  local STATE_NAME="${1-}"
+  local STATE_VALUE="${2-}"
 
   # Check state name / value aren't blank
   [ -n "${STATE_NAME}" ] || { error "state_set(): blank state name argument"; bash_echo_setting_set "${BASH_ECHO_SETTINGS}"; return 1; }
@@ -4236,8 +4233,10 @@ function state_set {
   #   if state value contains: error|fail|'', then "is_error": true
   # else
   #   don't include neither "is_success" nor "is_error".
-  local IS_SUCCESS_OR_IS_ERROR_JSON=''
-  local IS_ERROR=false
+  local IS_SUCCESS_OR_IS_ERROR_JSON
+  IS_SUCCESS_OR_IS_ERROR_JSON=''
+  local
+  IS_ERROR=false
   if [[ "${STATE_VALUE}" =~ success|running ]]; then
     IS_SUCCESS_OR_IS_ERROR_JSON='"is_success": true,'
   else
@@ -4680,7 +4679,8 @@ function ppid_command_get {
     local DEPENDENCIES="cat echo"
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-    local PPID_CMD=$( cat /proc/${PPID}/cmdline )
+    local PPID_CMD
+    PPID_CMD=$( cat /proc/${PPID}/cmdline )
     echo "${PPID_CMD}"
 }
 export -f ppid_command_get
@@ -4721,7 +4721,7 @@ function user_exists {
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
     # TODO: OSX doesn't have getent. Find Equivalent
-    if [ -z "$(getent passwd ${1})" ]; then
+    if [ -z "$(getent passwd "${1}")" ]; then
         return 1 # User does not exist
     else
         return 0 # User exists
@@ -4893,8 +4893,10 @@ function discover_optional_environment_variable {
   fi
 
   # Try to get value by "secret_get()"
-  local NAME_LOWERCASE="$( echo "${NAME}" | tr '[:upper:]' '[:lower:]' )"
-  local RESTORED_VALUE=$( secret_get "${NAME_LOWERCASE}" 2> /dev/null ) # Suppress error: secret_get failed_to_find_secret_value
+  local NAME_LOWERCASE
+  NAME_LOWERCASE="$( echo "${NAME}" | tr '[:upper:]' '[:lower:]' )"
+  local RESTORED_VALUE
+  RESTORED_VALUE=$( secret_get "${NAME_LOWERCASE}" 2> /dev/null ) # Suppress error: secret_get failed_to_find_secret_value
   if [ -n "${RESTORED_VALUE}" ]; then
       # Got non-empty value from secrets, use it to export variable
       export "${NAME}"="${RESTORED_VALUE}"
@@ -4946,8 +4948,8 @@ function discover_os {
   # Detect the platform based on "OS_TYPE" variable. E.g. on a mac it might be 'darwin22.1.0'
   case "${OS_TYPE}" in
   darwin*)  OS_FAMILY="macos" ;;
-  linux*)   OS_FAMILY="linux" ;;
   linux-gnu*)   OS_FAMILY="linux" ;;
+  linux*)   OS_FAMILY="linux" ;;
   bsd*)     OS_FAMILY="bsd" ;;
   msys*)    OS_FAMILY="windows" ;;
   cygwin*)  OS_FAMILY="windows" ;;
@@ -5061,7 +5063,7 @@ function epoch_ms_get {
   local DEPENDENCIES="cut date echo"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  echo "$( date +%s%N | cut -b1-13 )"  # https://serverfault.com/a/151112/413686>
+  date +%s%N | cut -b1-13  # https://serverfault.com/a/151112/413686>
 }
 export -f epoch_ms_get
 
@@ -6065,7 +6067,7 @@ function ff_api_get {
         return 1
     fi
 
-    echo ${RESULT}
+    echo "${RESULT}"
 }
 export -f ff_api_get
 
@@ -6201,8 +6203,8 @@ function publish_message {
 
   bash_echo_off_set || { error "${FUNCNAME[0]}" "Failed to bash_echo_off_set"; return 1; }
 
-  # Read piped json
-  INPUT_JSON=`cat`
+  # Read piped json from stdin
+  INPUT_JSON=$( cat - )
 
   # Check if API is defined (this will check for:
   #  - FF_AGENT_API_FQDN
@@ -6228,7 +6230,8 @@ function publish_message {
     return 1
   fi
 
-  local UUID="$( ff_uuid )"
+  local UUID
+  UUID="$( ff_uuid )"
   if [ "${UUID}" == "" ]; then
     bash_echo_setting_set "${BASH_ECHO_SETTINGS}"  # Restore bash echo settings
     error "${FUNCNAME[0]}" "failed to generate UUID"
@@ -6364,7 +6367,7 @@ function secret_check_set_and_get {
   RETRIEVED_VALUE=$( secret_get "${SECRET_NAME}" ) || { error "${FUNCNAME[0]}" "failed to retrieve secret '${SECRET_NAME}'"; return 1; }
 
   # Compare retrieved and expected values
-  local EPOCH_DELTA_S=$(( ${RETRIEVED_VALUE} - ${EXPECTED_VALUE} ))
+  local EPOCH_DELTA_S=$(( RETRIEVED_VALUE - EXPECTED_VALUE ))
   if [[ ${EPOCH_DELTA_S} -ge 0 ]] && [[ ${EPOCH_DELTA_S} -lt 5 ]]; then
     # Test passed: the retrieved value is within couple seconds of expected value
     return 0
@@ -6561,7 +6564,7 @@ function state_check_set_and_get {
   RETRIEVED_VALUE=$( state_get "${STATE_NAME}" ) || { error "${FUNCNAME[0]}" "failed to retrieve state '${STATE_NAME}'"; return 1; }
 
   # Compare retrieved and expected values
-  local EPOCH_DELTA_S=$(( ${RETRIEVED_VALUE} - ${EXPECTED_VALUE} ))
+  local EPOCH_DELTA_S=$(( RETRIEVED_VALUE - EXPECTED_VALUE ))
   if [[ ${EPOCH_DELTA_S} -ge 0 ]] && [[ ${EPOCH_DELTA_S} -lt 5 ]]; then
     # Test passed: the retrieved value is within couple seconds of expected value
     return 0
