@@ -179,10 +179,10 @@ function ask_for_value {
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1
 
     local VALUE=""
-    local __RESULTVAR=${1}
-    local QUESTION=${2}
-    local TOOLTIP=${3}
-    local DEFAULT=${4}
+    local __RESULTVAR=${1-}
+    local QUESTION=${2-}
+    local TOOLTIP=${3-}
+    local DEFAULT=${4-}
 
     while [[ -z ${VALUE} ]]
     do
@@ -236,7 +236,7 @@ function ask_for_yn {
     local DEPENDENCIES="log"
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-    local QUESTION=${1}
+    local QUESTION=${1-}
     local ANSWER=""
 
     while [[ ${ANSWER,,} != "y" ]] && [[ ${ANSWER,,} != "n" ]]
@@ -288,7 +288,7 @@ function command_exists {
   # -n - true if the length of string is nonzero
   [ -n "$(command -v hash )" ] || { error "${FUNCNAME[0]}: error_no_hash_command"; return 1; }
 
-  local COMMAND=${1}
+  local COMMAND=${1-}
 
   # Force bash to un-hash any previously memorized commands. This will require bash to look it up again.
   # This is for cases where it has 'memoried' a command that has actually been deleted.
@@ -350,7 +350,7 @@ function file_toc {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Define path to ff_bash_functions file
-  local FILEPATH="${1}"
+  local FILEPATH="${1-}"
   [ ! -f "${FILEPATH}" ] && {
     error "error_ff_bash_functions_file_missing"
     return 1
@@ -473,7 +473,7 @@ function apt_dist_upgrade {
   local DEPENDENCIES="apt_update apt_upgrade error sudo"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  local APT_COMMAND=dist-upgrade
+  local APT_COMMAND="dist-upgrade"
 
   #        --force-yes is deprecetaed now.
   #       Force yes; this is a dangerous option that will cause apt to continue without prompting if it is doing something potentially harmful. It should not be used
@@ -520,7 +520,7 @@ function apt_install {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   local PACKAGES=("$@")
-  local APT_COMMAND=install
+  local APT_COMMAND="install"
 
   # Note: don't wrap ${PACKAGES} in quotes, otherwise it will not word split, and the loop will only run once.
   for PACKAGE in "${PACKAGES[@]}"; do
@@ -568,7 +568,7 @@ function apt_list {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Check inputs:
-  local PACKAGE_NAME="${1}"
+  local PACKAGE_NAME="${1-}"
   if [ "${PACKAGE_NAME}" == "" ]; then
     error "${FUNCNAME[0]}" "bad_arguments_missing_package_name"
     return 1
@@ -631,7 +631,7 @@ function apt_reinstall {
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
     PACKAGES=${@}
-    APT_COMMAND=reinstall
+    APT_COMMAND="reinstall"
 
     # Note: don't wrap ${PACKAGES} in quotes, otherwise it will not word split, and the loop will only run once.
     for PACKAGE in ${PACKAGES}; do
@@ -673,7 +673,7 @@ function apt_remove {
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
     PACKAGES=${@}
-    APT_COMMAND=remove
+    APT_COMMAND="remove"
 
     # Note: don't wrap ${PACKAGES} in quotes, otherwise it will not word split, and the loop will only run once.
     for PACKAGE in ${PACKAGES}
@@ -716,7 +716,7 @@ function apt_update {
     local DEPENDENCIES="apt-get error sudo"
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-    local APT_COMMAND=update
+    local APT_COMMAND="update"
 
     #        --force-yes is deprecetaed now.
     #       Force yes; this is a dangerous option that will cause apt to continue without prompting if it is doing something potentially harmful. It should not be used
@@ -760,7 +760,7 @@ function apt_upgrade {
     local DEPENDENCIES="apt-get error sudo"
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-    local APT_COMMAND=upgrade
+    local APT_COMMAND="upgrade"
 
     #        --force-yes is deprecetaed now.
     #       Force yes; this is a dangerous option that will cause apt to continue without prompting if it is doing something potentially harmful. It should not be used
@@ -805,9 +805,9 @@ export -f apt_upgrade
 #
 ################################################################################
 function in_array {
-    # Assign the first argument ($1) passed into the function to the "needle" variable.
+    # Assign the first argument (${1-}) passed into the function to the "needle" variable.
     # "hay" is just declared, but not initialized yet here
-    local HAY NEEDLE=${1}
+    local HAY NEEDLE=${1-}
     shift
 
     # Note: the "for hay; do": This is shorthand for for hay in "$@"; do. It loops through all the remaining
@@ -907,8 +907,8 @@ export -f in_array
 function github_repository_url_parse {
 
   # Get arguments
-  local URL="${1}"
-  local KEY="${2}"
+  local URL="${1-}"
+  local KEY="${2-}"
 
   # Check required arguments are not empty
   [ -n "${URL}" ] || { error "${FUNCNAME[0]}" "called with no URL argument"; return 1; }
@@ -992,8 +992,8 @@ function semantic_version_parse {
   [ $# -eq 2 ] || { error "${FUNCNAME[0]}" 'error_wrong_number_of_arguments'; return 1; }
 
   # Get arguments
-  local VERSION_COMPONENT_NAME="$1"
-  local FULL_VERSION="$2"
+  local VERSION_COMPONENT_NAME="${1-}"
+  local FULL_VERSION="${2-}"
 
   # Check we got non-empty arguments
   [ -n "${VERSION_COMPONENT_NAME}" ] || { error "${FUNCNAME[0]}" 'error_empty_argument_component_name'; return 1; }
@@ -1126,16 +1126,22 @@ function assert_cd {
   local DEPENDENCIES="abort assert_clean_exit"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
+  # Get target directory
+  local TARGET_DIR="${1-}"
+
+  # Check string is not empty
+  [ -n "${TARGET_DIR}" ] || { abort "ERROR: Can not enter empty directory."; }
+
   # Check first if it is a directory.
-  if [ ! -d "${1}" ]; then
-     abort "ERROR: Can not enter directory \"${1}\" -- it is not a directory."
+  if [ ! -d "${TARGET_DIR}" ]; then
+     abort "ERROR: Can not enter directory \"${TARGET_DIR}\" -- it is not a directory."
   fi
 
   # Directory exists, now enter it. May fail due to permissions.
-  if [ -d "${1}" ]; then
-     assert_clean_exit cd "${1}"
+  if [ -d "${TARGET_DIR}" ]; then
+     assert_clean_exit cd "${TARGET_DIR}"
   else
-     abort "ERROR: Can not enter directory \"${1}\". SUGGEST: check user ID and directory permissions."
+     abort "ERROR: Can not enter directory \"${TARGET_DIR}\". SUGGEST: check user ID and directory permissions."
   fi
 }
 export -f assert_cd
@@ -1167,10 +1173,17 @@ function assert_makedir {
   local DEPENDENCIES="assert_clean_exit log"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  if [ -d "${1}" ]; then
-     log "INFO: Directory \"${1}\" exists, skipping creation."
+  # Get target directory
+  local TARGET_DIR="${1-}"
+
+  # Check string is not empty
+  [ -n "${TARGET_DIR}" ] || { abort "ERROR: Can not create empty directory."; }
+
+  # Check first if it is a directory.
+  if [ -d "${TARGET_DIR}" ]; then
+     log "INFO: Directory \"${TARGET_DIR}\" exists, skipping creation."
   else
-     assert_clean_exit mkdir "${1}"
+     assert_clean_exit mkdir "${TARGET_DIR}"
   fi
 }
 export -f assert_makedir
@@ -1224,10 +1237,10 @@ function does_file_have_eol_at_the_end {
   local ERROR_FILE_DOES_NOT_EXIST_OR_CAN_NOT_READ_EVEN_WITH_SUDO=3
 
   # Take arguments
-  FILENAME="${1}"
+  FILENAME="${1-}"
 
   # Check required arguments are not empty
-  [ -n "${FILEPATH}" ] || { error "${FUNCNAME[0]}" "error_target_filepath_is_blank"; return ${ERROR_BAD_ARGUMENTS}; }
+  [ -n "${FILENAME}" ] || { error "${FUNCNAME[0]}" "error_target_filepath_is_blank"; return ${ERROR_BAD_ARGUMENTS}; }
 
   # Check if file is empty
   if [ ! -s "${FILENAME}" ]; then
@@ -1276,7 +1289,7 @@ function f {
     local DEPENDENCIES="echo find"
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-    FILE_PREFIX="${1}"
+    FILE_PREFIX="${1-}"
     if [ "${FILE_PREFIX}" != "" ]; then
         find . -iname "${FILE_PREFIX}*"
         return ${?}
@@ -1320,8 +1333,8 @@ function file_contains_pattern {
     local DEPENDENCIES="grep"
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-    FILE="${1}"
-    PATTERN="${2}"
+    FILE="${1-}"
+    PATTERN="${2-}"
 
     if [ ! -e "${FILE}" ]; then
         return 1
@@ -1369,7 +1382,7 @@ function file_truncate {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Get filename argument
-  local FILEPATH="${1}"
+  local FILEPATH="${1-}"
 
   # Check filename is not blank
   if [ "${FILEPATH}" == "" ]; then
@@ -1448,7 +1461,7 @@ function find_file_owner_in_all_packages {
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
     # Take filename argument
-    FILE="${1}"
+    FILE="${1-}"
 
     # Make sure arguemnt is not empty
     if [ -z "${FILE}" ]; then
@@ -1501,7 +1514,7 @@ function find_file_owner_in_installed_packages {
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
     # Take filename argument
-    FILE="${1}"
+    FILE="${1-}"
 
     # Make sure arguemnt is not empty
     if [ -z "${FILE}" ]; then
@@ -1598,9 +1611,9 @@ function inject_into_file {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Take arguments
-  local FILEPATH="${1}"
-  local PATTERN="${2}"
-  local INJECT_CONTENT="${3}"
+  local FILEPATH="${1-}"
+  local PATTERN="${2-}"
+  local INJECT_CONTENT="${3-}"
 
   # Check required arguments are not empty
   # Define required variables
@@ -1692,7 +1705,7 @@ export -f inject_into_file
 function is_writable {
 
   # Get argument
-  local TARGET="${1}"
+  local TARGET="${1-}"
 
   # Check argument is not blank
   [ -n "${TARGET}" ] || { return 1; }
@@ -1736,7 +1749,11 @@ function path_to_absolute_path {
   local DEPENDENCIES="realpath"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  local TARGET="$1"
+  local TARGET="${1-}"
+
+  # Check argument is not empty
+  [ -n "${TARGET}" ] || { error "${FUNCNAME[0]}: Missing argument."; return 1; }
+
   realpath --canonicalize-missing "${TARGET}"
 }
 export -f path_to_absolute_path
@@ -1783,8 +1800,8 @@ function remove_all_lines_by_regexp {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Get regexp argument
-  local FILEPATH="${1}"
-  local REGEX="${2}"
+  local FILEPATH="${1-}"
+  local REGEX="${2-}"
 
   # Check required arguments are not empty
   # Define required variables
@@ -1921,15 +1938,16 @@ function replace_all_lines_by_regexp {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Take arguments
-  local FILEPATH="${1}"
-  local REGEX="${2}"
-  local INJECT_CONTENT="${3}"
+  local FILEPATH="${1-}"
+  local REGEX="${2-}"
+  local INJECT_CONTENT="${3-}"
 
   # Check required arguments are not empty (note: ${INJECT_CONTENT} can be empty)
   # Define required variables
   local REQUIRED_VARIABLES=(
     FILEPATH
     REGEX
+    INJECT_CONTENT
   )
 
   # Check required environment variables are set
@@ -2044,7 +2062,7 @@ function s {
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
     GREP_OPTIONS="--color=always"
-    PATTERN="${1}"
+    PATTERN="${1-}"
     if [ "${PATTERN}" != "" ]; then
         find . -name "*" -type f -not -path "*node_modules*" -exec grep --ignore-case --text --line-number -H "${PATTERN}" {} \;
         return ${?}
@@ -2109,14 +2127,14 @@ function url_get {
   [ $# -ne 2 ] && { state_set "${FUNCNAME[0]}" "error_wrong_number_of_arguments"; return 1; }
 
   # Get/check inputs: URL
-  local URL="$1"
+  local URL="${1-}"
   [ -z "${URL}" ] && { state_set "${FUNCNAME[0]}" "error_bad_argument_blank_url"; return 1; }
 
   # TODO: discuss if we want to user regexp to check URL is valid:
   # https://stackoverflow.com/questions/3183444/check-for-valid-link-url
 
   # Get/check inputs: FILEPATH
-  local FILEPATH="$2"
+  local FILEPATH="${2-}"
   [ -z "${FILEPATH}" ] && { state_set "${FUNCNAME[0]}" "error_bad_argument_blank_filepath"; return 1; }
 
   # Create a temporary file and store it's filepath to TMP_FILEPATH
@@ -2229,7 +2247,7 @@ function abort {
     error "abort called - aborting ${*}"
 
     # Check if the SERVICE is set (not blank string), then also set corresponding state
-    if [ -n "${SERVICE}" ]; then
+    if [ -n "${SERVICE-}" ]; then
         state_set ${SERVICE} abort
     fi
     exit 1
@@ -2417,14 +2435,14 @@ function log {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Check if optional environment SERVICE is defined, then use it as a tag for logger
-  if [ "${SERVICE}" != "" ]; then
+  if [ "${SERVICE-}" != "" ]; then
     local LOGGER_TAG="--tag '${SERVICE}'"
     local SERVICE_PREFIX="${SERVICE}: "
   else
     local SERVICE_PREFIX=''
   fi
 
-  echo "${SERVICE_PREFIX}${*}" | tee >(logger ${LOGGER_TAG} ) >&2
+  echo "${SERVICE_PREFIX}${*}" | tee >(logger ${LOGGER_TAG-} ) >&2
 }
 export -f log
 
@@ -2489,7 +2507,7 @@ function successful_exit {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Check if SERVICE is defined
-  if [ "${SERVICE}" != "" ]; then
+  if [ "${SERVICE-}" != "" ]; then
     local SERVICE_SUFFIX="${SERVICE}_"
     state_set "${SERVICE_SUFFIX}last_run_state" success
   fi
@@ -2697,7 +2715,7 @@ function ensure_variable_defined {
   local DEPENDENCIES="error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  local NAME="${1}"
+  local NAME="${1-}"
   [[ -z "${NAME}" ]] && { error "${FUNCNAME[0]}" "error_ensure_variable_defined_no_arguments"; return 1; }  # Check: NAME is not blank
   [[ -v "${NAME}" ]] && { return 0; }  # Check: variable by NAME is defined
 
@@ -2739,7 +2757,7 @@ function ensure_variable_not_empty {
   local DEPENDENCIES="error tr"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  local NAME="${1}"
+  local NAME="${1-}"
   [[ -z "${NAME}" ]] && { error "error_ensure_variable_not_empty_no_arguments"; return 1; }
   [[ -v "${NAME}" ]] && [[ -n "${!NAME}" ]] && { return 0; }
 
@@ -2793,7 +2811,7 @@ function ensure_variables_defined {
   local DEPENDENCIES="ensure_variable_defined error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  local CALLER_FUNCTION_NAME="${1}"
+  local CALLER_FUNCTION_NAME="${1-}"
   shift
 
   local VARIABLE_NAMES_STRING="${@}"
@@ -2862,7 +2880,7 @@ function ensure_variables_not_empty {
   local DEPENDENCIES="ensure_variable_not_empty error"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  local CALLER_FUNCTION_NAME="${1}"
+  local CALLER_FUNCTION_NAME="${1-}"
   shift
 
   local VARIABLE_NAMES_STRING="${@}"
@@ -2923,7 +2941,7 @@ export -f ensure_variables_not_empty
 ################################################################################
 function is_shell_attribute_set {
   case "$-" in
-    *"${1}"*)
+    *"${1-}"*)
       return 0
       ;;
     *)
@@ -2969,7 +2987,7 @@ function is_shell_option_set {
   local DEPENDENCIES="grep"
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
-  case "$(set -o | grep "${1}")" in
+  case "$(set -o | grep "${1-}")" in
     *on) return 0 ;;
     *)   return 1 ;;
   esac
@@ -3201,7 +3219,7 @@ function check_dependencies {
     bash_echo_off_set || { error "${FUNCNAME[0]}" 'failed_to_bash_echo_off_set'; return 1; } # Disable xtrace to avoid priting secrets
 
     # Get 1st argument: caller function name
-    local CALLER_FUNCTION_NAME="${1}"
+    local CALLER_FUNCTION_NAME="${1-}"
     shift
 
     # Get all the rest of the arguments and turn them into array of strings
@@ -3317,8 +3335,8 @@ function command_run_as_user {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Get arguments
-  local TARGET_USER="$1"
-  local COMMAND="$2"
+  local TARGET_USER="${1-}"
+  local COMMAND="${2-}"
 
   if [[ -z "${TARGET_USER}" || -z "${COMMAND}" ]]; then
     error "${FUNCNAME[0]}" "Missing parameters. Usage: command_run_as_user <user> <command or ->"
@@ -3394,7 +3412,7 @@ function process_is_running_as_me {
   local DEPENDENCIES="command_exists current_user_get error grep ps"
   check_dependencies "${FUNC}" "${DEPENDENCIES}" || return 1
 
-  local COMMAND_PATTERN="${1}"
+  local COMMAND_PATTERN="${1-}"
   [ -n "${COMMAND_PATTERN}" ] || { error "${FUNC}" 'error_require_pattern_to_search_for'; return 1; }
 
   local PS
@@ -3451,17 +3469,17 @@ function retry_command {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Get number of max attempts
-  RETRY_ATTEMPTS_MAX=$1
-  # Shift all arguments to the left (original $1 gets lost)
+  RETRY_ATTEMPTS_MAX=${1-}
+  # Shift all arguments to the left (original ${1-} gets lost)
   shift
 
   # Check argument not empty and >0
-  [ "${RETRY_ATTEMPTS_MAX}" != "" ] || { error "${FUNCNAME[0]}" 'failed_to_get_retry_attempts_max'; return 1; }
+  [ "${RETRY_ATTEMPTS_MAX-}" != "" ] || { error "${FUNCNAME[0]}" 'failed_to_get_retry_attempts_max'; return 1; }
   [ "${RETRY_ATTEMPTS_MAX}" -gt 0 ] || { error "${FUNCNAME[0]}" 'error_retry_attempts_max_must_be_positive_number'; return 1; }
 
   # Get number of seconds to sleep between attempts
-  SLEEP_SECONDS=$1
-  shift # Shift all arguments to the left (original $1 gets lost)
+  SLEEP_SECONDS=${1-}
+  shift # Shift all arguments to the left (original ${1-} gets lost)
 
   # Check argument not empty & >1
   [ "${SLEEP_SECONDS}" != "" ] || { error "${FUNCNAME[0]}" 'failed_to_get_sleep_seconds'; return 1; }
@@ -3534,7 +3552,7 @@ function service_is_running {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Take arguments
-  local SERVICE_NAME="$1"
+  local SERVICE_NAME="${1-}"
 
   # Check arguments (must be non-empty string)
   [ ! -z "${SERVICE_NAME}" ] || { error "${FUNCNAME[0]}" 'error_empty_argument'; return 1; }
@@ -3680,7 +3698,7 @@ function secret_get {
   # Disable xtrace to avoid priting secrets
   bash_echo_off_set || { error "${FUNCNAME[0]}" 'failed_to_bash_echo_off_set'; return 1; } # Disable xtrace to avoid priting secrets
 
-  local KEY="${1}"
+  local KEY="${1-}"
 
   # Check KEY is not blank
   [ -n "${KEY}" ] || { error "secret_get(): blank KEY argument"; return 1; }
@@ -3865,8 +3883,8 @@ function secret_set {
   bash_echo_off_set || { error "${FUNCNAME[0]}" 'failed_to_bash_echo_off_set'; return 1; } # Disable xtrace to avoid priting secrets
 
   # Get arguments
-  local URI="${1}"
-  local SECRET="${2}"
+  local URI="${1-}"
+  local SECRET="${2-}"
 
   # Check FF_AGENT_HOME is set
   [ -n "${FF_AGENT_HOME}" ] || {
@@ -3951,7 +3969,7 @@ function state_get {
   bash_echo_off_set || { error "${FUNCNAME[0]}" 'failed_to_bash_echo_off_set'; return 1; } # Disable xtrace to avoid priting secrets
 
   # Get 1 argument: state name
-  STATE_NAME="${1}"
+  STATE_NAME="${1-}"
 
   # Check state name isn't
   [ -n "${STATE_NAME}" ] || { error "state_get(): blank state name argument"; return 1; }
@@ -4048,8 +4066,8 @@ function state_set {
   }  # Note: check_dependencies will report missing dependencies
 
   # Get 2 arguments: state and value
-  local STATE_NAME="${1}"
-  local STATE_VALUE="${2}"
+  local STATE_NAME="${1-}"
+  local STATE_VALUE="${2-}"
 
   # Check state name / value aren't blank
   [ -n "${STATE_NAME}" ] || { error "state_set(): blank state name argument"; bash_echo_setting_set "${BASH_ECHO_SETTINGS}"; return 1; }
@@ -4281,7 +4299,7 @@ function can_sudo {
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
     # Take argument
-    local USER_TO_CHECK="${1}"
+    local USER_TO_CHECK="${1-}"
 
     local USER_CAN_SUDO=1  # Assume they can't. 1 is an error code meaning we can't.
 
@@ -4343,7 +4361,7 @@ function check_group_exists {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Take argument
-  local GROUP="${1}"
+  local GROUP="${1-}"
 
   # Check argument is not empty
   if [ -z "${GROUP}" ]; then
@@ -4390,7 +4408,7 @@ function create_user {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Get argument
-  local USERNAME="${1}"
+  local USERNAME="${1-}"
 	if [ -n "${USERNAME}" ]; then
 		if can_sudo "${USERNAME}"; then
         	# TODO: Make this multiplatform. Check what happens if we do this in a docker.
@@ -4436,9 +4454,9 @@ function home_directory_for_user_get {
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
     # TODO: OSX doesn't have getent. Find Equivalent
-    HOME_DIR=$( getent passwd "${1}" | cut -d: -f6 )
+    HOME_DIR=$( getent passwd "${1-}" | cut -d: -f6 )
     if [ -z "${HOME_DIR}" ]; then
-        error "${FUNCNAME[0]}" "Failed to retrieve home directory for user '${1}'."
+        error "${FUNCNAME[0]}" "Failed to retrieve home directory for user '${1-}'."
         return 1
     else
         echo "${HOME_DIR}"
@@ -4511,8 +4529,8 @@ function is_user_in_group {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Get arguments
-  local USERNAME="${1}"
-  local GROUP="${2}"
+  local USERNAME="${1-}"
+  local GROUP="${2-}"
 
   # Check arguments are not empty
   [ -z "${USERNAME}" ] && return 1
@@ -4602,7 +4620,7 @@ function user_exists {
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
     # TODO: OSX doesn't have getent. Find Equivalent
-    if [ -z "$(getent passwd ${1})" ]; then
+    if [ -z "$(getent passwd ${1-})" ]; then
         return 1 # User does not exist
     else
         return 0 # User exists
@@ -4750,8 +4768,8 @@ function discover_optional_environment_variable {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Get arguments
-  local NAME="${1}"
-  local DEFAULT_VALUE="${2}"
+  local NAME="${1-}"
+  local DEFAULT_VALUE="${2-}"
 
   # Check inputs: NAME can be empty
   [ -z "${NAME}" ] && { return 1; }
@@ -4882,8 +4900,8 @@ function discover_required_environment_variable {
   check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
   # Get arguments
-  local NAME="${1}"
-  local DEFAULT_VALUE="${2}"
+  local NAME="${1-}"
+  local DEFAULT_VALUE="${2-}"
 
   # Check inputs: NAME can not be empty
   [ -n "${NAME}" ] || { error "${FUNCNAME[0]}" "Missing required argument 'NAME'"; return 1; }
@@ -5872,7 +5890,7 @@ function ff_api_get {
     check_dependencies "${FUNCNAME[0]}" "${DEPENDENCIES}" || return 1  # Note: check_dependencies will report missing dependencies
 
     # Get argument
-    CALL="${1}"
+    CALL="${1-}"
 
     # Check required arguments are not empty
     # Define required variables
@@ -6324,7 +6342,7 @@ function set_environment_is_working {
   local VERBOSE=false
 
   # Set VERBOSE envrionment variable if requested by --verbose
-  [ "${1}" == "--verbose" ] && VERBOSE=true
+  [ "${1-}" == "--verbose" ] && VERBOSE=true
 
   # Check dependencies: commands are executed without errors
   # Loop through array of f-nested f-ns, on error set flag HAS_ERRORS (don't exit)
