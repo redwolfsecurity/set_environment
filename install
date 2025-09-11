@@ -55,7 +55,7 @@ function install_set_environment () {
   log "  FF Content URL               : ${FF_CONTENT_URL:-Not Set}"
   # --- Script Invocation Details ---
   log "🔍 Script Invocation Details:"
-  log "  Arguments passed to script   : $@" # Shows all arguments passed to this build script
+  log "  Arguments passed to script   : $*" # Shows all arguments passed to this build script
 
   log "-----------------------------------------------------------------"
   log "🚀 Proceeding with setup tasks..."
