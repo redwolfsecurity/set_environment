@@ -380,12 +380,11 @@ function install_ff_agent {
   #   abort "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
   # }
 
-  # Replacing ff_agent pm2 starter to use more explicit path to the executable
-  # Get the full path of the ff_agent executable
-  FF_AGENT_PATH=$( command_exists ff_agent )
 
   # Register/start ff_agent in pm2 using the node interpreter
-  pm2 start node --name ff_agent -- "$FF_AGENT_PATH" || {
+
+
+  pm2 start "bash -l -c ff_agent.sh" --name ff_agent || {
     state_set "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
     abort "${FUNCNAME[0]}" 'failed_to_start_ff_agent'
   }
