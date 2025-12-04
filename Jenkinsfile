@@ -27,6 +27,13 @@ pipeline {
   }
 
   stages {
+
+    stage('debug_docker_version') {
+      steps {
+        sh 'echo "=== docker version from Jenkins build ==="'
+        sh 'docker version || echo "docker version failed in Jenkins context"'
+      }
+    }
     stage('Install') {
       environment {
         FF_CONTENT_URL = credentials('production_content_url')
